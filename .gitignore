@@ -3,6 +3,10 @@ target/
 Cargo.lock
 **/*.rs.bk
 
+# Project-specific
+docs/
+CLAUDE.md
+
 # Anchor
 .anchor/
 test-ledger/
