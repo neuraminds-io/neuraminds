@@ -88,4 +88,7 @@ pub enum MarketError {
 
     #[msg("Unauthorized withdrawal: recipient mismatch")]
     UnauthorizedWithdrawal,
+
+    #[msg("Invalid outcome")]
+    InvalidOutcome,
 }

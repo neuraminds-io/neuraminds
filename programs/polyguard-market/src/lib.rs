@@ -147,4 +147,27 @@ pub mod polyguard_market {
     pub fn execute_transaction(ctx: Context<ExecuteTransaction>) -> Result<()> {
         crate::instructions::multisig_ops::execute_transaction_handler(ctx)
     }
+
+    // =========================================================================
+    // Dispute Resolution
+    // =========================================================================
+
+    /// File a dispute against a market resolution
+    pub fn file_dispute(ctx: Context<FileDispute>, reason_hash: String) -> Result<()> {
+        crate::instructions::dispute::file_dispute_handler(ctx, reason_hash)
+    }
+
+    /// Submit oracle vote on a dispute
+    pub fn submit_dispute_vote(
+        ctx: Context<SubmitDisputeVote>,
+        outcome_vote: u8,
+        confidence_score: u8,
+    ) -> Result<()> {
+        crate::instructions::dispute::submit_dispute_vote_handler(ctx, outcome_vote, confidence_score)
+    }
+
+    /// Finalize dispute with oracle consensus
+    pub fn finalize_dispute(ctx: Context<FinalizeDispute>) -> Result<()> {
+        crate::instructions::dispute::finalize_dispute_handler(ctx)
+    }
 }
