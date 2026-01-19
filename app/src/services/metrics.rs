@@ -1,11 +1,127 @@
 //! Metrics and observability service for Polyguard backend
 //!
 //! Provides application metrics, health checks, and monitoring data.
+//! Includes histogram support for latency tracking.
 
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Instant;
+
+/// Histogram bucket boundaries in milliseconds
+const LATENCY_BUCKETS: &[f64] = &[1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0];
+
+/// Thread-safe histogram for latency tracking
+pub struct Histogram {
+    buckets: RwLock<Vec<u64>>,
+    sum: AtomicU64,
+    count: AtomicU64,
+}
+
+impl Histogram {
+    pub fn new() -> Self {
+        Self {
+            buckets: RwLock::new(vec![0; LATENCY_BUCKETS.len() + 1]),
+            sum: AtomicU64::new(0),
+            count: AtomicU64::new(0),
+        }
+    }
+
+    /// Observe a value in the histogram
+    pub fn observe(&self, value_ms: f64) {
+        let value_bits = (value_ms * 1000.0) as u64; // Store as microseconds for precision
+        self.sum.fetch_add(value_bits, Ordering::Relaxed);
+        self.count.fetch_add(1, Ordering::Relaxed);
+
+        let bucket_idx = LATENCY_BUCKETS.iter()
+            .position(|&b| value_ms <= b)
+            .unwrap_or(LATENCY_BUCKETS.len());
+
+        if let Ok(mut buckets) = self.buckets.write() {
+            for i in bucket_idx..buckets.len() {
+                buckets[i] += 1;
+            }
+        }
+    }
+
+    /// Get histogram stats
+    pub fn get_stats(&self) -> HistogramStats {
+        let buckets = self.buckets.read()
+            .map(|b| b.clone())
+            .unwrap_or_else(|_| vec![0; LATENCY_BUCKETS.len() + 1]);
+        let sum_micros = self.sum.load(Ordering::Relaxed);
+        let count = self.count.load(Ordering::Relaxed);
+
+        HistogramStats {
+            buckets: LATENCY_BUCKETS.iter()
+                .zip(buckets.iter())
+                .map(|(&le, &count)| (le, count))
+                .collect(),
+            inf_bucket: *buckets.last().unwrap_or(&0),
+            sum_ms: sum_micros as f64 / 1000.0,
+            count,
+        }
+    }
+
+    /// Export in Prometheus format
+    pub fn export_prometheus(&self, name: &str, help: &str) -> String {
+        let stats = self.get_stats();
+        let mut output = String::new();
+
+        output.push_str(&format!("# HELP {} {}\n", name, help));
+        output.push_str(&format!("# TYPE {} histogram\n", name));
+
+        for (le, count) in &stats.buckets {
+            output.push_str(&format!("{}_bucket{{le=\"{}\"}} {}\n", name, le, count));
+        }
+        output.push_str(&format!("{}_bucket{{le=\"+Inf\"}} {}\n", name, stats.inf_bucket));
+        output.push_str(&format!("{}_sum {}\n", name, stats.sum_ms));
+        output.push_str(&format!("{}_count {}\n\n", name, stats.count));
+
+        output
+    }
+}
+
+impl Default for Histogram {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Histogram statistics
+#[derive(Debug, Clone, Serialize)]
+pub struct HistogramStats {
+    pub buckets: Vec<(f64, u64)>,
+    pub inf_bucket: u64,
+    pub sum_ms: f64,
+    pub count: u64,
+}
+
+impl HistogramStats {
+    /// Calculate average latency
+    pub fn avg_ms(&self) -> f64 {
+        if self.count == 0 {
+            0.0
+        } else {
+            self.sum_ms / self.count as f64
+        }
+    }
+
+    /// Estimate percentile (approximate)
+    pub fn percentile(&self, p: f64) -> f64 {
+        if self.count == 0 {
+            return 0.0;
+        }
+
+        let target = (self.count as f64 * p / 100.0).ceil() as u64;
+        for (le, count) in &self.buckets {
+            if *count >= target {
+                return *le;
+            }
+        }
+        *LATENCY_BUCKETS.last().unwrap_or(&0.0)
+    }
+}
 
 /// Application metrics collector
 pub struct MetricsService {
@@ -17,6 +133,12 @@ pub struct MetricsService {
     orders_cancelled: AtomicU64,
     trades_executed: AtomicU64,
     total_volume: AtomicU64,
+    // Latency histograms
+    request_latency: Histogram,
+    order_latency: Histogram,
+    trade_latency: Histogram,
+    solana_rpc_latency: Histogram,
+    database_latency: Histogram,
 }
 
 impl MetricsService {
@@ -30,6 +152,11 @@ impl MetricsService {
             orders_cancelled: AtomicU64::new(0),
             trades_executed: AtomicU64::new(0),
             total_volume: AtomicU64::new(0),
+            request_latency: Histogram::new(),
+            order_latency: Histogram::new(),
+            trade_latency: Histogram::new(),
+            solana_rpc_latency: Histogram::new(),
+            database_latency: Histogram::new(),
         }
     }
 
@@ -62,6 +189,42 @@ impl MetricsService {
     pub fn record_trade(&self, volume: u64) {
         self.trades_executed.fetch_add(1, Ordering::Relaxed);
         self.total_volume.fetch_add(volume, Ordering::Relaxed);
+    }
+
+    /// Record request latency
+    pub fn observe_request_latency(&self, latency_ms: f64) {
+        self.request_latency.observe(latency_ms);
+    }
+
+    /// Record order processing latency
+    pub fn observe_order_latency(&self, latency_ms: f64) {
+        self.order_latency.observe(latency_ms);
+    }
+
+    /// Record trade execution latency
+    pub fn observe_trade_latency(&self, latency_ms: f64) {
+        self.trade_latency.observe(latency_ms);
+    }
+
+    /// Record Solana RPC call latency
+    pub fn observe_solana_rpc_latency(&self, latency_ms: f64) {
+        self.solana_rpc_latency.observe(latency_ms);
+    }
+
+    /// Record database query latency
+    pub fn observe_database_latency(&self, latency_ms: f64) {
+        self.database_latency.observe(latency_ms);
+    }
+
+    /// Get latency statistics
+    pub fn get_latency_stats(&self) -> LatencyMetrics {
+        LatencyMetrics {
+            request: self.request_latency.get_stats(),
+            order: self.order_latency.get_stats(),
+            trade: self.trade_latency.get_stats(),
+            solana_rpc: self.solana_rpc_latency.get_stats(),
+            database: self.database_latency.get_stats(),
+        }
     }
 
     /// Get current metrics snapshot
@@ -114,7 +277,29 @@ impl MetricsService {
         // Volume
         output.push_str("# HELP polyguard_volume_total Total trading volume in lamports\n");
         output.push_str("# TYPE polyguard_volume_total counter\n");
-        output.push_str(&format!("polyguard_volume_total {}\n", metrics.trades.total_volume));
+        output.push_str(&format!("polyguard_volume_total {}\n\n", metrics.trades.total_volume));
+
+        // Latency histograms
+        output.push_str(&self.request_latency.export_prometheus(
+            "polyguard_request_duration_ms",
+            "HTTP request duration in milliseconds"
+        ));
+        output.push_str(&self.order_latency.export_prometheus(
+            "polyguard_order_duration_ms",
+            "Order processing duration in milliseconds"
+        ));
+        output.push_str(&self.trade_latency.export_prometheus(
+            "polyguard_trade_duration_ms",
+            "Trade execution duration in milliseconds"
+        ));
+        output.push_str(&self.solana_rpc_latency.export_prometheus(
+            "polyguard_solana_rpc_duration_ms",
+            "Solana RPC call duration in milliseconds"
+        ));
+        output.push_str(&self.database_latency.export_prometheus(
+            "polyguard_database_duration_ms",
+            "Database query duration in milliseconds"
+        ));
 
         output
     }
@@ -152,6 +337,15 @@ pub struct OrderMetrics {
 pub struct TradeMetrics {
     pub executed: u64,
     pub total_volume: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LatencyMetrics {
+    pub request: HistogramStats,
+    pub order: HistogramStats,
+    pub trade: HistogramStats,
+    pub solana_rpc: HistogramStats,
+    pub database: HistogramStats,
 }
 
 /// System health information
@@ -267,5 +461,105 @@ mod tests {
         let output = metrics.export_prometheus();
         assert!(output.contains("polyguard_requests_total"));
         assert!(output.contains("polyguard_uptime_seconds"));
+    }
+
+    #[test]
+    fn test_histogram_observe() {
+        let histogram = Histogram::new();
+
+        histogram.observe(5.0);
+        histogram.observe(15.0);
+        histogram.observe(150.0);
+
+        let stats = histogram.get_stats();
+        assert_eq!(stats.count, 3);
+        assert!(stats.sum_ms > 0.0);
+    }
+
+    #[test]
+    fn test_histogram_buckets() {
+        let histogram = Histogram::new();
+
+        // Add values to different buckets
+        histogram.observe(0.5);   // <= 1ms bucket
+        histogram.observe(3.0);   // <= 5ms bucket
+        histogram.observe(8.0);   // <= 10ms bucket
+        histogram.observe(20.0);  // <= 25ms bucket
+
+        let stats = histogram.get_stats();
+        assert_eq!(stats.count, 4);
+
+        // Check cumulative buckets
+        assert!(stats.buckets.iter().find(|(le, _)| *le == 1.0).map(|(_, c)| *c).unwrap_or(0) >= 1);
+        assert!(stats.buckets.iter().find(|(le, _)| *le == 5.0).map(|(_, c)| *c).unwrap_or(0) >= 2);
+        assert!(stats.buckets.iter().find(|(le, _)| *le == 10.0).map(|(_, c)| *c).unwrap_or(0) >= 3);
+        assert!(stats.buckets.iter().find(|(le, _)| *le == 25.0).map(|(_, c)| *c).unwrap_or(0) >= 4);
+    }
+
+    #[test]
+    fn test_histogram_percentile() {
+        let histogram = Histogram::new();
+
+        // Add 100 values spread across buckets
+        for i in 0..100 {
+            histogram.observe(i as f64);
+        }
+
+        let stats = histogram.get_stats();
+        assert_eq!(stats.count, 100);
+
+        // p50 should be around middle values
+        let p50 = stats.percentile(50.0);
+        assert!(p50 > 0.0);
+
+        // p99 should be higher
+        let p99 = stats.percentile(99.0);
+        assert!(p99 >= p50);
+    }
+
+    #[test]
+    fn test_latency_metrics() {
+        let metrics = MetricsService::new();
+
+        metrics.observe_request_latency(10.0);
+        metrics.observe_request_latency(20.0);
+        metrics.observe_order_latency(5.0);
+        metrics.observe_trade_latency(100.0);
+        metrics.observe_solana_rpc_latency(50.0);
+        metrics.observe_database_latency(2.0);
+
+        let latency = metrics.get_latency_stats();
+        assert_eq!(latency.request.count, 2);
+        assert_eq!(latency.order.count, 1);
+        assert_eq!(latency.trade.count, 1);
+        assert_eq!(latency.solana_rpc.count, 1);
+        assert_eq!(latency.database.count, 1);
+    }
+
+    #[test]
+    fn test_histogram_prometheus_export() {
+        let histogram = Histogram::new();
+        histogram.observe(10.0);
+        histogram.observe(50.0);
+
+        let output = histogram.export_prometheus("test_metric", "Test metric description");
+        assert!(output.contains("# HELP test_metric Test metric description"));
+        assert!(output.contains("# TYPE test_metric histogram"));
+        assert!(output.contains("test_metric_bucket"));
+        assert!(output.contains("test_metric_sum"));
+        assert!(output.contains("test_metric_count"));
+    }
+
+    #[test]
+    fn test_histogram_avg() {
+        let histogram = Histogram::new();
+
+        histogram.observe(10.0);
+        histogram.observe(20.0);
+        histogram.observe(30.0);
+
+        let stats = histogram.get_stats();
+        let avg = stats.avg_ms();
+        assert!((avg - 20.0).abs() < 0.1);
     }
 }
