@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
-use crate::state::{Market, MarketStatus};
+use crate::state::{Market, MarketStatus, OracleRegistry, OracleRegistryError};
 use crate::errors::MarketError;
 
 #[derive(Accounts)]
@@ -9,8 +9,15 @@ pub struct CreateMarket<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    /// CHECK: Oracle account that will resolve the market
+    /// CHECK: Oracle account that will resolve the market (validated against registry)
     pub oracle: UncheckedAccount<'info>,
+
+    /// Oracle registry for validation (optional - if not provided, oracle validation is skipped)
+    #[account(
+        seeds = [OracleRegistry::SEED_PREFIX],
+        bump = oracle_registry.bump
+    )]
+    pub oracle_registry: Option<Account<'info, OracleRegistry>>,
 
     #[account(
         init,
@@ -74,6 +81,14 @@ pub fn handler(
     require!(description.len() <= 512, MarketError::DescriptionTooLong);
     require!(category.len() <= 32, MarketError::CategoryTooLong);
     require!(fee_bps <= 1000, MarketError::InvalidFee); // Max 10%
+
+    // Validate oracle against registry if provided
+    if let Some(ref registry) = ctx.accounts.oracle_registry {
+        require!(
+            registry.is_approved(&ctx.accounts.oracle.key()),
+            OracleRegistryError::OracleNotApproved
+        );
+    }
 
     let clock = Clock::get()?;
     let current_time = clock.unix_timestamp;

@@ -8,8 +8,10 @@ pub mod redeem_outcome_tokens;
 pub mod claim_winnings;
 pub mod refund_cancelled;
 pub mod withdraw_fees;
+pub mod initialize_oracle_registry;
+pub mod manage_oracle;
+pub mod multisig_ops;
 
-// Re-export everything for anchor macro compatibility
 pub use create_market::*;
 pub use resolve_market::*;
 pub use pause_market::*;
@@ -20,3 +22,6 @@ pub use redeem_outcome_tokens::*;
 pub use claim_winnings::*;
 pub use refund_cancelled::*;
 pub use withdraw_fees::*;
+pub use initialize_oracle_registry::*;
+pub use manage_oracle::*;
+pub use multisig_ops::*;

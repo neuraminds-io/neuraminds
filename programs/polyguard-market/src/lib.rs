@@ -6,6 +6,7 @@ pub mod errors;
 
 use instructions::*;
 use instructions::withdraw_fees::FeeRecipient;
+use instructions::manage_oracle::OracleAction;
 use state::*;
 
 declare_id!("98jqxMe88XGjXzCY3bwV1Kuqzj32fcwdhPZa193RUffQ");
@@ -78,8 +79,72 @@ pub mod polyguard_market {
     }
 
     /// Withdraws accumulated fees with protocol/creator split
-    /// Protocol fees go to protocol treasury, creator fees to market authority
     pub fn withdraw_fees(ctx: Context<WithdrawFees>, recipient_type: FeeRecipient) -> Result<()> {
         crate::instructions::withdraw_fees::handler(ctx, recipient_type)
+    }
+
+    /// Initialize the oracle registry
+    pub fn initialize_oracle_registry(
+        ctx: Context<InitializeOracleRegistry>,
+        enforce_validation: bool,
+    ) -> Result<()> {
+        crate::instructions::initialize_oracle_registry::handler(ctx, enforce_validation)
+    }
+
+    /// Add or remove an oracle from the registry
+    pub fn manage_oracle(
+        ctx: Context<ManageOracle>,
+        oracle: Pubkey,
+        action: OracleAction,
+    ) -> Result<()> {
+        crate::instructions::manage_oracle::handler(ctx, oracle, action)
+    }
+
+    /// Update the oracle registry authority
+    pub fn update_registry_authority(
+        ctx: Context<UpdateRegistryAuthority>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        crate::instructions::manage_oracle::update_authority_handler(ctx, new_authority)
+    }
+
+    /// Enable or disable oracle validation enforcement
+    pub fn set_enforce_validation(
+        ctx: Context<SetEnforceValidation>,
+        enforce: bool,
+    ) -> Result<()> {
+        crate::instructions::manage_oracle::set_enforce_validation_handler(ctx, enforce)
+    }
+
+    // =========================================================================
+    // Multisig Operations
+    // =========================================================================
+
+    /// Create a new multisig for admin operations
+    pub fn create_multisig(
+        ctx: Context<CreateMultisig>,
+        signers: Vec<Pubkey>,
+        threshold: u8,
+    ) -> Result<()> {
+        crate::instructions::multisig_ops::create_multisig_handler(ctx, signers, threshold)
+    }
+
+    /// Propose a new multisig transaction
+    pub fn propose_transaction(
+        ctx: Context<ProposeTransaction>,
+        instruction_data: Vec<u8>,
+        target: Pubkey,
+    ) -> Result<()> {
+        crate::instructions::multisig_ops::propose_transaction_handler(ctx, instruction_data, target)
+    }
+
+    /// Approve a pending multisig transaction
+    pub fn approve_transaction(ctx: Context<ApproveTransaction>) -> Result<()> {
+        crate::instructions::multisig_ops::approve_transaction_handler(ctx)
+    }
+
+    /// Execute an approved multisig transaction
+    pub fn execute_transaction(ctx: Context<ExecuteTransaction>) -> Result<()> {
+        crate::instructions::multisig_ops::execute_transaction_handler(ctx)
     }
 }
