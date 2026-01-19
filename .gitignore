@@ -1,0 +1,49 @@
+# Rust/Cargo
+target/
+Cargo.lock
+**/*.rs.bk
+
+# Anchor
+.anchor/
+test-ledger/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.pem
+*.json.backup
+
+# Keys (NEVER commit)
+keys/
+*.keypair
+*-keypair.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Build artifacts
+dist/
+build/
+
+# Test
+coverage/
+.nyc_output/

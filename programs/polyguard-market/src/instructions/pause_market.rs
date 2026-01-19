@@ -1,0 +1,35 @@
+use anchor_lang::prelude::*;
+use crate::state::{Market, MarketStatus};
+use crate::errors::MarketError;
+
+#[derive(Accounts)]
+pub struct PauseMarket<'info> {
+    #[account(
+        constraint = authority.key() == market.authority @ MarketError::UnauthorizedAuthority
+    )]
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = market.status == MarketStatus::Active @ MarketError::MarketNotActive
+    )]
+    pub market: Account<'info, Market>,
+}
+
+pub fn handler(ctx: Context<PauseMarket>) -> Result<()> {
+    let market = &mut ctx.accounts.market;
+    market.status = MarketStatus::Paused;
+
+    emit!(MarketPaused {
+        market: market.key(),
+        paused_at: Clock::get()?.unix_timestamp,
+    });
+
+    Ok(())
+}
+
+#[event]
+pub struct MarketPaused {
+    pub market: Pubkey,
+    pub paused_at: i64,
+}
