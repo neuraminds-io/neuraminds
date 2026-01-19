@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: polyguard-api
+    runtime: docker
+    dockerfilePath: ./app/Dockerfile
+    dockerContext: .
+    region: singapore
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: polyguard
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: polyguard-redis
+          type: redis
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+      - key: RUST_LOG
+        value: info
+      - key: PORT
+        value: "8080"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SOLANA_RPC_URL
+        value: https://api.devnet.solana.com
+      - key: CORS_ORIGINS
+        value: https://polyguard.cc,https://app.polyguard.cc
+
+databases:
+  - name: polyguard
+    plan: starter
+    region: singapore
+    postgresMajorVersion: "16"
+
+# Note: Redis requires paid plan on Render
+# For free tier, use external Redis (e.g., Upstash)
