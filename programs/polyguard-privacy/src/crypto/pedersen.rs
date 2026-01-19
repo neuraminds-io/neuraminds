@@ -41,7 +41,7 @@ pub struct PedersenOpening {
 
 /// Get the secondary generator H via hash-to-curve
 /// This is deterministically derived and the discrete log relative to G is unknown
-fn get_h_generator() -> RistrettoPoint {
+pub fn get_h_generator() -> RistrettoPoint {
     // Domain separation for Polyguard Pedersen commitments
     let mut hasher = Sha512::new();
     hasher.update(b"polyguard_pedersen_generator_h_v1");
