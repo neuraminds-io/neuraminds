@@ -5,6 +5,7 @@ pub mod state;
 pub mod errors;
 
 use instructions::*;
+use instructions::withdraw_fees::FeeRecipient;
 use state::*;
 
 declare_id!("98jqxMe88XGjXzCY3bwV1Kuqzj32fcwdhPZa193RUffQ");
@@ -76,9 +77,9 @@ pub mod polyguard_market {
         crate::instructions::refund_cancelled::handler(ctx)
     }
 
-    /// Withdraws accumulated fees to the protocol treasury
-    /// Only market authority can call this
-    pub fn withdraw_fees(ctx: Context<WithdrawFees>, amount: Option<u64>) -> Result<()> {
-        crate::instructions::withdraw_fees::handler(ctx, amount)
+    /// Withdraws accumulated fees with protocol/creator split
+    /// Protocol fees go to protocol treasury, creator fees to market authority
+    pub fn withdraw_fees(ctx: Context<WithdrawFees>, recipient_type: FeeRecipient) -> Result<()> {
+        crate::instructions::withdraw_fees::handler(ctx, recipient_type)
     }
 }

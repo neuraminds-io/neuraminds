@@ -85,4 +85,7 @@ pub enum MarketError {
 
     #[msg("Invalid collateral mint")]
     InvalidCollateral,
+
+    #[msg("Unauthorized withdrawal: recipient mismatch")]
+    UnauthorizedWithdrawal,
 }

@@ -3,15 +3,23 @@ use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use crate::state::Market;
 use crate::errors::MarketError;
 
+/// Fee recipient type for split withdrawals
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum FeeRecipient {
+    /// Protocol treasury withdrawal
+    Protocol,
+    /// Market creator withdrawal
+    Creator,
+}
+
 #[derive(Accounts)]
 pub struct WithdrawFees<'info> {
-    /// Market authority (only authority can withdraw fees)
+    /// Caller - must be either market authority (creator) or protocol treasury owner
     #[account(mut)]
-    pub authority: Signer<'info>,
+    pub caller: Signer<'info>,
 
     #[account(
         mut,
-        constraint = market.authority == authority.key() @ MarketError::UnauthorizedOracle,
         constraint = market.accumulated_fees > 0 @ MarketError::NoFeesToWithdraw
     )]
     pub market: Account<'info, Market>,
@@ -23,35 +31,51 @@ pub struct WithdrawFees<'info> {
     )]
     pub vault: Account<'info, TokenAccount>,
 
-    /// Treasury account to receive fees
+    /// Recipient account to receive fees
     #[account(
         mut,
-        constraint = treasury.mint == market.collateral_mint @ MarketError::InvalidCollateral
+        constraint = recipient.mint == market.collateral_mint @ MarketError::InvalidCollateral
     )]
-    pub treasury: Account<'info, TokenAccount>,
+    pub recipient: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
 }
 
-/// Withdraw accumulated fees to the protocol treasury
+/// Withdraw fees with protocol/creator split
 ///
 /// Security:
-/// - Only market authority can withdraw fees
-/// - Cannot withdraw more than accumulated_fees
-/// - Updates accumulated_fees to prevent double withdrawal
-pub fn handler(ctx: Context<WithdrawFees>, amount: Option<u64>) -> Result<()> {
+/// - Protocol fees: Only protocol treasury owner can withdraw
+/// - Creator fees: Only market authority (creator) can withdraw
+/// - Tracks separate withdrawal amounts to prevent double withdrawal
+pub fn handler(ctx: Context<WithdrawFees>, recipient_type: FeeRecipient) -> Result<()> {
     let market = &ctx.accounts.market;
+    let caller = ctx.accounts.caller.key();
 
-    // Determine amount to withdraw (all fees if not specified)
-    let withdraw_amount = amount.unwrap_or(market.accumulated_fees);
+    // Validate caller and calculate available amount based on recipient type
+    let withdraw_amount = match recipient_type {
+        FeeRecipient::Protocol => {
+            // Protocol treasury owner or anyone can withdraw to protocol treasury
+            // The recipient must be the protocol treasury
+            require!(
+                ctx.accounts.recipient.key() == market.protocol_treasury
+                    || ctx.accounts.recipient.owner == market.protocol_treasury,
+                MarketError::UnauthorizedWithdrawal
+            );
+            market.available_protocol_fees()
+        }
+        FeeRecipient::Creator => {
+            // Only market creator can withdraw creator fees
+            require!(
+                caller == market.authority,
+                MarketError::UnauthorizedOracle
+            );
+            market.available_creator_fees()
+        }
+    };
 
-    require!(withdraw_amount > 0, MarketError::InvalidAmount);
-    require!(
-        withdraw_amount <= market.accumulated_fees,
-        MarketError::InsufficientFees
-    );
+    require!(withdraw_amount > 0, MarketError::NoFeesToWithdraw);
 
-    // Transfer fees from vault to treasury
+    // Transfer fees from vault to recipient
     let seeds = &[
         Market::SEED_PREFIX,
         market.market_id.as_bytes(),
@@ -63,7 +87,7 @@ pub fn handler(ctx: Context<WithdrawFees>, amount: Option<u64>) -> Result<()> {
         ctx.accounts.token_program.to_account_info(),
         Transfer {
             from: ctx.accounts.vault.to_account_info(),
-            to: ctx.accounts.treasury.to_account_info(),
+            to: ctx.accounts.recipient.to_account_info(),
             authority: ctx.accounts.market.to_account_info(),
         },
         signer_seeds,
@@ -72,12 +96,23 @@ pub fn handler(ctx: Context<WithdrawFees>, amount: Option<u64>) -> Result<()> {
 
     // Update market state
     let market = &mut ctx.accounts.market;
-    market.accumulated_fees = market
-        .accumulated_fees
-        .checked_sub(withdraw_amount)
-        .ok_or(MarketError::ArithmeticOverflow)?;
 
-    // Also decrease total_collateral since fees are part of vault balance
+    match recipient_type {
+        FeeRecipient::Protocol => {
+            market.protocol_fees_withdrawn = market
+                .protocol_fees_withdrawn
+                .checked_add(withdraw_amount)
+                .ok_or(MarketError::ArithmeticOverflow)?;
+        }
+        FeeRecipient::Creator => {
+            market.creator_fees_withdrawn = market
+                .creator_fees_withdrawn
+                .checked_add(withdraw_amount)
+                .ok_or(MarketError::ArithmeticOverflow)?;
+        }
+    }
+
+    // Decrease total_collateral since fees are part of vault balance
     market.total_collateral = market
         .total_collateral
         .checked_sub(withdraw_amount)
@@ -85,10 +120,11 @@ pub fn handler(ctx: Context<WithdrawFees>, amount: Option<u64>) -> Result<()> {
 
     emit!(FeesWithdrawn {
         market: market.key(),
-        authority: ctx.accounts.authority.key(),
-        treasury: ctx.accounts.treasury.key(),
+        recipient_type,
+        recipient: ctx.accounts.recipient.key(),
         amount: withdraw_amount,
-        remaining_fees: market.accumulated_fees,
+        protocol_fees_withdrawn: market.protocol_fees_withdrawn,
+        creator_fees_withdrawn: market.creator_fees_withdrawn,
     });
 
     Ok(())
@@ -97,8 +133,9 @@ pub fn handler(ctx: Context<WithdrawFees>, amount: Option<u64>) -> Result<()> {
 #[event]
 pub struct FeesWithdrawn {
     pub market: Pubkey,
-    pub authority: Pubkey,
-    pub treasury: Pubkey,
+    pub recipient_type: FeeRecipient,
+    pub recipient: Pubkey,
     pub amount: u64,
-    pub remaining_fees: u64,
+    pub protocol_fees_withdrawn: u64,
+    pub creator_fees_withdrawn: u64,
 }

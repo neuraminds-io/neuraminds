@@ -58,11 +58,24 @@ pub struct Market {
     /// Total NO tokens minted
     pub total_no_supply: u64,
 
-    /// Fee in basis points (100 = 1%)
+    /// Total fee in basis points (100 = 1%)
     pub fee_bps: u16,
 
-    /// Accumulated fees
+    /// Protocol's share of fees in basis points (e.g., 2000 = 20% of total fee)
+    /// Remaining (10000 - protocol_fee_share_bps) goes to market creator
+    pub protocol_fee_share_bps: u16,
+
+    /// Protocol treasury address for fee collection
+    pub protocol_treasury: Pubkey,
+
+    /// Accumulated fees (total, before split)
     pub accumulated_fees: u64,
+
+    /// Protocol fees already withdrawn
+    pub protocol_fees_withdrawn: u64,
+
+    /// Creator fees already withdrawn
+    pub creator_fees_withdrawn: u64,
 
     /// Bump seed for PDA
     pub bump: u8,
@@ -115,11 +128,40 @@ impl Market {
     pub const NO_MINT_SEED: &'static [u8] = b"no_mint";
     pub const VAULT_SEED: &'static [u8] = b"vault";
 
+    /// Default protocol fee share: 20% of total fees
+    pub const DEFAULT_PROTOCOL_FEE_SHARE_BPS: u16 = 2000;
+
     pub fn is_trading_active(&self, current_time: i64) -> bool {
         self.status == MarketStatus::Active && current_time < self.trading_end
     }
 
     pub fn can_resolve(&self, current_time: i64) -> bool {
         self.status == MarketStatus::Closed && current_time >= self.resolution_deadline
+    }
+
+    /// Calculate the protocol's share of accumulated fees
+    pub fn calculate_protocol_fees(&self) -> u64 {
+        (self.accumulated_fees as u128)
+            .checked_mul(self.protocol_fee_share_bps as u128)
+            .and_then(|v| v.checked_div(10000))
+            .unwrap_or(0) as u64
+    }
+
+    /// Calculate the creator's share of accumulated fees
+    pub fn calculate_creator_fees(&self) -> u64 {
+        let protocol_share = self.calculate_protocol_fees();
+        self.accumulated_fees.saturating_sub(protocol_share)
+    }
+
+    /// Get available protocol fees (not yet withdrawn)
+    pub fn available_protocol_fees(&self) -> u64 {
+        self.calculate_protocol_fees()
+            .saturating_sub(self.protocol_fees_withdrawn)
+    }
+
+    /// Get available creator fees (not yet withdrawn)
+    pub fn available_creator_fees(&self) -> u64 {
+        self.calculate_creator_fees()
+            .saturating_sub(self.creator_fees_withdrawn)
     }
 }

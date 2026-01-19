@@ -402,17 +402,17 @@ polyguard/
 
 ## Technical Debt
 
-- [ ] Replace placeholder Solana transaction submission
+- [x] ~~Replace placeholder Solana transaction submission~~ **DONE Sprint 7**
 - [x] ~~Implement proper ElGamal encryption (CRITICAL)~~ **DONE Sprint 4**
 - [ ] Implement production bulletproofs (placeholder verification in place)
 - [x] ~~Remove plaintext balance from privacy program (CRITICAL)~~ **DONE Sprint 4**
 - [x] ~~Complete Ed25519 signature verification in backend~~ **DONE Sprint 5**
-- [ ] Add comprehensive input validation
-- [ ] Database connection pooling optimization
-- [ ] Add metrics/observability
+- [x] ~~Add comprehensive input validation~~ **DONE Sprint 7**
+- [x] ~~Database connection pooling optimization~~ **DONE Sprint 7**
+- [x] ~~Add metrics/observability~~ **DONE Sprint 7**
 - [x] ~~Implement fee collection mechanism~~ **DONE Sprint 6**
-- [ ] Token revocation list in Redis (logout enhancement)
-- [ ] Fee splitting between protocol and market creator
+- [x] ~~Token revocation list in Redis (logout enhancement)~~ **DONE Sprint 7**
+- [x] ~~Fee splitting between protocol and market creator~~ **DONE Sprint 7**
 
 ---
 

@@ -12,7 +12,7 @@ mod services;
 
 use api::JwtService;
 use config::AppConfig;
-use services::{DatabaseService, SolanaService, OrderBookService, RedisService};
+use services::{DatabaseService, SolanaService, OrderBookService, RedisService, MetricsService};
 
 pub struct AppState {
     pub config: AppConfig,
@@ -21,6 +21,7 @@ pub struct AppState {
     pub orderbook: OrderBookService,
     pub redis: RedisService,
     pub jwt: JwtService,
+    pub metrics: MetricsService,
 }
 
 #[actix_web::main]
@@ -51,6 +52,8 @@ async fn main() -> std::io::Result<()> {
 
     let jwt = JwtService::new(&config.jwt_secret);
 
+    let metrics = MetricsService::new();
+
     let app_state = Arc::new(AppState {
         config: config.clone(),
         db,
@@ -58,6 +61,7 @@ async fn main() -> std::io::Result<()> {
         orderbook,
         redis,
         jwt,
+        metrics,
     });
 
     info!("Starting HTTP server on {}", bind_addr);
@@ -106,6 +110,10 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::JsonConfig::default().limit(4096))
             // Health check
             .route("/health", web::get().to(api::health::health_check))
+            .route("/health/detailed", web::get().to(api::health::health_detailed))
+            // Metrics endpoints
+            .route("/metrics", web::get().to(api::health::get_metrics))
+            .route("/metrics/prometheus", web::get().to(api::health::get_metrics_prometheus))
             // API v1 routes
             .service(
                 web::scope("/v1")
