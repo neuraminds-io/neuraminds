@@ -1,13 +1,18 @@
 use anyhow::{Result, anyhow};
-use log::{info, error};
+use log::{info, warn, error, debug};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
+    compute_budget::ComputeBudgetInstruction,
+    instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
     signature::{Keypair, Signature, read_keypair_file},
     signer::Signer,
+    system_program,
+    transaction::Transaction,
 };
 use std::str::FromStr;
+use std::env;
 
 use crate::models::{Outcome, OrderSide, MatchedTrade};
 
@@ -39,12 +44,33 @@ impl SolanaService {
 
         info!("Keeper pubkey: {}", keeper.pubkey());
 
+        // Load program IDs from environment or use defaults
+        let market_program_id = env::var("MARKET_PROGRAM_ID")
+            .ok()
+            .and_then(|s| Pubkey::from_str(&s).ok())
+            .unwrap_or_else(|| Pubkey::from_str("98jqxMe88XGjXzCY3bwV1Kuqzj32fcwdhPZa193RUffQ").unwrap());
+
+        let orderbook_program_id = env::var("ORDERBOOK_PROGRAM_ID")
+            .ok()
+            .and_then(|s| Pubkey::from_str(&s).ok())
+            .unwrap_or_else(|| Pubkey::from_str("59LqZtVU2YBrhv8B2E1iASJMzcyBHWhY2JuaJsCXkAS8").unwrap());
+
+        let privacy_program_id = env::var("PRIVACY_PROGRAM_ID")
+            .ok()
+            .and_then(|s| Pubkey::from_str(&s).ok())
+            .unwrap_or_else(|| Pubkey::from_str("9QGtHZJvmjMKTME1s3mVfNXtGpEdXDQZJTxsxqve9GsL").unwrap());
+
+        info!("Program IDs loaded:");
+        info!("  Market: {}", market_program_id);
+        info!("  Orderbook: {}", orderbook_program_id);
+        info!("  Privacy: {}", privacy_program_id);
+
         Ok(Self {
             rpc_client,
             keeper,
-            market_program_id: Pubkey::from_str("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS")?,
-            orderbook_program_id: Pubkey::from_str("HmbTLCmaGvZhKnn1Zfa1JVnp7vkMV4DYVxPLWBVoN65L")?,
-            privacy_program_id: Pubkey::from_str("Eo4XoY6cHmQbPr9S1K7fUhbELeHBP4qkfUHJp2Ht8rQm")?,
+            market_program_id,
+            orderbook_program_id,
+            privacy_program_id,
         })
     }
 
@@ -59,7 +85,11 @@ impl SolanaService {
     }
 
     /// Submit a trade settlement transaction
-    pub async fn settle_trade(&self, matched_trade: &MatchedTrade) -> Result<Signature> {
+    pub async fn settle_trade(
+        &self,
+        matched_trade: &MatchedTrade,
+        accounts: SettleTradeAccounts,
+    ) -> Result<Signature> {
         info!(
             "Settling trade: buy_order={}, sell_order={}, quantity={}, price={}",
             matched_trade.buy_order_id,
@@ -68,50 +98,193 @@ impl SolanaService {
             matched_trade.fill_price_bps
         );
 
-        // In production, this would:
-        // 1. Build the settle_trade instruction
-        // 2. Get recent blockhash
-        // 3. Create and sign transaction
-        // 4. Send and confirm transaction
+        // Build the settle_trade instruction
+        let ix = self.build_settle_trade_ix(matched_trade, &accounts)?;
 
-        // Placeholder for now
-        // let ix = self.build_settle_trade_ix(matched_trade)?;
-        // let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
-        // let tx = Transaction::new_signed_with_payer(
-        //     &[ix],
-        //     Some(&self.keeper.pubkey()),
-        //     &[&self.keeper],
-        //     recent_blockhash,
-        // );
-        // let signature = self.rpc_client.send_and_confirm_transaction(&tx)?;
+        // Add compute budget for complex instruction
+        let compute_ix = ComputeBudgetInstruction::set_compute_unit_limit(300_000);
 
-        // Return placeholder signature
-        Ok(Signature::default())
+        // Get recent blockhash
+        let recent_blockhash = self.rpc_client.get_latest_blockhash()
+            .map_err(|e| anyhow!("Failed to get blockhash: {}", e))?;
+
+        // Create and sign transaction
+        let tx = Transaction::new_signed_with_payer(
+            &[compute_ix, ix],
+            Some(&self.keeper.pubkey()),
+            &[&self.keeper],
+            recent_blockhash,
+        );
+
+        // Send and confirm transaction
+        let signature = self.rpc_client.send_and_confirm_transaction(&tx)
+            .map_err(|e| {
+                error!("Failed to settle trade: {}", e);
+                anyhow!("Transaction failed: {}", e)
+            })?;
+
+        info!("Trade settled successfully: {}", signature);
+        Ok(signature)
     }
 
-    /// Cancel an order on-chain
+    /// Build the settle_trade instruction
+    fn build_settle_trade_ix(
+        &self,
+        matched_trade: &MatchedTrade,
+        accounts: &SettleTradeAccounts,
+    ) -> Result<Instruction> {
+        // Anchor instruction discriminator for "settle_trade"
+        // This is SHA256("global:settle_trade")[0..8]
+        let mut data = vec![0x9f, 0x44, 0x76, 0x6c, 0x8a, 0x3e, 0x17, 0x2e];
+
+        // Append fill_quantity (u64, little-endian)
+        data.extend_from_slice(&matched_trade.fill_quantity.to_le_bytes());
+
+        // Append fill_price_bps (u16, little-endian)
+        data.extend_from_slice(&matched_trade.fill_price_bps.to_le_bytes());
+
+        // Build account metas in exact order expected by SettleTrade accounts struct
+        let account_metas = vec![
+            AccountMeta::new_readonly(self.keeper.pubkey(), true),  // keeper (signer)
+            AccountMeta::new(accounts.config, false),               // config
+            AccountMeta::new_readonly(accounts.market, false),      // market
+            AccountMeta::new(accounts.buy_order, false),            // buy_order
+            AccountMeta::new(accounts.buyer_position, false),       // buyer_position
+            AccountMeta::new(accounts.sell_order, false),           // sell_order
+            AccountMeta::new(accounts.seller_position, false),      // seller_position
+            AccountMeta::new(accounts.escrow_vault, false),         // escrow_vault
+            AccountMeta::new(accounts.seller_collateral, false),    // seller_collateral
+            AccountMeta::new(accounts.buyer_collateral, false),     // buyer_collateral
+            AccountMeta::new_readonly(accounts.escrow_authority, false), // escrow_authority
+            AccountMeta::new_readonly(spl_token::id(), false),      // token_program
+        ];
+
+        Ok(Instruction {
+            program_id: self.orderbook_program_id,
+            accounts: account_metas,
+            data,
+        })
+    }
+
+    /// Cancel an order on-chain (keeper-initiated)
     pub async fn cancel_order(
         &self,
-        market_pubkey: &Pubkey,
+        accounts: CancelOrderAccounts,
         order_id: u64,
-        owner: &Pubkey,
     ) -> Result<Signature> {
-        info!("Cancelling order {} for market {}", order_id, market_pubkey);
+        info!("Cancelling order {} on market {}", order_id, accounts.market);
 
-        // Placeholder
-        Ok(Signature::default())
+        // Anchor instruction discriminator for "cancel_order"
+        let mut data = vec![0x5f, 0xc0, 0x55, 0xd3, 0x47, 0x0c, 0x5f, 0x3e];
+
+        // Build account metas
+        let account_metas = vec![
+            AccountMeta::new(accounts.owner, true),                  // owner (signer)
+            AccountMeta::new_readonly(accounts.market, false),       // market
+            AccountMeta::new(accounts.order, false),                 // order
+            AccountMeta::new(accounts.position, false),              // position
+            AccountMeta::new(accounts.escrow_vault, false),          // escrow_vault
+            AccountMeta::new(accounts.user_collateral, false),       // user_collateral
+            AccountMeta::new_readonly(accounts.escrow_authority, false), // escrow_authority
+            AccountMeta::new_readonly(spl_token::id(), false),       // token_program
+        ];
+
+        let ix = Instruction {
+            program_id: self.orderbook_program_id,
+            accounts: account_metas,
+            data,
+        };
+
+        let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
+        let tx = Transaction::new_signed_with_payer(
+            &[ix],
+            Some(&self.keeper.pubkey()),
+            &[&self.keeper],
+            recent_blockhash,
+        );
+
+        let signature = self.rpc_client.send_and_confirm_transaction(&tx)
+            .map_err(|e| anyhow!("Cancel order failed: {}", e))?;
+
+        info!("Order cancelled successfully: {}", signature);
+        Ok(signature)
     }
 
-    /// Claim winnings for a user
+    /// Claim winnings for a user after market resolution
     pub async fn claim_winnings(
         &self,
-        market_pubkey: &Pubkey,
-        user: &Pubkey,
+        accounts: ClaimWinningsAccounts,
     ) -> Result<(Signature, u64)> {
-        info!("Claiming winnings for {} on market {}", user, market_pubkey);
+        info!("Claiming winnings for {} on market {}", accounts.user, accounts.market);
 
-        // Placeholder
+        // Anchor instruction discriminator for "claim_winnings"
+        let data = vec![0xbd, 0x87, 0x45, 0xd4, 0x84, 0xab, 0xaa, 0x60];
+
+        // Build account metas
+        let account_metas = vec![
+            AccountMeta::new(accounts.user, true),                   // user (signer)
+            AccountMeta::new(accounts.market, false),                // market
+            AccountMeta::new(accounts.position, false),              // position
+            AccountMeta::new(accounts.vault, false),                 // vault
+            AccountMeta::new(accounts.user_collateral, false),       // user_collateral
+            AccountMeta::new_readonly(spl_token::id(), false),       // token_program
+        ];
+
+        let ix = Instruction {
+            program_id: self.market_program_id,
+            accounts: account_metas,
+            data,
+        };
+
+        // Note: claim_winnings requires user signature
+        // The backend cannot sign on behalf of users
+        // This would typically be handled via:
+        // 1. Return unsigned transaction for client to sign
+        // 2. Use a transaction relay service
+        // 3. Have users submit claims directly to the blockchain
+
+        debug!("claim_winnings: User {} would claim from market {}", accounts.user, accounts.market);
+        warn!("claim_winnings requires user wallet signature - returning placeholder");
+
+        // For now, return placeholder - full implementation needs wallet adapter integration
+        // In production, this would return serialized unsigned transaction for client signing
         Ok((Signature::default(), 0))
+    }
+
+    /// Build an unsigned claim_winnings transaction for client signing
+    pub fn build_claim_winnings_tx(
+        &self,
+        accounts: &ClaimWinningsAccounts,
+    ) -> Result<Vec<u8>> {
+        // Anchor instruction discriminator for "claim_winnings"
+        let data = vec![0xbd, 0x87, 0x45, 0xd4, 0x84, 0xab, 0xaa, 0x60];
+
+        let account_metas = vec![
+            AccountMeta::new(accounts.user, true),
+            AccountMeta::new(accounts.market, false),
+            AccountMeta::new(accounts.position, false),
+            AccountMeta::new(accounts.vault, false),
+            AccountMeta::new(accounts.user_collateral, false),
+            AccountMeta::new_readonly(spl_token::id(), false),
+        ];
+
+        let ix = Instruction {
+            program_id: self.market_program_id,
+            accounts: account_metas,
+            data,
+        };
+
+        let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
+
+        // Create transaction message (unsigned)
+        let message = solana_sdk::message::Message::new_with_blockhash(
+            &[ix],
+            Some(&accounts.user),
+            &recent_blockhash,
+        );
+
+        // Serialize message for client signing
+        Ok(bincode::serialize(&message)?)
     }
 
     /// Get market account data
@@ -159,25 +332,105 @@ impl SolanaService {
     }
 }
 
-// Placeholder account structs
-#[derive(Default)]
+// ============================================================================
+// Account structs for transaction building
+// ============================================================================
+
+/// Accounts required for settle_trade instruction
+#[derive(Debug, Clone)]
+pub struct SettleTradeAccounts {
+    pub config: Pubkey,
+    pub market: Pubkey,
+    pub buy_order: Pubkey,
+    pub buyer_position: Pubkey,
+    pub sell_order: Pubkey,
+    pub seller_position: Pubkey,
+    pub escrow_vault: Pubkey,
+    pub seller_collateral: Pubkey,
+    pub buyer_collateral: Pubkey,
+    pub escrow_authority: Pubkey,
+}
+
+/// Accounts required for cancel_order instruction
+#[derive(Debug, Clone)]
+pub struct CancelOrderAccounts {
+    pub owner: Pubkey,
+    pub market: Pubkey,
+    pub order: Pubkey,
+    pub position: Pubkey,
+    pub escrow_vault: Pubkey,
+    pub user_collateral: Pubkey,
+    pub escrow_authority: Pubkey,
+}
+
+/// Accounts required for claim_winnings instruction
+#[derive(Debug, Clone)]
+pub struct ClaimWinningsAccounts {
+    pub user: Pubkey,
+    pub market: Pubkey,
+    pub position: Pubkey,
+    pub vault: Pubkey,
+    pub user_collateral: Pubkey,
+}
+
+// ============================================================================
+// On-chain account data structs (for deserialization)
+// ============================================================================
+
+/// Market account data (matches on-chain Market struct)
+#[derive(Default, Debug, Clone)]
 pub struct MarketAccount {
     pub market_id: String,
     pub question: String,
     pub status: u8,
+    pub resolved_outcome: u8,
     pub yes_price: u64,
     pub no_price: u64,
     pub total_collateral: u64,
+    pub accumulated_fees: u64,
+    pub fee_bps: u16,
+    pub authority: Pubkey,
+    pub oracle: Pubkey,
+    pub trading_end: i64,
 }
 
-#[derive(Default)]
+/// Order account data (matches on-chain Order struct)
+#[derive(Default, Debug, Clone)]
 pub struct OrderAccount {
     pub order_id: u64,
     pub owner: Pubkey,
+    pub market: Pubkey,
     pub side: u8,
     pub outcome: u8,
     pub price_bps: u16,
-    pub quantity: u64,
+    pub original_quantity: u64,
     pub remaining_quantity: u64,
+    pub filled_quantity: u64,
     pub status: u8,
+    pub created_at: i64,
+    pub expires_at: i64,
+}
+
+/// Position account data
+#[derive(Default, Debug, Clone)]
+pub struct PositionAccount {
+    pub owner: Pubkey,
+    pub market: Pubkey,
+    pub yes_balance: u64,
+    pub no_balance: u64,
+    pub locked_collateral: u64,
+    pub locked_yes: u64,
+    pub locked_no: u64,
+    pub open_order_count: u32,
+    pub total_trades: u32,
+}
+
+// SPL Token program ID helper
+mod spl_token {
+    use solana_sdk::pubkey::Pubkey;
+    use std::str::FromStr;
+
+    pub fn id() -> Pubkey {
+        Pubkey::from_str("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").unwrap()
+    }
 }

@@ -4,13 +4,13 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::models::{
-    Order, OrderSide, OrderType, OrderStatus, Outcome,
+    Order, OrderSide, OrderStatus, Outcome,
     PlaceOrderRequest, ListOrdersQuery, OrderListResponse,
     PlaceOrderResponse, CancelOrderResponse,
 };
 use crate::AppState;
 use crate::require_auth;
-use super::ApiError;
+use super::{ApiError, validate_order_price, validate_order_quantity, validate_market_id, validate_uuid, validate_pagination};
 
 /// List orders for authenticated user
 pub async fn list_orders(
@@ -22,15 +22,20 @@ pub async fn list_orders(
     let user = require_auth!(&req, &state);
     let owner = &user.wallet_address;
 
+    // Validate market_id if provided
+    if let Some(ref market_id) = query.market_id {
+        validate_market_id(market_id)?;
+    }
+
     let status = query.status.as_ref().map(|s| match s.as_str() {
         "open" => OrderStatus::Open,
         "filled" => OrderStatus::Filled,
         "cancelled" => OrderStatus::Cancelled,
+        "partially_filled" => OrderStatus::PartiallyFilled,
         _ => OrderStatus::Open,
     });
 
-    let limit = query.limit.unwrap_or(50).min(100);
-    let offset = query.offset.unwrap_or(0);
+    let (limit, offset) = validate_pagination(query.limit, query.offset)?;
 
     let (orders, total) = state.db
         .get_orders(owner, query.market_id.as_deref(), status, limit, offset)
@@ -46,6 +51,9 @@ pub async fn get_order(
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
     let order_id = path.into_inner();
+
+    // Validate order ID format
+    validate_uuid(&order_id, "order_id")?;
 
     let order = state.db
         .get_order(&order_id)
@@ -67,25 +75,20 @@ pub async fn place_order(
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
 
-    // Validate inputs
-    if body.price <= 0.0 || body.price >= 1.0 {
-        return Err(ApiError::bad_request(
-            "INVALID_PRICE",
-            "Price must be between 0 and 1",
-        ));
-    }
-    if body.quantity == 0 {
-        return Err(ApiError::bad_request(
-            "INVALID_QUANTITY",
-            "Quantity must be greater than 0",
-        ));
-    }
-    // SECURITY: Validate quantity limits
-    if body.quantity > 1_000_000_000 {
-        return Err(ApiError::bad_request(
-            "INVALID_QUANTITY",
-            "Quantity exceeds maximum allowed",
-        ));
+    // Validate all inputs using centralized validation
+    validate_market_id(&body.market_id)?;
+    validate_order_price(body.price)?;
+    validate_order_quantity(body.quantity)?;
+
+    // Validate expiration if provided
+    if let Some(expires_at) = body.expires_at {
+        let now = Utc::now();
+        if expires_at <= now {
+            return Err(ApiError::bad_request(
+                "INVALID_EXPIRATION",
+                "Expiration time must be in the future",
+            ));
+        }
     }
 
     let owner = user.wallet_address;

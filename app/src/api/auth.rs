@@ -425,8 +425,7 @@ pub async fn refresh_token(
 }
 
 /// POST /v1/auth/logout
-/// Logs out the current user (client should discard tokens)
-/// In a full implementation, this would add the token to a revocation list
+/// Logs out the current user by revoking their token
 pub async fn logout(
     req: HttpRequest,
     state: web::Data<Arc<AppState>>,
@@ -442,8 +441,12 @@ pub async fn logout(
             let token = &header[7..];
             if let Ok(claims) = state.jwt.validate_token(token) {
                 log::info!("User logged out: {}", claims.sub);
-                // TODO: Add token to revocation list in Redis
-                // state.redis.set(&format!("revoked:{}", claims.jti), &true, Some(claims.exp as u64)).await?;
+
+                // Add token to revocation list in Redis
+                if let Err(e) = state.redis.revoke_token(&claims.jti, claims.exp).await {
+                    log::warn!("Failed to add token to revocation list: {}", e);
+                    // Don't fail the logout - client should still discard token
+                }
             }
         }
     }
@@ -451,6 +454,39 @@ pub async fn logout(
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "message": "Logged out successfully"
     })))
+}
+
+/// POST /v1/auth/logout-all
+/// Logs out the user from all devices by incrementing their token generation
+pub async fn logout_all(
+    req: HttpRequest,
+    state: web::Data<Arc<AppState>>,
+) -> Result<HttpResponse, ApiError> {
+    let auth_header = req
+        .headers()
+        .get("Authorization")
+        .and_then(|h| h.to_str().ok());
+
+    if let Some(header) = auth_header {
+        if header.starts_with("Bearer ") {
+            let token = &header[7..];
+            if let Ok(claims) = state.jwt.validate_token(token) {
+                log::info!("User {} logging out from all devices", claims.sub);
+
+                // Increment user's token generation to invalidate all existing tokens
+                if let Err(e) = state.redis.revoke_all_user_tokens(&claims.sub).await {
+                    log::error!("Failed to revoke all tokens: {}", e);
+                    return Err(ApiError::internal("Failed to logout from all devices"));
+                }
+
+                return Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "message": "Logged out from all devices successfully"
+                })));
+            }
+        }
+    }
+
+    Err(ApiError::unauthorized("Invalid or missing token"))
 }
 
 /// Determine user role based on wallet address

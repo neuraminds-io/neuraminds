@@ -38,10 +38,10 @@ impl RedisService {
 
         match ttl_seconds {
             Some(ttl) => {
-                conn.set_ex(key, serialized, ttl).await?;
+                let _: () = conn.set_ex(key, serialized, ttl).await?;
             }
             None => {
-                conn.set(key, serialized).await?;
+                let _: () = conn.set(key, serialized).await?;
             }
         }
 
@@ -51,14 +51,14 @@ impl RedisService {
     /// Delete a key
     pub async fn delete(&self, key: &str) -> Result<()> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
-        conn.del(key).await?;
+        let _: () = conn.del(key).await?;
         Ok(())
     }
 
     /// Publish a message to a channel
     pub async fn publish(&self, channel: &str, message: &str) -> Result<()> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
-        conn.publish(channel, message).await?;
+        let _: () = conn.publish(channel, message).await?;
         Ok(())
     }
 
@@ -151,5 +151,95 @@ impl RedisService {
         });
 
         self.publish(&format!("trades:{}", market_id), &message.to_string()).await
+    }
+
+    // =========================================================================
+    // Token Revocation List
+    // =========================================================================
+
+    /// Revoke a JWT token by its JTI (token ID)
+    /// TTL is set to match the token's remaining lifetime
+    pub async fn revoke_token(&self, jti: &str, expires_at: i64) -> Result<()> {
+        let key = format!("revoked_token:{}", jti);
+        let now = chrono::Utc::now().timestamp();
+        let ttl = (expires_at - now).max(1) as u64;
+
+        // Store the revocation with TTL matching token expiration
+        // After token expires, we don't need to track it anymore
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let _: () = conn.set_ex(&key, "1", ttl).await?;
+
+        info!("Token {} revoked, TTL: {}s", jti, ttl);
+        Ok(())
+    }
+
+    /// Check if a token has been revoked
+    pub async fn is_token_revoked(&self, jti: &str) -> Result<bool> {
+        let key = format!("revoked_token:{}", jti);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let exists: bool = conn.exists(&key).await?;
+        Ok(exists)
+    }
+
+    /// Revoke all tokens for a specific user (logout from all devices)
+    /// This uses a user-specific generation counter
+    pub async fn revoke_all_user_tokens(&self, wallet_address: &str) -> Result<()> {
+        let key = format!("user_token_gen:{}", wallet_address);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+
+        // Increment the generation counter
+        let _: i64 = conn.incr(&key, 1i64).await?;
+
+        info!("All tokens revoked for user {}", wallet_address);
+        Ok(())
+    }
+
+    /// Get the current token generation for a user
+    pub async fn get_user_token_generation(&self, wallet_address: &str) -> Result<i64> {
+        let key = format!("user_token_gen:{}", wallet_address);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let gen: Option<i64> = conn.get(&key).await?;
+        Ok(gen.unwrap_or(0))
+    }
+
+    /// Store user token generation in the token claims for validation
+    pub async fn set_user_token_generation(&self, wallet_address: &str, generation: i64) -> Result<()> {
+        let key = format!("user_token_gen:{}", wallet_address);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        // 30 days TTL for generation counter
+        let _: () = conn.set_ex(&key, generation, 30 * 24 * 3600).await?;
+        Ok(())
+    }
+
+    // =========================================================================
+    // Rate Limiting Support
+    // =========================================================================
+
+    /// Increment rate limit counter for an IP/user
+    /// Returns the current count and remaining TTL
+    pub async fn increment_rate_limit(&self, key: &str, window_secs: u64) -> Result<(i64, i64)> {
+        let rate_key = format!("rate_limit:{}", key);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+
+        // Increment counter
+        let count: i64 = conn.incr(&rate_key, 1i64).await?;
+
+        // Set expiry if this is the first request in the window
+        if count == 1 {
+            let _: () = conn.expire(&rate_key, window_secs as i64).await?;
+        }
+
+        // Get TTL
+        let ttl: i64 = conn.ttl(&rate_key).await?;
+
+        Ok((count, ttl))
+    }
+
+    /// Check rate limit without incrementing
+    pub async fn get_rate_limit_count(&self, key: &str) -> Result<i64> {
+        let rate_key = format!("rate_limit:{}", key);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let count: Option<i64> = conn.get(&rate_key).await?;
+        Ok(count.unwrap_or(0))
     }
 }

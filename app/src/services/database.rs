@@ -2,6 +2,8 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use log::info;
+use std::time::Duration;
+use std::env;
 
 use crate::models::{
     Market, MarketStatus, Outcome,
@@ -9,25 +11,106 @@ use crate::models::{
     Position, Trade, Transaction, TransactionType, TransactionStatus,
 };
 
+/// Database connection pool configuration
+pub struct PoolConfig {
+    /// Maximum number of connections in the pool
+    pub max_connections: u32,
+    /// Minimum number of connections to maintain
+    pub min_connections: u32,
+    /// Maximum time to wait for a connection
+    pub acquire_timeout: Duration,
+    /// Maximum idle time before connection is closed
+    pub idle_timeout: Duration,
+    /// Maximum lifetime of a connection
+    pub max_lifetime: Duration,
+}
+
+impl Default for PoolConfig {
+    fn default() -> Self {
+        Self {
+            max_connections: 20,
+            min_connections: 5,
+            acquire_timeout: Duration::from_secs(30),
+            idle_timeout: Duration::from_secs(600),
+            max_lifetime: Duration::from_secs(1800),
+        }
+    }
+}
+
+impl PoolConfig {
+    /// Load configuration from environment variables
+    pub fn from_env() -> Self {
+        Self {
+            max_connections: env::var("DB_MAX_CONNECTIONS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(20),
+            min_connections: env::var("DB_MIN_CONNECTIONS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(5),
+            acquire_timeout: Duration::from_secs(
+                env::var("DB_ACQUIRE_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(30)
+            ),
+            idle_timeout: Duration::from_secs(
+                env::var("DB_IDLE_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(600)
+            ),
+            max_lifetime: Duration::from_secs(
+                env::var("DB_MAX_LIFETIME_SECS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1800)
+            ),
+        }
+    }
+}
+
 pub struct DatabaseService {
     pool: PgPool,
 }
 
 impl DatabaseService {
     pub async fn new(database_url: &str) -> Result<Self> {
-        info!("Connecting to database...");
+        Self::with_config(database_url, PoolConfig::from_env()).await
+    }
+
+    pub async fn with_config(database_url: &str, config: PoolConfig) -> Result<Self> {
+        info!("Connecting to database with pool config:");
+        info!("  max_connections: {}", config.max_connections);
+        info!("  min_connections: {}", config.min_connections);
+        info!("  acquire_timeout: {:?}", config.acquire_timeout);
+        info!("  idle_timeout: {:?}", config.idle_timeout);
+        info!("  max_lifetime: {:?}", config.max_lifetime);
 
         let pool = PgPoolOptions::new()
-            .max_connections(10)
+            .max_connections(config.max_connections)
+            .min_connections(config.min_connections)
+            .acquire_timeout(config.acquire_timeout)
+            .idle_timeout(config.idle_timeout)
+            .max_lifetime(config.max_lifetime)
             .connect(database_url)
             .await?;
 
         info!("Database connected successfully");
 
-        // Run migrations
+        // Run migrations (uncomment in production)
         // sqlx::migrate!("./migrations").run(&pool).await?;
 
         Ok(Self { pool })
+    }
+
+    /// Get pool statistics for monitoring
+    pub fn pool_stats(&self) -> PoolStats {
+        PoolStats {
+            size: self.pool.size(),
+            idle_count: self.pool.num_idle(),
+        }
     }
 
     // Markets
@@ -234,4 +317,13 @@ impl DatabaseService {
         // Placeholder
         Ok((vec![], 0))
     }
+}
+
+/// Database pool statistics for monitoring
+#[derive(Debug, Clone)]
+pub struct PoolStats {
+    /// Current number of connections in the pool
+    pub size: u32,
+    /// Number of idle connections
+    pub idle_count: usize,
 }
