@@ -48,9 +48,28 @@ impl OrderBookService {
         }
     }
 
+    /// Acquire write lock, recovering from poison if necessary
+    /// In case of panic during a previous operation, we clear the poisoned
+    /// state and return the guard. This may lose some in-flight data but
+    /// prevents deadlock and allows the system to continue.
+    fn write_books(&self) -> std::sync::RwLockWriteGuard<'_, HashMap<String, MarketOrderBook>> {
+        self.books.write().unwrap_or_else(|poisoned| {
+            log::error!("OrderBook lock was poisoned, recovering...");
+            poisoned.into_inner()
+        })
+    }
+
+    /// Acquire read lock, recovering from poison if necessary
+    fn read_books(&self) -> std::sync::RwLockReadGuard<'_, HashMap<String, MarketOrderBook>> {
+        self.books.read().unwrap_or_else(|poisoned| {
+            log::error!("OrderBook lock was poisoned (read), recovering...");
+            poisoned.into_inner()
+        })
+    }
+
     /// Add an order to the order book and attempt to match
     pub fn add_order(&self, order: &Order) -> Vec<MatchedTrade> {
-        let mut books = self.books.write().unwrap();
+        let mut books = self.write_books();
 
         // Get or create market order book
         let market_book = books
@@ -227,7 +246,7 @@ impl OrderBookService {
 
     /// Remove an order from the book (for cancellations)
     pub fn remove_order(&self, market_id: &str, outcome: Outcome, side: OrderSide, order_id: &str) {
-        let mut books = self.books.write().unwrap();
+        let mut books = self.write_books();
 
         if let Some(market_book) = books.get_mut(market_id) {
             let outcome_book = match outcome {
@@ -257,7 +276,7 @@ impl OrderBookService {
         outcome: Outcome,
         levels: usize,
     ) -> (Vec<OrderBookLevel>, Vec<OrderBookLevel>) {
-        let books = self.books.read().unwrap();
+        let books = self.read_books();
 
         let empty_bids = Vec::new();
         let empty_asks = Vec::new();
@@ -300,7 +319,7 @@ impl OrderBookService {
 
     /// Get best bid price
     pub fn best_bid(&self, market_id: &str, outcome: Outcome) -> Option<f64> {
-        let books = self.books.read().unwrap();
+        let books = self.read_books();
         books.get(market_id).and_then(|mb| {
             let book = match outcome {
                 Outcome::Yes => &mb.yes,
@@ -312,7 +331,7 @@ impl OrderBookService {
 
     /// Get best ask price
     pub fn best_ask(&self, market_id: &str, outcome: Outcome) -> Option<f64> {
-        let books = self.books.read().unwrap();
+        let books = self.read_books();
         books.get(market_id).and_then(|mb| {
             let book = match outcome {
                 Outcome::Yes => &mb.yes,
@@ -339,7 +358,7 @@ impl Default for OrderBookService {
 impl OrderBookService {
     /// Restore order book from persisted entries (call on startup)
     pub fn restore_from_entries(&self, entries: Vec<OrderBookEntry>) {
-        let mut books = self.books.write().unwrap();
+        let mut books = self.write_books();
 
         for entry in entries {
             let market_book = books
@@ -400,7 +419,7 @@ impl OrderBookService {
 
     /// Get all open orders for a market (for persistence/sync)
     pub fn get_all_orders(&self, market_id: &str) -> Vec<(String, Outcome, OrderSide, u16, u64)> {
-        let books = self.books.read().unwrap();
+        let books = self.read_books();
         let mut orders = Vec::new();
 
         if let Some(market_book) = books.get(market_id) {

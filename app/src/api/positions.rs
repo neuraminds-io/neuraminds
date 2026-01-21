@@ -84,7 +84,9 @@ pub async fn claim_winnings(
         return Err(ApiError::forbidden("You can only claim your own winnings"));
     }
 
-    let winning_outcome = market.resolved_outcome.unwrap();
+    // Safe: already verified resolved_outcome.is_some() above
+    let winning_outcome = market.resolved_outcome
+        .expect("checked is_some above");
     let winning_tokens = match winning_outcome {
         Outcome::Yes => position.yes_balance,
         Outcome::No => position.no_balance,

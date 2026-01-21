@@ -129,7 +129,6 @@ jobs:
 
       - name: Check dependencies
         run: cargo deny check
-        continue-on-error: true
 
   build:
     name: Build
