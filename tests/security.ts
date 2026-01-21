@@ -20,6 +20,7 @@ describe("Security Tests", () => {
   const oracle = Keypair.generate();
   const attacker = Keypair.generate();
   const user = Keypair.generate();
+  const protocolTreasury = Keypair.generate();
 
   let collateralMint: PublicKey;
   let marketPda: PublicKey;
@@ -77,6 +78,45 @@ describe("Security Tests", () => {
     );
   });
 
+  describe("Setup", () => {
+    it("Initializes oracle registry for security tests", async () => {
+      try {
+        await marketProgram.methods
+          .initializeOracleRegistry(true)
+          .accounts({
+            authority: authority.publicKey,
+            registry: oracleRegistryPda,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([authority])
+          .rpc();
+        console.log("✓ Oracle registry initialized");
+      } catch (e: any) {
+        if (e.message.includes("already in use")) {
+          console.log("✓ Oracle registry already exists");
+        }
+      }
+    });
+
+    it("Adds oracle to registry", async () => {
+      try {
+        await marketProgram.methods
+          .addOracle(oracle.publicKey)
+          .accounts({
+            authority: authority.publicKey,
+            registry: oracleRegistryPda,
+          })
+          .signers([authority])
+          .rpc();
+        console.log("✓ Oracle added");
+      } catch (e: any) {
+        if (e.message.includes("already")) {
+          console.log("✓ Oracle already registered");
+        }
+      }
+    });
+  });
+
   describe("Authorization Tests", () => {
     it("SECURITY: Rejects unauthorized oracle resolution", async () => {
       // First create a market
@@ -94,12 +134,13 @@ describe("Security Tests", () => {
           .accounts({
             authority: authority.publicKey,
             oracle: oracle.publicKey,
+            oracleRegistry: oracleRegistryPda,
             market: marketPda,
             collateralMint: collateralMint,
             yesMint: yesMintPda,
             noMint: noMintPda,
             vault: vaultPda,
-            oracleRegistry: null,
+            protocolTreasury: protocolTreasury.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -185,12 +226,13 @@ describe("Security Tests", () => {
           .accounts({
             authority: authority.publicKey,
             oracle: oracle.publicKey,
+            oracleRegistry: oracleRegistryPda,
             market: badMarketPda,
             collateralMint: collateralMint,
             yesMint: badYesMint,
             noMint: badNoMint,
             vault: badVault,
-            oracleRegistry: null,
+            protocolTreasury: protocolTreasury.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -239,12 +281,13 @@ describe("Security Tests", () => {
           .accounts({
             authority: authority.publicKey,
             oracle: oracle.publicKey,
+            oracleRegistry: oracleRegistryPda,
             market: badMarketPda,
             collateralMint: collateralMint,
             yesMint: badYesMint,
             noMint: badNoMint,
             vault: badVault,
-            oracleRegistry: null,
+            protocolTreasury: protocolTreasury.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -291,12 +334,13 @@ describe("Security Tests", () => {
           .accounts({
             authority: authority.publicKey,
             oracle: oracle.publicKey,
+            oracleRegistry: oracleRegistryPda,
             market: badMarketPda,
             collateralMint: collateralMint,
             yesMint: badYesMint,
             noMint: badNoMint,
             vault: badVault,
-            oracleRegistry: null,
+            protocolTreasury: protocolTreasury.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -389,12 +433,13 @@ describe("Security Tests", () => {
           .accounts({
             authority: authority.publicKey,
             oracle: unapprovedOracle.publicKey, // Not in registry
+            oracleRegistry: oracleRegistryPda, // With registry validation
             market: badMarketPda,
             collateralMint: collateralMint,
             yesMint: badYesMint,
             noMint: badNoMint,
             vault: badVault,
-            oracleRegistry: oracleRegistryPda, // With registry validation
+            protocolTreasury: protocolTreasury.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })

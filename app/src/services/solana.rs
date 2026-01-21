@@ -45,20 +45,30 @@ impl SolanaService {
         info!("Keeper pubkey: {}", keeper.pubkey());
 
         // Load program IDs from environment or use defaults
+        // These are hardcoded devnet defaults - safe to use expect() here
         let market_program_id = env::var("MARKET_PROGRAM_ID")
             .ok()
             .and_then(|s| Pubkey::from_str(&s).ok())
-            .unwrap_or_else(|| Pubkey::from_str("98jqxMe88XGjXzCY3bwV1Kuqzj32fcwdhPZa193RUffQ").unwrap());
+            .unwrap_or_else(|| {
+                Pubkey::from_str("98jqxMe88XGjXzCY3bwV1Kuqzj32fcwdhPZa193RUffQ")
+                    .expect("hardcoded market program ID is valid")
+            });
 
         let orderbook_program_id = env::var("ORDERBOOK_PROGRAM_ID")
             .ok()
             .and_then(|s| Pubkey::from_str(&s).ok())
-            .unwrap_or_else(|| Pubkey::from_str("59LqZtVU2YBrhv8B2E1iASJMzcyBHWhY2JuaJsCXkAS8").unwrap());
+            .unwrap_or_else(|| {
+                Pubkey::from_str("59LqZtVU2YBrhv8B2E1iASJMzcyBHWhY2JuaJsCXkAS8")
+                    .expect("hardcoded orderbook program ID is valid")
+            });
 
         let privacy_program_id = env::var("PRIVACY_PROGRAM_ID")
             .ok()
             .and_then(|s| Pubkey::from_str(&s).ok())
-            .unwrap_or_else(|| Pubkey::from_str("9QGtHZJvmjMKTME1s3mVfNXtGpEdXDQZJTxsxqve9GsL").unwrap());
+            .unwrap_or_else(|| {
+                Pubkey::from_str("9QGtHZJvmjMKTME1s3mVfNXtGpEdXDQZJTxsxqve9GsL")
+                    .expect("hardcoded privacy program ID is valid")
+            });
 
         info!("Program IDs loaded:");
         info!("  Market: {}", market_program_id);
@@ -496,8 +506,14 @@ pub struct PositionAccount {
 mod spl_token {
     use solana_sdk::pubkey::Pubkey;
     use std::str::FromStr;
+    use std::sync::OnceLock;
+
+    static TOKEN_PROGRAM_ID: OnceLock<Pubkey> = OnceLock::new();
 
     pub fn id() -> Pubkey {
-        Pubkey::from_str("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").unwrap()
+        *TOKEN_PROGRAM_ID.get_or_init(|| {
+            Pubkey::from_str("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+                .expect("hardcoded SPL token program ID is valid")
+        })
     }
 }

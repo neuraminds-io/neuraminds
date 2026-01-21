@@ -109,7 +109,7 @@ async fn main() -> std::io::Result<()> {
         .per_second(1)
         .burst_size(60)
         .finish()
-        .unwrap();
+        .expect("valid governor configuration");
 
     let config_clone = config.clone();
 
