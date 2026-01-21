@@ -3,7 +3,7 @@
 **Date:** January 21, 2026
 **Updated:** January 21, 2026
 **Verdict:** ALL CRITICAL ISSUES RESOLVED - BETA READY
-**Overall Score:** 75/100 (up from 35/100)
+**Overall Score:** 80/100 (up from 35/100)
 
 ---
 
@@ -38,18 +38,19 @@
 | HIGH-007 | Pause after trading end | ✅ FIXED | Added timestamp check |
 | HIGH-012 | Wrapping arithmetic in proofs | ✅ FIXED | Added checked arithmetic methods |
 
+| HIGH-001 | Reentrancy via invoke() | ✅ FIXED | Refactored to Checks-Effects-Interactions pattern |
+| HIGH-006 | Wrong recipient validation | ✅ FIXED | Proper authority and ownership checks |
+| HIGH-019 | Hardcoded USDC mint | ✅ FIXED | Parameterized collateral_mint in CreateMarketRequest |
+| HIGH-022 | Insufficient rate limiting | ✅ FIXED | Added per-endpoint rate limiting (Auth: 10/min, Write: 30/min, Read: 120/min) |
+
 ### Remaining High Priority Issues
 
 | ID | Issue | Status |
 |----|-------|--------|
-| HIGH-001 | Reentrancy via invoke() | ⏳ PENDING |
 | HIGH-002-004 | Market state machine issues | ⏳ PENDING |
-| HIGH-006 | Wrong recipient validation | ⏳ PENDING |
 | HIGH-008 | Protocol treasury not initialized | ⏳ PENDING |
 | HIGH-009-014 | Privacy program issues | ⏳ PENDING |
-| HIGH-019 | Hardcoded USDC mint | ⏳ PENDING |
 | HIGH-020 | Settlement TODO | ⏳ PENDING |
-| HIGH-022 | Insufficient rate limiting | ⏳ PENDING |
 | HIGH-023-026 | Database issues | ⏳ PENDING |
 
 ---

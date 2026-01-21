@@ -78,6 +78,15 @@ pub struct CreateMarketRequest {
     pub resolution_deadline: DateTime<Utc>,
     pub trading_end: DateTime<Utc>,
     pub fee_bps: u16,
+    /// Collateral token mint address (e.g., USDC)
+    /// If not provided, defaults to USDC on mainnet
+    #[serde(default = "default_collateral_mint")]
+    pub collateral_mint: String,
+}
+
+/// Default collateral mint is USDC on Solana mainnet
+fn default_collateral_mint() -> String {
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()
 }
 
 #[derive(Debug, Deserialize)]

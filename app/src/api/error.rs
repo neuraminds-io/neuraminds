@@ -49,6 +49,14 @@ impl ApiError {
             status: 500,
         }
     }
+
+    pub fn rate_limited(retry_after: u64) -> Self {
+        Self {
+            code: "RATE_LIMITED".to_string(),
+            message: format!("Too many requests. Retry after {} seconds.", retry_after),
+            status: 429,
+        }
+    }
 }
 
 impl fmt::Display for ApiError {

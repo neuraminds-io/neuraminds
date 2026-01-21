@@ -13,26 +13,61 @@ use crate::state::{
 use crate::errors::MarketError;
 
 /// File a dispute against a market resolution
+///
+/// Uses Checks-Effects-Interactions pattern to prevent reentrancy:
+/// 1. Checks: Validate all preconditions
+/// 2. Effects: Update all state
+/// 3. Interactions: External calls (transfer) last
 pub fn file_dispute_handler(
     ctx: Context<FileDispute>,
     reason_hash: String,
 ) -> Result<()> {
-    let market = &ctx.accounts.market;
     let clock = Clock::get()?;
 
+    // === CHECKS ===
     // Market must be resolved
     require!(
-        market.status == MarketStatus::Resolved,
+        ctx.accounts.market.status == MarketStatus::Resolved,
         MarketError::MarketNotResolved
     );
 
     // Within dispute window
     require!(
-        clock.unix_timestamp <= market.resolved_at + DISPUTE_WINDOW,
+        clock.unix_timestamp <= ctx.accounts.market.resolved_at + DISPUTE_WINDOW,
         DisputeError::DisputeWindowExpired
     );
 
-    // Transfer bond from disputer
+    // Store values needed after borrow
+    let market_key = ctx.accounts.market.key();
+    let disputer_key = ctx.accounts.disputer.key();
+    let original_oracle = ctx.accounts.market.oracle;
+    let original_outcome = ctx.accounts.market.resolved_outcome;
+    let market_id = ctx.accounts.market.market_id.clone();
+
+    // === EFFECTS ===
+    // Update market status FIRST (before any external calls)
+    let market = &mut ctx.accounts.market;
+    market.status = MarketStatus::Paused;
+
+    // Initialize dispute state
+    let dispute = &mut ctx.accounts.dispute;
+    dispute.market = market_key;
+    dispute.disputer = disputer_key;
+    dispute.original_oracle = original_oracle;
+    dispute.original_outcome = original_outcome;
+    dispute.status = DisputeStatus::Pending;
+    dispute.bond_amount = DISPUTE_BOND;
+    dispute.reason_hash = reason_hash;
+    dispute.oracle_submissions = Vec::new();
+    dispute.consensus_outcome = None;
+    dispute.consensus_score = None;
+    dispute.created_at = clock.unix_timestamp;
+    dispute.first_submission_at = None;
+    dispute.resolved_at = None;
+    dispute.bump = ctx.bumps.dispute;
+
+    // === INTERACTIONS ===
+    // Transfer bond from disputer LAST
     let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
         &ctx.accounts.disputer.key(),
         &ctx.accounts.dispute.key(),
@@ -47,28 +82,7 @@ pub fn file_dispute_handler(
         ],
     )?;
 
-    // Initialize dispute
-    let dispute = &mut ctx.accounts.dispute;
-    dispute.market = ctx.accounts.market.key();
-    dispute.disputer = ctx.accounts.disputer.key();
-    dispute.original_oracle = market.oracle;
-    dispute.original_outcome = market.resolved_outcome;
-    dispute.status = DisputeStatus::Pending;
-    dispute.bond_amount = DISPUTE_BOND;
-    dispute.reason_hash = reason_hash;
-    dispute.oracle_submissions = Vec::new();
-    dispute.consensus_outcome = None;
-    dispute.consensus_score = None;
-    dispute.created_at = clock.unix_timestamp;
-    dispute.first_submission_at = None;
-    dispute.resolved_at = None;
-    dispute.bump = ctx.bumps.dispute;
-
-    // Update market status to disputed
-    let market = &mut ctx.accounts.market;
-    market.status = MarketStatus::Paused; // Pause claims during dispute
-
-    msg!("Dispute filed for market {}", market.market_id);
+    msg!("Dispute filed for market {}", market_id);
 
     Ok(())
 }

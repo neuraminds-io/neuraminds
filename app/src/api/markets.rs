@@ -106,7 +106,7 @@ pub async fn create_market(
         total_collateral: 0,
         fee_bps: body.fee_bps,
         oracle: body.oracle.clone(),
-        collateral_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(), // USDC
+        collateral_mint: body.collateral_mint.clone(),
         yes_mint: String::new(), // Would be derived
         no_mint: String::new(),
         resolution_deadline: body.resolution_deadline,

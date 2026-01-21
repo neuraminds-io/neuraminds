@@ -6,7 +6,7 @@ use std::str::FromStr;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
 use crate::AppState;
-use crate::api::{ApiError, jwt::{UserRole, TokenPair}};
+use crate::api::{ApiError, jwt::{UserRole, TokenPair}, check_auth_rate_limit};
 
 /// Message expiration time in seconds (5 minutes)
 const MESSAGE_EXPIRATION_SECS: u64 = 300;
@@ -305,9 +305,13 @@ pub async fn get_nonce() -> Result<HttpResponse, ApiError> {
 /// POST /v1/auth/login
 /// Authenticates a user with their wallet signature and returns JWT tokens
 pub async fn login(
+    http_req: HttpRequest,
     state: web::Data<Arc<AppState>>,
     body: web::Json<LoginRequest>,
 ) -> Result<HttpResponse, ApiError> {
+    // Rate limit: 10 login attempts per minute per IP
+    check_auth_rate_limit(&http_req, &state.redis).await?;
+
     let req = body.into_inner();
 
     // Validate wallet address
@@ -358,9 +362,13 @@ pub async fn login(
 /// POST /v1/auth/refresh
 /// Refreshes an expired access token using a valid refresh token
 pub async fn refresh_token(
+    http_req: HttpRequest,
     state: web::Data<Arc<AppState>>,
     body: web::Json<RefreshRequest>,
 ) -> Result<HttpResponse, ApiError> {
+    // Rate limit: 10 refresh attempts per minute per IP
+    check_auth_rate_limit(&http_req, &state.redis).await?;
+
     let req = body.into_inner();
 
     // Validate the refresh token

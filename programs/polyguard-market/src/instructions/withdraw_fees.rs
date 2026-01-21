@@ -54,20 +54,24 @@ pub fn handler(ctx: Context<WithdrawFees>, recipient_type: FeeRecipient) -> Resu
     // Validate caller and calculate available amount based on recipient type
     let withdraw_amount = match recipient_type {
         FeeRecipient::Protocol => {
-            // Protocol treasury owner or anyone can withdraw to protocol treasury
-            // The recipient must be the protocol treasury
+            // Recipient token account must be owned by the protocol treasury
+            // This ensures fees go to the correct address
             require!(
-                ctx.accounts.recipient.key() == market.protocol_treasury
-                    || ctx.accounts.recipient.owner == market.protocol_treasury,
+                ctx.accounts.recipient.owner == market.protocol_treasury,
                 MarketError::UnauthorizedWithdrawal
             );
             market.available_protocol_fees()
         }
         FeeRecipient::Creator => {
-            // Only market creator can withdraw creator fees
+            // Only market authority can withdraw creator fees
+            // and recipient must be owned by the authority
             require!(
                 caller == market.authority,
                 MarketError::UnauthorizedOracle
+            );
+            require!(
+                ctx.accounts.recipient.owner == market.authority,
+                MarketError::UnauthorizedWithdrawal
             );
             market.available_creator_fees()
         }
