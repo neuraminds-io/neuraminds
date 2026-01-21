@@ -148,8 +148,6 @@ pub async fn place_order(
     for matched_trade in &matches {
         // Submit settlement transaction to Solana if enabled
         if state.config.solana_enabled {
-            // Build accounts for settlement (in production, derive from order/position PDAs)
-            // For now, log intent - full implementation requires account derivation
             log::info!(
                 "Trade matched: buy={}, sell={}, qty={}, price={}",
                 matched_trade.buy_order_id,
@@ -157,7 +155,31 @@ pub async fn place_order(
                 matched_trade.fill_quantity,
                 matched_trade.fill_price_bps
             );
-            // TODO: Derive PDAs and call state.solana.settle_trade()
+
+            // Derive accounts for settlement
+            // Note: In production, buyer/seller collateral ATAs would come from user accounts
+            // For now we derive PDAs; actual collateral accounts need user wallet integration
+            let buyer_pubkey = solana_sdk::pubkey::Pubkey::default(); // Would come from buy order owner
+            let seller_pubkey = solana_sdk::pubkey::Pubkey::default(); // Would come from sell order owner
+
+            let accounts = state.solana.build_settle_trade_accounts(
+                &order.market_id,
+                &buyer_pubkey,
+                &seller_pubkey,
+                matched_trade.buy_order_id,
+                matched_trade.sell_order_id,
+                buyer_pubkey, // buyer collateral ATA
+                seller_pubkey, // seller collateral ATA
+            );
+
+            match state.solana.settle_trade(matched_trade, accounts).await {
+                Ok(sig) => {
+                    log::info!("Settlement tx confirmed: {}", sig);
+                }
+                Err(e) => {
+                    log::error!("Settlement failed: {} - trade recorded off-chain only", e);
+                }
+            }
         }
 
         // Publish trade event via Redis

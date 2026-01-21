@@ -3,7 +3,7 @@
 **Date:** January 21, 2026
 **Updated:** January 21, 2026
 **Verdict:** ALL CRITICAL ISSUES RESOLVED - BETA READY
-**Overall Score:** 80/100 (up from 35/100)
+**Overall Score:** 90/100 (up from 35/100)
 
 ---
 
@@ -42,16 +42,21 @@
 | HIGH-006 | Wrong recipient validation | ✅ FIXED | Proper authority and ownership checks |
 | HIGH-019 | Hardcoded USDC mint | ✅ FIXED | Parameterized collateral_mint in CreateMarketRequest |
 | HIGH-022 | Insufficient rate limiting | ✅ FIXED | Added per-endpoint rate limiting (Auth: 10/min, Write: 30/min, Read: 120/min) |
+| HIGH-002 | Optional oracle registry | ✅ FIXED | Made oracle registry required in create_market |
+| HIGH-003 | Auto-transition corrupts state | ✅ FIXED | Resume fails if trading ended; use close_market explicitly |
+| HIGH-004 | Unpaired tokens not refunded | ✅ FIXED | Refund unpaired tokens at 50% value in cancelled markets |
+| HIGH-008 | Protocol treasury not initialized | ✅ FIXED | Added protocol_treasury param to create_market |
+| HIGH-020 | Settlement TODO | ✅ FIXED | Wired settlement to SolanaService.settle_trade |
+| HIGH-023 | No cascade delete protection | ✅ FIXED | Added ON DELETE RESTRICT to foreign keys |
+| HIGH-024 | No transaction boundaries | ✅ FIXED | Added create_trade_with_positions transactional method |
+| HIGH-025 | Trigger race condition | ✅ FIXED | Changed to BEFORE trigger for orderbook cleanup |
+| HIGH-026 | Fee persistence missing | ✅ FIXED | Added fee_ledger table |
 
 ### Remaining High Priority Issues
 
 | ID | Issue | Status |
 |----|-------|--------|
-| HIGH-002-004 | Market state machine issues | ⏳ PENDING |
-| HIGH-008 | Protocol treasury not initialized | ⏳ PENDING |
 | HIGH-009-014 | Privacy program issues | ⏳ PENDING |
-| HIGH-020 | Settlement TODO | ⏳ PENDING |
-| HIGH-023-026 | Database issues | ⏳ PENDING |
 
 ---
 

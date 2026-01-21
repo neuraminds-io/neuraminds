@@ -479,6 +479,85 @@ impl DatabaseService {
     }
 
     // Trades
+
+    /// Create trade with position updates in a single transaction
+    /// HIGH-024: Transaction boundaries for atomicity
+    pub async fn create_trade_with_positions(
+        &self,
+        trade: &Trade,
+        buyer_yes_delta: i64,
+        buyer_no_delta: i64,
+        seller_yes_delta: i64,
+        seller_no_delta: i64,
+    ) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+
+        // Insert trade
+        sqlx::query(
+            r#"
+            INSERT INTO trades (
+                id, market_id, buy_order_id, sell_order_id, outcome,
+                price, price_bps, quantity, collateral_amount,
+                buyer, seller, tx_signature, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            "#,
+        )
+        .bind(&trade.id)
+        .bind(&trade.market_id)
+        .bind(&trade.buy_order_id)
+        .bind(&trade.sell_order_id)
+        .bind(trade.outcome as i16)
+        .bind(trade.price)
+        .bind(trade.price_bps as i16)
+        .bind(trade.quantity as i64)
+        .bind(trade.collateral_amount as i64)
+        .bind(&trade.buyer)
+        .bind(&trade.seller)
+        .bind(&trade.tx_signature)
+        .bind(trade.created_at)
+        .execute(&mut *tx)
+        .await?;
+
+        // Update buyer position
+        sqlx::query(
+            r#"
+            INSERT INTO positions (market_id, owner, yes_balance, no_balance, total_trades)
+            VALUES ($1, $2, $3, $4, 1)
+            ON CONFLICT (market_id, owner) DO UPDATE SET
+                yes_balance = positions.yes_balance + $3,
+                no_balance = positions.no_balance + $4,
+                total_trades = positions.total_trades + 1
+            "#,
+        )
+        .bind(&trade.market_id)
+        .bind(&trade.buyer)
+        .bind(buyer_yes_delta)
+        .bind(buyer_no_delta)
+        .execute(&mut *tx)
+        .await?;
+
+        // Update seller position
+        sqlx::query(
+            r#"
+            INSERT INTO positions (market_id, owner, yes_balance, no_balance, total_trades)
+            VALUES ($1, $2, $3, $4, 1)
+            ON CONFLICT (market_id, owner) DO UPDATE SET
+                yes_balance = positions.yes_balance + $3,
+                no_balance = positions.no_balance + $4,
+                total_trades = positions.total_trades + 1
+            "#,
+        )
+        .bind(&trade.market_id)
+        .bind(&trade.seller)
+        .bind(seller_yes_delta)
+        .bind(seller_no_delta)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn create_trade(&self, trade: &Trade) -> Result<()> {
         sqlx::query(
             r#"

@@ -12,12 +12,12 @@ pub struct CreateMarket<'info> {
     /// CHECK: Oracle account that will resolve the market (validated against registry)
     pub oracle: UncheckedAccount<'info>,
 
-    /// Oracle registry for validation (optional - if not provided, oracle validation is skipped)
+    /// Oracle registry for validation (required)
     #[account(
         seeds = [OracleRegistry::SEED_PREFIX],
         bump = oracle_registry.bump
     )]
-    pub oracle_registry: Option<Account<'info, OracleRegistry>>,
+    pub oracle_registry: Account<'info, OracleRegistry>,
 
     #[account(
         init,
@@ -60,6 +60,9 @@ pub struct CreateMarket<'info> {
 
     pub collateral_mint: Account<'info, Mint>,
 
+    /// CHECK: Protocol treasury address for fee collection (validated as valid pubkey)
+    pub protocol_treasury: UncheckedAccount<'info>,
+
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
     pub rent: Sysvar<'info, Rent>,
@@ -82,13 +85,11 @@ pub fn handler(
     require!(category.len() <= 32, MarketError::CategoryTooLong);
     require!(fee_bps <= 1000, MarketError::InvalidFee); // Max 10%
 
-    // Validate oracle against registry if provided
-    if let Some(ref registry) = ctx.accounts.oracle_registry {
-        require!(
-            registry.is_approved(&ctx.accounts.oracle.key()),
-            OracleRegistryError::OracleNotApproved
-        );
-    }
+    // Validate oracle against registry (required)
+    require!(
+        ctx.accounts.oracle_registry.is_approved(&ctx.accounts.oracle.key()),
+        OracleRegistryError::OracleNotApproved
+    );
 
     let clock = Clock::get()?;
     let current_time = clock.unix_timestamp;
@@ -127,7 +128,11 @@ pub fn handler(
     market.total_yes_supply = 0;
     market.total_no_supply = 0;
     market.fee_bps = fee_bps;
+    market.protocol_fee_share_bps = Market::DEFAULT_PROTOCOL_FEE_SHARE_BPS;
+    market.protocol_treasury = ctx.accounts.protocol_treasury.key();
     market.accumulated_fees = 0;
+    market.protocol_fees_withdrawn = 0;
+    market.creator_fees_withdrawn = 0;
     market.bump = ctx.bumps.market;
     market.yes_mint_bump = ctx.bumps.yes_mint;
     market.no_mint_bump = ctx.bumps.no_mint;

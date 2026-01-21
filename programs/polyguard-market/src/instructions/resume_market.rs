@@ -20,12 +20,14 @@ pub fn handler(ctx: Context<ResumeMarket>) -> Result<()> {
     let clock = Clock::get()?;
     let market = &mut ctx.accounts.market;
 
-    // Check if trading period hasn't ended
-    if clock.unix_timestamp >= market.trading_end {
-        market.status = MarketStatus::Closed;
-    } else {
-        market.status = MarketStatus::Active;
-    }
+    // Cannot resume a market after trading has ended
+    // Use close_market instruction explicitly instead
+    require!(
+        clock.unix_timestamp < market.trading_end,
+        MarketError::TradingEnded
+    );
+
+    market.status = MarketStatus::Active;
 
     emit!(MarketResumed {
         market: market.key(),

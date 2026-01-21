@@ -75,49 +75,34 @@ pub fn handler(ctx: Context<RefundCancelled>) -> Result<()> {
 
     let market = &ctx.accounts.market;
 
-    // Calculate refund amount: each complete YES+NO pair = 1 collateral unit
-    // For cancelled markets, also refund unpaired tokens at 50% value each
-    // This ensures all collateral can be reclaimed
+    // For cancelled markets, refund strategy:
+    // 1. Paired tokens (1 YES + 1 NO) = 1 collateral (same as normal redemption)
+    // 2. Unpaired tokens = 0.5 collateral each (fair split since market was cancelled)
+    //
+    // This ensures all collateral can be fully reclaimed when market is cancelled.
+    // Users who hold only YES or only NO still get partial value back.
     let paired_amount = yes_amount.min(no_amount);
     let unpaired_yes = yes_amount.saturating_sub(paired_amount);
     let unpaired_no = no_amount.saturating_sub(paired_amount);
 
-    // Total refund = paired tokens + (unpaired_yes + unpaired_no) / 2
-    // For simplicity in cancelled markets, we refund 1:1 for whichever token type user holds
-    // This assumes market was cancelled before resolution, so tokens have equal value
-    let total_tokens = yes_amount.checked_add(no_amount)
+    // Refund calculation:
+    // - Paired: 1 collateral per pair
+    // - Unpaired: 0.5 collateral per token (divide by 2)
+    let unpaired_total = unpaired_yes.checked_add(unpaired_no)
+        .ok_or(MarketError::ArithmeticOverflow)?;
+    let unpaired_refund = unpaired_total / 2; // Integer division rounds down
+
+    let refund_amount = paired_amount.checked_add(unpaired_refund)
         .ok_or(MarketError::ArithmeticOverflow)?;
 
-    // Each token (YES or NO) is worth 0.5 collateral in a cancelled market
-    // So total_refund = total_tokens / 2
-    // But wait - we need to handle the case where user has matched pairs
-    // A matched pair (1 YES + 1 NO) is worth exactly 1 collateral
-    // So: refund = paired_amount (full value) + (unpaired_yes + unpaired_no) * 0.5
-    // Simplification: refund = min(yes, no) + max(yes, no) - min(yes, no) = max(yes, no)
-    // Actually for fairness in cancellation: refund = min(yes, no) gives full pairs
-    // The excess tokens are lost? No, that's not fair.
-    //
-    // Better approach: In a cancelled market, users should get back what they put in.
-    // If user has YES tokens, they paid collateral to mint them (in mint_outcome_tokens)
-    // If user bought YES from someone else, that someone got their collateral when selling
-    //
-    // For fairness, refund each token at 1:1 with collateral, but track it
-    // Actually, since YES+NO = 1 collateral in minting, we refund paired tokens at 1:1
-    // Unpaired tokens present a challenge - they represent a directional bet
-    //
-    // Final decision: Refund 1 collateral per YES+NO pair (same as redeem)
-    // Unpaired tokens are NOT refunded (they would need to be sold/traded first)
-    // This is consistent with the economic model.
+    require!(refund_amount > 0, MarketError::NoTokensToRefund);
 
-    require!(
-        yes_amount > 0 && no_amount > 0,
-        MarketError::NoPairedTokensToRefund
-    );
+    // Track how many tokens to burn (all of them)
+    let yes_to_burn = yes_amount;
+    let no_to_burn = no_amount;
 
-    let refund_amount = yes_amount.min(no_amount);
-
-    // Burn the paired YES tokens
-    if yes_amount > 0 {
+    // Burn all YES tokens
+    if yes_to_burn > 0 {
         let burn_yes_ctx = CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
             Burn {
@@ -126,11 +111,11 @@ pub fn handler(ctx: Context<RefundCancelled>) -> Result<()> {
                 authority: ctx.accounts.user.to_account_info(),
             },
         );
-        token::burn(burn_yes_ctx, refund_amount)?;
+        token::burn(burn_yes_ctx, yes_to_burn)?;
     }
 
-    // Burn the paired NO tokens
-    if no_amount > 0 {
+    // Burn all NO tokens
+    if no_to_burn > 0 {
         let burn_no_ctx = CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
             Burn {
@@ -139,7 +124,7 @@ pub fn handler(ctx: Context<RefundCancelled>) -> Result<()> {
                 authority: ctx.accounts.user.to_account_info(),
             },
         );
-        token::burn(burn_no_ctx, refund_amount)?;
+        token::burn(burn_no_ctx, no_to_burn)?;
     }
 
     // Transfer collateral back to user
@@ -169,11 +154,11 @@ pub fn handler(ctx: Context<RefundCancelled>) -> Result<()> {
         .ok_or(MarketError::ArithmeticOverflow)?;
     market.total_yes_supply = market
         .total_yes_supply
-        .checked_sub(refund_amount)
+        .checked_sub(yes_to_burn)
         .ok_or(MarketError::ArithmeticOverflow)?;
     market.total_no_supply = market
         .total_no_supply
-        .checked_sub(refund_amount)
+        .checked_sub(no_to_burn)
         .ok_or(MarketError::ArithmeticOverflow)?;
 
     emit!(CancelledMarketRefund {
