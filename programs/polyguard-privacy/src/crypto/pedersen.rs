@@ -135,6 +135,16 @@ impl PedersenCommitment {
         Ok(Self((k * p).compress()))
     }
 
+    /// Subtract a public value from a commitment
+    /// C(v, r) - v' = C(v - v', r)
+    /// Used to validate that a proof's difference commitment matches expected
+    pub fn subtract_value(&self, value: u64) -> Result<Self, CryptoError> {
+        let p = self.0.decompress().ok_or(CryptoError::InvalidCommitment)?;
+        let v_point = Scalar::from(value) * RISTRETTO_BASEPOINT_POINT;
+
+        Ok(Self((p - v_point).compress()))
+    }
+
     /// Check if this is a commitment to zero
     /// Note: Only works if you know the blinding factor is zero
     pub fn is_identity(&self) -> bool {

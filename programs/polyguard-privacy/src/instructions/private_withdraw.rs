@@ -79,9 +79,21 @@ pub fn handler(
     // Verify balance proof
     // The proof shows that (balance - amount) is non-negative
     // by proving the difference commitment opens to a value in [0, 2^64)
+    //
+    // HIGH-009 FIX: Validate that the proof's difference commitment is correctly
+    // derived from the account's actual encrypted balance (c2 component)
     let c2_bytes: [u8; 32] = *balance_ciphertext.c2.as_bytes();
     let balance_commitment = crate::crypto::PedersenCommitment::from_bytes(&c2_bytes)
         .map_err(|_| PrivacyError::InvalidBalanceProof)?;
+
+    // Verify the difference commitment in the proof is cryptographically linked
+    // to the account's balance commitment (prevents using proofs from other accounts)
+    let expected_diff_commitment = balance_commitment.subtract_value(amount)
+        .map_err(|_| PrivacyError::InvalidBalanceProof)?;
+    require!(
+        proof.difference_commitment == expected_diff_commitment.to_bytes(),
+        PrivacyError::InvalidBalanceProof
+    );
 
     proof.verify(&balance_commitment, amount)
         .map_err(|_| PrivacyError::InvalidBalanceProof)?

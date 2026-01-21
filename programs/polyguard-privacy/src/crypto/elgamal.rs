@@ -269,12 +269,37 @@ impl ElGamalCiphertext {
     }
 }
 
-/// Baby-step giant-step discrete log solver for small amounts
-/// This is compute-intensive but necessary for twisted ElGamal decryption
-fn discrete_log(point: &RistrettoPoint) -> Option<u64> {
-    // For on-chain use, we need an efficient approach
-    // Using baby-step giant-step with precomputation
+/// Cached baby-step lookup table for discrete log
+/// HIGH-011 FIX: Use lazy static initialization to build table once
+#[cfg(feature = "std")]
+mod dlog_cache {
+    use super::*;
+    use std::sync::OnceLock;
 
+    /// Baby step size: sqrt(MAX_DECRYPTABLE_AMOUNT) = 2^16
+    pub const BABY_STEP_SIZE: u64 = 65536;
+
+    /// Cached baby steps table
+    static BABY_STEPS: OnceLock<Vec<(CompressedRistretto, u64)>> = OnceLock::new();
+
+    /// Get or initialize the baby steps table
+    pub fn get_baby_steps() -> &'static [(CompressedRistretto, u64)] {
+        BABY_STEPS.get_or_init(|| {
+            let mut table = Vec::with_capacity(BABY_STEP_SIZE as usize);
+            let mut current = RistrettoPoint::identity();
+            for i in 0..BABY_STEP_SIZE {
+                table.push((current.compress(), i));
+                current += RISTRETTO_BASEPOINT_POINT;
+            }
+            table.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+            table
+        })
+    }
+}
+
+/// Baby-step giant-step discrete log solver for small amounts
+/// HIGH-011 FIX: Uses cached lookup table for performance
+fn discrete_log(point: &RistrettoPoint) -> Option<u64> {
     // Check for zero first
     if *point == RistrettoPoint::identity() {
         return Some(0);
@@ -287,15 +312,21 @@ fn discrete_log(point: &RistrettoPoint) -> Option<u64> {
     // Base point G
     let g = RISTRETTO_BASEPOINT_POINT;
 
-    // Build baby step lookup
-    // Note: In production, use a proper hash map with precomputation
-    let mut baby_steps = alloc::vec::Vec::with_capacity(baby_step_size as usize);
-    let mut current = RistrettoPoint::identity();
-    for i in 0..baby_step_size {
-        baby_steps.push((current.compress(), i));
-        current += g;
-    }
-    baby_steps.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+    // Get baby steps table (cached in std, built fresh in no_std)
+    #[cfg(feature = "std")]
+    let baby_steps = dlog_cache::get_baby_steps();
+
+    #[cfg(not(feature = "std"))]
+    let baby_steps = {
+        let mut table = alloc::vec::Vec::with_capacity(baby_step_size as usize);
+        let mut current = RistrettoPoint::identity();
+        for i in 0..baby_step_size {
+            table.push((current.compress(), i));
+            current += g;
+        }
+        table.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+        table
+    };
 
     // Giant step: -baby_step_size * G
     let giant_step = -Scalar::from(baby_step_size) * g;

@@ -98,7 +98,8 @@ pub struct PrivateSettle<'info> {
     #[account(
         mut,
         seeds = [PrivateAccount::SEED_PREFIX, buy_order.owner.as_ref()],
-        bump
+        bump,
+        constraint = buyer_account.is_active @ PrivacyError::PrivateAccountNotInitialized
     )]
     pub buyer_account: Box<Account<'info, PrivateAccount>>,
 
@@ -119,7 +120,8 @@ pub struct PrivateSettle<'info> {
     #[account(
         mut,
         seeds = [PrivateAccount::SEED_PREFIX, sell_order.owner.as_ref()],
-        bump
+        bump,
+        constraint = seller_account.is_active @ PrivacyError::PrivateAccountNotInitialized
     )]
     pub seller_account: Box<Account<'info, PrivateAccount>>,
 
