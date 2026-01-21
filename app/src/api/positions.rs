@@ -1,7 +1,7 @@
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use std::sync::Arc;
 
-use crate::models::{Position, PositionListResponse, ClaimWinningsResponse, Outcome};
+use crate::models::{PositionListResponse, ClaimWinningsResponse, Outcome};
 use crate::AppState;
 use crate::require_auth;
 use super::ApiError;

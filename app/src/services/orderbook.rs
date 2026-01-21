@@ -3,10 +3,8 @@ use std::sync::RwLock;
 use chrono::Utc;
 use log::info;
 
-use crate::models::{
-    Order, OrderSide, OrderStatus, OrderType, Outcome,
-    OrderBookLevel, MatchedTrade,
-};
+use crate::models::{Order, OrderSide, Outcome, OrderBookLevel, MatchedTrade};
+use super::database::OrderBookEntry;
 
 /// In-memory order book for fast matching
 /// In production, this would be backed by Redis for persistence and horizontal scaling
@@ -34,9 +32,12 @@ struct OrderEntry {
     order_id: String,
     on_chain_id: u64,
     owner: String,
+    #[allow(dead_code)]
     price_bps: u16,
+    #[allow(dead_code)]
     quantity: u64,
     remaining: u64,
+    #[allow(dead_code)]
     timestamp: i64,
 }
 
@@ -332,5 +333,99 @@ impl OrderBookService {
 impl Default for OrderBookService {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl OrderBookService {
+    /// Restore order book from persisted entries (call on startup)
+    pub fn restore_from_entries(&self, entries: Vec<OrderBookEntry>) {
+        let mut books = self.books.write().unwrap();
+
+        for entry in entries {
+            let market_book = books
+                .entry(entry.market_id.clone())
+                .or_insert_with(|| MarketOrderBook {
+                    yes: OutcomeOrderBook {
+                        bids: BTreeMap::new(),
+                        asks: BTreeMap::new(),
+                    },
+                    no: OutcomeOrderBook {
+                        bids: BTreeMap::new(),
+                        asks: BTreeMap::new(),
+                    },
+                });
+
+            let outcome_book = match entry.outcome {
+                Outcome::Yes => &mut market_book.yes,
+                Outcome::No => &mut market_book.no,
+            };
+
+            let order_entry = OrderEntry {
+                order_id: entry.order_id.clone(),
+                on_chain_id: entry.on_chain_id,
+                owner: entry.owner.clone(),
+                price_bps: entry.price_bps,
+                quantity: entry.remaining_quantity,
+                remaining: entry.remaining_quantity,
+                timestamp: Utc::now().timestamp(),
+            };
+
+            match entry.side {
+                OrderSide::Buy => {
+                    outcome_book.bids
+                        .entry(entry.price_bps)
+                        .or_insert_with(Vec::new)
+                        .push(order_entry);
+                }
+                OrderSide::Sell => {
+                    outcome_book.asks
+                        .entry(entry.price_bps)
+                        .or_insert_with(Vec::new)
+                        .push(order_entry);
+                }
+            }
+        }
+
+        let total_orders: usize = books.values()
+            .map(|mb| {
+                mb.yes.bids.values().map(|v| v.len()).sum::<usize>() +
+                mb.yes.asks.values().map(|v| v.len()).sum::<usize>() +
+                mb.no.bids.values().map(|v| v.len()).sum::<usize>() +
+                mb.no.asks.values().map(|v| v.len()).sum::<usize>()
+            })
+            .sum();
+
+        info!("Order book restored: {} markets, {} orders", books.len(), total_orders);
+    }
+
+    /// Get all open orders for a market (for persistence/sync)
+    pub fn get_all_orders(&self, market_id: &str) -> Vec<(String, Outcome, OrderSide, u16, u64)> {
+        let books = self.books.read().unwrap();
+        let mut orders = Vec::new();
+
+        if let Some(market_book) = books.get(market_id) {
+            for (price, entries) in &market_book.yes.bids {
+                for e in entries {
+                    orders.push((e.order_id.clone(), Outcome::Yes, OrderSide::Buy, *price, e.remaining));
+                }
+            }
+            for (price, entries) in &market_book.yes.asks {
+                for e in entries {
+                    orders.push((e.order_id.clone(), Outcome::Yes, OrderSide::Sell, *price, e.remaining));
+                }
+            }
+            for (price, entries) in &market_book.no.bids {
+                for e in entries {
+                    orders.push((e.order_id.clone(), Outcome::No, OrderSide::Buy, *price, e.remaining));
+                }
+            }
+            for (price, entries) in &market_book.no.asks {
+                for e in entries {
+                    orders.push((e.order_id.clone(), Outcome::No, OrderSide::Sell, *price, e.remaining));
+                }
+            }
+        }
+
+        orders
     }
 }

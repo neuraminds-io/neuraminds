@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Web framework
+actix = "0.13"
 actix-web = "4"
 actix-rt = "2"
 actix-cors = "0.7"

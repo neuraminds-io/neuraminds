@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::models::{
     User, UserStats, UserSettings,
-    Transaction, TransactionType, ListTransactionsQuery, TransactionListResponse,
+    TransactionType, ListTransactionsQuery, TransactionListResponse,
 };
 use crate::AppState;
 use crate::require_auth;

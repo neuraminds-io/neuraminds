@@ -8,7 +8,7 @@ use std::env;
 use crate::models::{
     Market, MarketStatus, Outcome,
     Order, OrderSide, OrderType, OrderStatus,
-    Position, Trade, Transaction, TransactionType, TransactionStatus,
+    Position, Trade, Transaction, TransactionType,
 };
 
 /// Database connection pool configuration
@@ -317,6 +317,108 @@ impl DatabaseService {
         // Placeholder
         Ok((vec![], 0))
     }
+
+    // Order Book Persistence
+    /// Add order to persistent order book
+    pub async fn add_orderbook_entry(
+        &self,
+        order_id: &str,
+        market_id: &str,
+        outcome: Outcome,
+        side: OrderSide,
+        price_bps: u16,
+        remaining_quantity: u64,
+        owner: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO orderbook_entries (market_id, order_id, outcome, side, price_bps, remaining_quantity, owner)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (order_id) DO UPDATE SET remaining_quantity = $6
+            "#,
+        )
+        .bind(market_id)
+        .bind(order_id)
+        .bind(outcome as i16)
+        .bind(side as i16)
+        .bind(price_bps as i16)
+        .bind(remaining_quantity as i64)
+        .bind(owner)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Remove order from persistent order book
+    pub async fn remove_orderbook_entry(&self, order_id: &str) -> Result<()> {
+        sqlx::query("DELETE FROM orderbook_entries WHERE order_id = $1")
+            .bind(order_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Update remaining quantity in persistent order book
+    pub async fn update_orderbook_entry_quantity(
+        &self,
+        order_id: &str,
+        remaining_quantity: u64,
+    ) -> Result<()> {
+        if remaining_quantity == 0 {
+            self.remove_orderbook_entry(order_id).await
+        } else {
+            sqlx::query("UPDATE orderbook_entries SET remaining_quantity = $1 WHERE order_id = $2")
+                .bind(remaining_quantity as i64)
+                .bind(order_id)
+                .execute(&self.pool)
+                .await?;
+            Ok(())
+        }
+    }
+
+    /// Load all open order book entries for recovery
+    pub async fn load_orderbook_entries(&self) -> Result<Vec<OrderBookEntry>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT o.id, o.order_id, o.market_id, o.owner, o.outcome, o.side,
+                   o.price_bps, o.remaining_quantity, o.created_at
+            FROM orderbook_entries oe
+            JOIN orders o ON o.id = oe.order_id
+            WHERE o.status = 0
+            ORDER BY o.market_id, o.outcome, o.side, o.price_bps, o.created_at
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let entries = rows.iter().map(|row| {
+            OrderBookEntry {
+                order_id: row.get("id"),
+                on_chain_id: row.get::<i64, _>("order_id") as u64,
+                market_id: row.get("market_id"),
+                owner: row.get("owner"),
+                outcome: Outcome::from(row.get::<i16, _>("outcome") as u8),
+                side: OrderSide::from(row.get::<i16, _>("side") as u8),
+                price_bps: row.get::<i16, _>("price_bps") as u16,
+                remaining_quantity: row.get::<i64, _>("remaining_quantity") as u64,
+            }
+        }).collect();
+
+        Ok(entries)
+    }
+}
+
+/// Order book entry for persistence and recovery
+#[derive(Debug, Clone)]
+pub struct OrderBookEntry {
+    pub order_id: String,
+    pub on_chain_id: u64,
+    pub market_id: String,
+    pub owner: String,
+    pub outcome: Outcome,
+    pub side: OrderSide,
+    pub price_bps: u16,
+    pub remaining_quantity: u64,
 }
 
 /// Database pool statistics for monitoring

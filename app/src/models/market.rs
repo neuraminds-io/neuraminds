@@ -84,7 +84,9 @@ pub struct CreateMarketRequest {
 pub struct ListMarketsQuery {
     pub status: Option<String>,
     pub category: Option<String>,
+    #[allow(dead_code)]
     pub sort: Option<String>,
+    #[allow(dead_code)]
     pub order: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,

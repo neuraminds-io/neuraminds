@@ -1,12 +1,10 @@
-//! Zero-Knowledge Proofs for Polyguard Privacy
+//! Zero-Knowledge Proofs
 //!
-//! This module provides:
-//! - Range proofs: prove a committed value is in [0, 2^n)
-//! - Balance proofs: prove encrypted balance >= amount
-//! - Equality proofs: prove two commitments contain the same value
+//! - Range proofs: committed value in [0, 2^n)
+//! - Balance proofs: encrypted balance >= amount
+//! - Equality proofs: two commitments hide same value
 //!
-//! Implementation uses Sigma protocols with Fiat-Shamir transformation
-//! optimized for Solana's compute budget.
+//! Sigma protocols with Fiat-Shamir, optimized for Solana compute.
 
 use curve25519_dalek::{
     constants::RISTRETTO_BASEPOINT_POINT,

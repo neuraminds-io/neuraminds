@@ -9,14 +9,10 @@ use instructions::*;
 
 declare_id!("9QGtHZJvmjMKTME1s3mVfNXtGpEdXDQZJTxsxqve9GsL");
 
-/// Polyguard Privacy Layer
+/// Privacy Layer
 ///
-/// This program provides confidential trading capabilities using:
-/// - ElGamal encryption for balance privacy
-/// - Pedersen commitments for order amounts
-/// - Zero-knowledge proofs for validation
-///
-/// Future integration with Arcium MXE for full MPC support.
+/// Confidential trading via ElGamal encryption, Pedersen commitments,
+/// and zero-knowledge proofs. Arcium MXE integration planned.
 #[program]
 pub mod polyguard_privacy {
     use super::*;

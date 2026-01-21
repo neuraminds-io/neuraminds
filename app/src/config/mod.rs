@@ -18,6 +18,8 @@ pub struct AppConfig {
     pub cors_origins: Vec<String>,
     /// Whether running in development mode (enables unsafe defaults)
     pub is_development: bool,
+    /// Whether to submit transactions to Solana (disable for testing without RPC)
+    pub solana_enabled: bool,
 }
 
 impl AppConfig {
@@ -88,6 +90,9 @@ impl AppConfig {
             jwt_secret,
             cors_origins,
             is_development,
+            solana_enabled: env::var("SOLANA_ENABLED")
+                .unwrap_or_else(|_| "true".to_string())
+                .to_lowercase() == "true",
         }
     }
 }

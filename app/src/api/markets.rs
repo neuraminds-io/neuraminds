@@ -5,8 +5,7 @@ use std::sync::Arc;
 use crate::models::{
     Market, MarketStatus, Outcome,
     CreateMarketRequest, ListMarketsQuery, MarketListResponse,
-    OrderBookResponse, OrderBookLevel,
-    Trade, ListTradesQuery, TradeListResponse,
+    OrderBookResponse, ListTradesQuery, TradeListResponse,
 };
 use crate::AppState;
 use super::ApiError;

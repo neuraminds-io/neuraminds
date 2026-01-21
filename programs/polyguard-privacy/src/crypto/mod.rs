@@ -1,10 +1,9 @@
-//! Cryptographic primitives for Polyguard Privacy Layer
+//! Cryptographic primitives
 //!
-//! This module provides:
-//! - ElGamal encryption (twisted variant on Ristretto255)
-//! - Pedersen commitments for hiding values
-//! - Range proofs for proving values are in valid range
-//! - Balance proofs for proving sufficient funds
+//! - ElGamal encryption (twisted Ristretto255)
+//! - Pedersen commitments
+//! - Range proofs
+//! - Balance proofs
 
 pub mod elgamal;
 pub mod pedersen;

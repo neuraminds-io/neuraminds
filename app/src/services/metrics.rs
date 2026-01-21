@@ -1,7 +1,6 @@
-//! Metrics and observability service for Polyguard backend
+//! Metrics and observability
 //!
-//! Provides application metrics, health checks, and monitoring data.
-//! Includes histogram support for latency tracking.
+//! Application metrics, health checks, latency histograms.
 
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -407,10 +406,12 @@ impl ComponentHealth {
 }
 
 /// Request timing helper
+#[allow(dead_code)]
 pub struct RequestTimer {
     start: Instant,
 }
 
+#[allow(dead_code)]
 impl RequestTimer {
     pub fn start() -> Self {
         Self { start: Instant::now() }

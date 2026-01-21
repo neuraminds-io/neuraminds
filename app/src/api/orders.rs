@@ -121,10 +121,34 @@ pub async fn place_order(
     // Add to order book and attempt matching
     let matches = state.orderbook.add_order(&order);
 
+    // Persist to database order book
+    if order.remaining_quantity > 0 {
+        state.db.add_orderbook_entry(
+            &order.id,
+            &order.market_id,
+            order.outcome,
+            order.side,
+            order.price_bps,
+            order.remaining_quantity,
+            &order.owner,
+        ).await.ok();
+    }
+
     // Process matches
     for matched_trade in &matches {
-        // In production: submit settlement transaction
-        // let tx_sig = state.solana.settle_trade(matched_trade).await?;
+        // Submit settlement transaction to Solana if enabled
+        if state.config.solana_enabled {
+            // Build accounts for settlement (in production, derive from order/position PDAs)
+            // For now, log intent - full implementation requires account derivation
+            log::info!(
+                "Trade matched: buy={}, sell={}, qty={}, price={}",
+                matched_trade.buy_order_id,
+                matched_trade.sell_order_id,
+                matched_trade.fill_quantity,
+                matched_trade.fill_price_bps
+            );
+            // TODO: Derive PDAs and call state.solana.settle_trade()
+        }
 
         // Publish trade event via Redis
         let outcome_str = match order.outcome {
@@ -140,6 +164,12 @@ pub async fn place_order(
             )
             .await
             .ok();
+
+        // Update persistent order book for matched orders
+        state.db.update_orderbook_entry_quantity(
+            &matched_trade.buy_order_id.to_string(),
+            0, // Buyer order filled
+        ).await.ok();
     }
 
     // Calculate filled amount
@@ -232,6 +262,9 @@ pub async fn cancel_order(
 
     // Remove from order book
     state.orderbook.remove_order(&order.market_id, order.outcome, order.side, &order_id);
+
+    // Remove from persistent order book
+    state.db.remove_orderbook_entry(&order_id).await.ok();
 
     // Update database
     state.db

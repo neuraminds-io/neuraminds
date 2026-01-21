@@ -12,7 +12,7 @@ mod services;
 
 use api::JwtService;
 use config::AppConfig;
-use services::{DatabaseService, SolanaService, OrderBookService, RedisService, MetricsService};
+use services::{DatabaseService, SolanaService, OrderBookService, RedisService, MetricsService, WebSocketHub};
 
 pub struct AppState {
     pub config: AppConfig,
@@ -22,6 +22,7 @@ pub struct AppState {
     pub redis: RedisService,
     pub jwt: JwtService,
     pub metrics: MetricsService,
+    pub ws_hub: WebSocketHub,
 }
 
 #[actix_web::main]
@@ -50,9 +51,25 @@ async fn main() -> std::io::Result<()> {
 
     let orderbook = OrderBookService::new();
 
+    // Restore order book from database
+    match db.load_orderbook_entries().await {
+        Ok(entries) => {
+            let count = entries.len();
+            orderbook.restore_from_entries(entries);
+            if count > 0 {
+                info!("Restored {} order book entries from database", count);
+            }
+        }
+        Err(e) => {
+            warn!("Failed to restore order book (table may not exist yet): {}", e);
+        }
+    }
+
     let jwt = JwtService::new(&config.jwt_secret);
 
     let metrics = MetricsService::new();
+
+    let ws_hub = WebSocketHub::new();
 
     let app_state = Arc::new(AppState {
         config: config.clone(),
@@ -62,6 +79,7 @@ async fn main() -> std::io::Result<()> {
         redis,
         jwt,
         metrics,
+        ws_hub,
     });
 
     info!("Starting HTTP server on {}", bind_addr);
@@ -114,6 +132,8 @@ async fn main() -> std::io::Result<()> {
             // Metrics endpoints
             .route("/metrics", web::get().to(api::health::get_metrics))
             .route("/metrics/prometheus", web::get().to(api::health::get_metrics_prometheus))
+            // WebSocket endpoint
+            .route("/ws", web::get().to(api::ws_handler))
             // API v1 routes
             .service(
                 web::scope("/v1")

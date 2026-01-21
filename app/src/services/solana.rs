@@ -8,19 +8,19 @@ use solana_sdk::{
     pubkey::Pubkey,
     signature::{Keypair, Signature, read_keypair_file},
     signer::Signer,
-    system_program,
     transaction::Transaction,
 };
 use std::str::FromStr;
 use std::env;
 
-use crate::models::{Outcome, OrderSide, MatchedTrade};
+use crate::models::MatchedTrade;
 
 pub struct SolanaService {
     rpc_client: RpcClient,
     keeper: Keypair,
     market_program_id: Pubkey,
     orderbook_program_id: Pubkey,
+    #[allow(dead_code)]
     privacy_program_id: Pubkey,
 }
 
@@ -330,6 +330,64 @@ impl SolanaService {
             &self.orderbook_program_id,
         )
     }
+
+    /// Derive escrow vault PDA
+    pub fn derive_escrow_vault_pda(&self, market_pubkey: &Pubkey) -> (Pubkey, u8) {
+        Pubkey::find_program_address(
+            &[b"escrow", market_pubkey.as_ref()],
+            &self.orderbook_program_id,
+        )
+    }
+
+    /// Derive escrow authority PDA
+    pub fn derive_escrow_authority_pda(&self, market_pubkey: &Pubkey) -> (Pubkey, u8) {
+        Pubkey::find_program_address(
+            &[b"escrow_authority", market_pubkey.as_ref()],
+            &self.orderbook_program_id,
+        )
+    }
+
+    /// Derive config PDA
+    pub fn derive_config_pda(&self) -> (Pubkey, u8) {
+        Pubkey::find_program_address(
+            &[b"config"],
+            &self.orderbook_program_id,
+        )
+    }
+
+    /// Build all accounts needed for settle_trade from order info
+    pub fn build_settle_trade_accounts(
+        &self,
+        market_id: &str,
+        buyer: &Pubkey,
+        seller: &Pubkey,
+        buy_order_id: u64,
+        sell_order_id: u64,
+        buyer_collateral: Pubkey,
+        seller_collateral: Pubkey,
+    ) -> SettleTradeAccounts {
+        let (market_pda, _) = self.derive_market_pda(market_id);
+        let (buy_order_pda, _) = self.derive_order_pda(&market_pda, buy_order_id);
+        let (sell_order_pda, _) = self.derive_order_pda(&market_pda, sell_order_id);
+        let (buyer_position_pda, _) = self.derive_position_pda(&market_pda, buyer);
+        let (seller_position_pda, _) = self.derive_position_pda(&market_pda, seller);
+        let (escrow_vault_pda, _) = self.derive_escrow_vault_pda(&market_pda);
+        let (escrow_authority_pda, _) = self.derive_escrow_authority_pda(&market_pda);
+        let (config_pda, _) = self.derive_config_pda();
+
+        SettleTradeAccounts {
+            config: config_pda,
+            market: market_pda,
+            buy_order: buy_order_pda,
+            buyer_position: buyer_position_pda,
+            sell_order: sell_order_pda,
+            seller_position: seller_position_pda,
+            escrow_vault: escrow_vault_pda,
+            seller_collateral,
+            buyer_collateral,
+            escrow_authority: escrow_authority_pda,
+        }
+    }
 }
 
 // ============================================================================
@@ -413,6 +471,7 @@ pub struct OrderAccount {
 
 /// Position account data
 #[derive(Default, Debug, Clone)]
+#[allow(dead_code)]
 pub struct PositionAccount {
     pub owner: Pubkey,
     pub market: Pubkey,

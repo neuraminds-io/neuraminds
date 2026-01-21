@@ -1,13 +1,11 @@
-//! Twisted ElGamal encryption on Ristretto255
+//! Twisted ElGamal on Ristretto255
 //!
-//! This implementation provides additively homomorphic encryption suitable for
-//! confidential balance tracking. The "twisted" variant encrypts as:
-//!   (r*G, m*G + r*P) where m is the amount
+//! Additively homomorphic encryption for confidential balances.
+//! Encrypts as (r*G, m*G + r*P) where m is the amount.
 //!
-//! This allows:
-//! - Homomorphic addition of ciphertexts
-//! - Decryption via discrete log (for small amounts)
-//! - Zero-knowledge proofs of plaintext properties
+//! - Homomorphic ciphertext addition
+//! - Decryption via discrete log (small amounts only)
+//! - ZK proofs of plaintext properties
 
 use curve25519_dalek::{
     constants::RISTRETTO_BASEPOINT_POINT,

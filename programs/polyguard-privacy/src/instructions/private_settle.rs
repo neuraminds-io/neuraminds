@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use crate::state::{PrivacyConfig, PrivateAccount, PrivateOrder, PrivateSettlement};
 use crate::errors::PrivacyError;
+use crate::crypto::{CompactRangeProof, PedersenCommitment};
 
 #[derive(Accounts)]
 #[instruction(buy_order_id: u64, sell_order_id: u64)]
@@ -86,15 +87,39 @@ pub fn handler(
     mxe_result: [u8; 256],
     settlement_proof: [u8; 128],
 ) -> Result<()> {
-    // Validate MXE result (in production, verify cryptographic proof)
-    require!(
-        mxe_result.iter().any(|&b| b != 0),
-        PrivacyError::InvalidMxeResult
-    );
+    // Parse MXE result structure:
+    // [0..64]   = encrypted fill quantity (ElGamal ciphertext)
+    // [64..128] = encrypted fill price (ElGamal ciphertext)
+    // [128..160] = fill quantity commitment (Pedersen)
+    // [160..192] = fill price commitment (Pedersen)
+    // [192..256] = MXE signature (Ed25519 over the above)
+    let encrypted_fill_quantity: [u8; 64] = mxe_result[0..64].try_into()
+        .map_err(|_| PrivacyError::InvalidMxeResult)?;
+    let encrypted_fill_price: [u8; 64] = mxe_result[64..128].try_into()
+        .map_err(|_| PrivacyError::InvalidMxeResult)?;
+    let fill_qty_commitment: [u8; 32] = mxe_result[128..160].try_into()
+        .map_err(|_| PrivacyError::InvalidMxeResult)?;
+    let fill_price_commitment: [u8; 32] = mxe_result[160..192].try_into()
+        .map_err(|_| PrivacyError::InvalidMxeResult)?;
 
-    // Validate settlement proof
+    // Validate commitments are valid curve points
+    let _qty_comm = PedersenCommitment::from_bytes(&fill_qty_commitment)
+        .map_err(|_| PrivacyError::InvalidMxeResult)?;
+    let _price_comm = PedersenCommitment::from_bytes(&fill_price_commitment)
+        .map_err(|_| PrivacyError::InvalidMxeResult)?;
+
+    // Verify settlement proof (range proof on fill quantity)
+    // This proves the fill quantity is valid (non-negative, bounded)
+    let settlement_range_proof = CompactRangeProof::from_bytes(&settlement_proof)
+        .map_err(|_| PrivacyError::InvalidSettlementProof)?;
+
+    let proof_valid = settlement_range_proof.verify()
+        .map_err(|_| PrivacyError::InvalidSettlementProof)?;
+    require!(proof_valid, PrivacyError::InvalidSettlementProof);
+
+    // Verify the settlement proof commitment matches the fill quantity commitment
     require!(
-        settlement_proof.iter().any(|&b| b != 0),
+        settlement_range_proof.commitment == fill_qty_commitment,
         PrivacyError::InvalidSettlementProof
     );
 
@@ -117,8 +142,8 @@ pub fn handler(
     settlement.market = ctx.accounts.market.key();
     settlement.mxe_result = mxe_result;
     settlement.settlement_proof = settlement_proof;
-    settlement.encrypted_fill_quantity = [0u8; 64];
-    settlement.encrypted_fill_price = [0u8; 64];
+    settlement.encrypted_fill_quantity = encrypted_fill_quantity;
+    settlement.encrypted_fill_price = encrypted_fill_price;
     settlement.status = PrivateSettlement::STATUS_COMPLETED;
     settlement.bump = ctx.bumps.settlement;
     settlement.settled_at = clock.unix_timestamp;

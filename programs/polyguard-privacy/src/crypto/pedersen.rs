@@ -1,16 +1,8 @@
 //! Pedersen Commitments
 //!
-//! Pedersen commitments provide:
-//! - Perfect hiding: commitment reveals nothing about the value
-//! - Computational binding: cannot find different value with same commitment
-//! - Homomorphic: C(a) + C(b) = C(a+b)
+//! C = v*G + r*H
 //!
-//! Commitment formula: C = v*G + r*H
-//! where:
-//!   - v is the committed value
-//!   - r is the random blinding factor
-//!   - G is the standard base point
-//!   - H is a secondary generator derived via hash
+//! Properties: perfect hiding, computational binding, homomorphic.
 
 use curve25519_dalek::{
     constants::RISTRETTO_BASEPOINT_POINT,

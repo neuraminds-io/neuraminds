@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use crate::state::{PrivacyConfig, PrivateAccount, PrivateOrder};
 use crate::errors::PrivacyError;
+use crate::crypto::{PedersenCommitment, CompactRangeProof};
 
 #[derive(Accounts)]
 pub struct PlacePrivateOrder<'info> {
@@ -63,19 +64,27 @@ pub fn handler(
         PrivacyError::InvalidOutcomeType
     );
 
-    // Validate commitments are not empty
-    require!(
-        price_commitment.iter().any(|&b| b != 0),
-        PrivacyError::InvalidPriceCommitment
-    );
-    require!(
-        quantity_commitment.iter().any(|&b| b != 0),
-        PrivacyError::InvalidQuantityCommitment
-    );
+    // Validate price commitment is a valid Pedersen commitment point
+    let _price_comm = PedersenCommitment::from_bytes(&price_commitment)
+        .map_err(|_| PrivacyError::InvalidPriceCommitment)?;
 
-    // Validate range proof (placeholder)
+    // Validate quantity commitment is a valid Pedersen commitment point
+    let _qty_comm = PedersenCommitment::from_bytes(&quantity_commitment)
+        .map_err(|_| PrivacyError::InvalidQuantityCommitment)?;
+
+    // Verify range proof on quantity commitment
+    // The range proof proves quantity is in valid range [0, 2^64)
+    let range_proof_parsed = CompactRangeProof::from_bytes(&range_proof)
+        .map_err(|_| PrivacyError::InvalidRangeProof)?;
+
+    // Verify the proof is valid and the commitment in the proof matches quantity
+    let proof_valid = range_proof_parsed.verify()
+        .map_err(|_| PrivacyError::InvalidRangeProof)?;
+    require!(proof_valid, PrivacyError::InvalidRangeProof);
+
+    // Verify the range proof commitment matches the quantity commitment
     require!(
-        range_proof.iter().any(|&b| b != 0),
+        range_proof_parsed.commitment == quantity_commitment,
         PrivacyError::InvalidRangeProof
     );
 
