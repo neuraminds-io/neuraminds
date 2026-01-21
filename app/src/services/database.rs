@@ -793,3 +793,63 @@ pub struct PoolStats {
     /// Number of idle connections
     pub idle_count: usize,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pool_config_default() {
+        let config = PoolConfig::default();
+        assert_eq!(config.max_connections, 20);
+        assert_eq!(config.min_connections, 5);
+        assert_eq!(config.acquire_timeout, Duration::from_secs(30));
+        assert_eq!(config.idle_timeout, Duration::from_secs(600));
+        assert_eq!(config.max_lifetime, Duration::from_secs(1800));
+    }
+
+    #[test]
+    fn test_market_status_conversion() {
+        assert_eq!(MarketStatus::from(0u8), MarketStatus::Active);
+        assert_eq!(MarketStatus::from(1u8), MarketStatus::Paused);
+        assert_eq!(MarketStatus::from(2u8), MarketStatus::Closed);
+        assert_eq!(MarketStatus::from(3u8), MarketStatus::Resolved);
+        assert_eq!(MarketStatus::from(4u8), MarketStatus::Cancelled);
+        // Unknown values default to Active
+        assert_eq!(MarketStatus::from(255u8), MarketStatus::Active);
+    }
+
+    #[test]
+    fn test_order_status_conversion() {
+        assert_eq!(OrderStatus::from(0u8), OrderStatus::Open);
+        assert_eq!(OrderStatus::from(1u8), OrderStatus::PartiallyFilled);
+        assert_eq!(OrderStatus::from(2u8), OrderStatus::Filled);
+        assert_eq!(OrderStatus::from(3u8), OrderStatus::Cancelled);
+        assert_eq!(OrderStatus::from(4u8), OrderStatus::Expired);
+        assert_eq!(OrderStatus::from(255u8), OrderStatus::Open);
+    }
+
+    #[test]
+    fn test_order_side_conversion() {
+        assert_eq!(OrderSide::from(0u8), OrderSide::Buy);
+        assert_eq!(OrderSide::from(1u8), OrderSide::Sell);
+        assert_eq!(OrderSide::from(255u8), OrderSide::Buy);
+    }
+
+    #[test]
+    fn test_outcome_conversion() {
+        assert_eq!(Outcome::from(1u8), Outcome::Yes);
+        assert_eq!(Outcome::from(2u8), Outcome::No);
+        // Unknown values default to Yes
+        assert_eq!(Outcome::from(0u8), Outcome::Yes);
+        assert_eq!(Outcome::from(255u8), Outcome::Yes);
+    }
+
+    #[test]
+    fn test_order_type_conversion() {
+        assert_eq!(OrderType::from(0u8), OrderType::Limit);
+        assert_eq!(OrderType::from(1u8), OrderType::Market);
+        // Unknown values default to Limit
+        assert_eq!(OrderType::from(255u8), OrderType::Limit);
+    }
+}
