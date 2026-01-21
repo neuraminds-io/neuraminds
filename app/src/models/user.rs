@@ -65,6 +65,7 @@ impl From<u8> for TransactionType {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TransactionStatus {

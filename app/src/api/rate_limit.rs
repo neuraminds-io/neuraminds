@@ -5,6 +5,8 @@
 //! - Write endpoints: 30/min (prevent spam)
 //! - Read endpoints: 120/min (reasonable API usage)
 
+#![allow(dead_code)]
+
 use actix_web::HttpRequest;
 
 use crate::services::RedisService;

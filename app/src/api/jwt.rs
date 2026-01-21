@@ -182,6 +182,7 @@ impl TokenPair {
 }
 
 /// Check if user has required role
+#[allow(dead_code)]
 pub fn check_role(user_role: UserRole, required_role: UserRole) -> Result<(), ApiError> {
     let has_access = match required_role {
         UserRole::User => true, // Everyone can access user-level resources

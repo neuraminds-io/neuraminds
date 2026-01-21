@@ -1,3 +1,8 @@
+//! Input validation utilities for API requests.
+//! Some functions are infrastructure for future use.
+
+#![allow(dead_code)]
+
 use regex::Regex;
 use lazy_static::lazy_static;
 use super::ApiError;

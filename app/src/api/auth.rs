@@ -55,6 +55,7 @@ impl AuthMessage {
     }
 
     /// Reconstruct the original message for verification
+    #[allow(dead_code)]
     fn to_string(&self) -> String {
         format!("polyguard:{}:{}:{}", self.wallet, self.timestamp, self.nonce)
     }
@@ -417,6 +418,7 @@ pub async fn logout(
 
 /// POST /v1/auth/logout-all
 /// Logs out the user from all devices by incrementing their token generation
+#[allow(dead_code)]
 pub async fn logout_all(
     req: HttpRequest,
     state: web::Data<Arc<AppState>>,
@@ -449,6 +451,7 @@ pub async fn logout_all(
 }
 
 /// Authenticated user with role from JWT token
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUserWithRole {
     pub wallet_address: String,
