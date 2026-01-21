@@ -28,12 +28,13 @@ pub struct UserSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     pub id: String,
+    pub owner: String,
     pub tx_type: TransactionType,
     pub market_id: Option<String>,
     pub amount: u64,
-    pub token: String,
-    pub tx_signature: String,
-    pub status: TransactionStatus,
+    pub fee: u64,
+    pub tx_signature: Option<String>,
+    pub status: String,
     pub created_at: DateTime<Utc>,
 }
 
@@ -47,6 +48,21 @@ pub enum TransactionType {
     Claim,
     Mint,
     Redeem,
+}
+
+impl From<u8> for TransactionType {
+    fn from(val: u8) -> Self {
+        match val {
+            0 => TransactionType::Deposit,
+            1 => TransactionType::Withdraw,
+            2 => TransactionType::Buy,
+            3 => TransactionType::Sell,
+            4 => TransactionType::Claim,
+            5 => TransactionType::Mint,
+            6 => TransactionType::Redeem,
+            _ => TransactionType::Deposit,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
