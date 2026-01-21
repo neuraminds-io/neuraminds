@@ -9,6 +9,7 @@ use log::{info, warn, error};
 
 use crate::AppState;
 use crate::services::websocket::{WsMessage, SubscribeRequest};
+use super::jwt::UserRole;
 
 /// WebSocket connection timeout
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
@@ -23,16 +24,23 @@ pub struct WsSession {
     /// App state
     #[allow(dead_code)]
     state: Arc<AppState>,
+    /// Authenticated user wallet address
+    user_wallet: String,
+    /// User role
+    #[allow(dead_code)]
+    user_role: UserRole,
     /// Subscribed markets
     subscribed_markets: Vec<String>,
 }
 
 impl WsSession {
-    pub fn new(state: Arc<AppState>) -> Self {
+    pub fn new(state: Arc<AppState>, user_wallet: String, user_role: UserRole) -> Self {
         Self {
             id: rand::random(),
             hb: Instant::now(),
             state,
+            user_wallet,
+            user_role,
             subscribed_markets: Vec::new(),
         }
     }
@@ -92,7 +100,7 @@ impl Actor for WsSession {
     type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        info!("WebSocket session started: {}", self.id);
+        info!("WebSocket session started: {} for user: {}", self.id, self.user_wallet);
         self.hb(ctx);
     }
 
@@ -131,11 +139,29 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
 }
 
 /// WebSocket upgrade handler
+/// Requires JWT authentication via query parameter: ?token=<jwt>
 pub async fn ws_handler(
     req: HttpRequest,
     stream: web::Payload,
     state: web::Data<Arc<AppState>>,
+    query: web::Query<WsAuthQuery>,
 ) -> Result<HttpResponse, Error> {
-    let session = WsSession::new(state.get_ref().clone());
+    // Validate JWT token from query parameter
+    let claims = match state.jwt.validate_token(&query.token) {
+        Ok(claims) => claims,
+        Err(e) => {
+            warn!("WebSocket authentication failed: {:?}", e);
+            return Ok(HttpResponse::Unauthorized().body("Invalid or missing token"));
+        }
+    };
+
+    let session = WsSession::new(state.get_ref().clone(), claims.sub, claims.role);
     ws::start(session, &req, stream)
+}
+
+/// Query parameters for WebSocket authentication
+#[derive(serde::Deserialize)]
+pub struct WsAuthQuery {
+    /// JWT token for authentication
+    pub token: String,
 }

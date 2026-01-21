@@ -96,20 +96,9 @@ pub fn extract_authenticated_user(
 
     let token = &auth_header[7..]; // Skip "Bearer "
 
-    if state.config.is_development {
-        // In development mode, accept wallet address directly
-        // Format: "Bearer <wallet_pubkey>"
-        validate_solana_address(token)?;
-
-        log::warn!(
-            "SECURITY: Development mode - accepting unverified wallet address: {}",
-            token
-        );
-
-        return Ok(AuthenticatedUser {
-            wallet_address: token.to_string(),
-        });
-    }
+    // SECURITY: Development mode bypass has been removed.
+    // All environments require proper signature verification.
+    // For testing, use proper test fixtures with valid signatures.
 
     // Production mode: require signature verification
     // Format: "Bearer <wallet_pubkey>:<signature_base58>:<message>"
@@ -384,12 +373,8 @@ pub async fn login(
     check_and_record_nonce(&auth_message.nonce, auth_message.timestamp)?;
 
     // Verify the Ed25519 signature
-    if !state.config.is_development {
-        if !verify_ed25519_signature(&req.wallet, &req.signature, &req.message) {
-            return Err(ApiError::unauthorized("Invalid signature"));
-        }
-    } else {
-        log::warn!("SECURITY: Development mode - skipping signature verification for login");
+    if !verify_ed25519_signature(&req.wallet, &req.signature, &req.message) {
+        return Err(ApiError::unauthorized("Invalid signature"));
     }
 
     // Determine user role (in production, this would query a database)
@@ -487,6 +472,38 @@ pub async fn logout_all(
     }
 
     Err(ApiError::unauthorized("Invalid or missing token"))
+}
+
+/// Authenticated user with role from JWT token
+#[derive(Debug, Clone)]
+pub struct AuthenticatedUserWithRole {
+    pub wallet_address: String,
+    pub role: UserRole,
+}
+
+/// Extract authenticated user from JWT Bearer token
+/// Used for endpoints that require JWT auth (login-based)
+pub fn extract_jwt_user(
+    req: &HttpRequest,
+    state: &web::Data<Arc<AppState>>,
+) -> Result<AuthenticatedUserWithRole, ApiError> {
+    let auth_header = req
+        .headers()
+        .get("Authorization")
+        .and_then(|h| h.to_str().ok())
+        .ok_or_else(|| ApiError::unauthorized("Missing Authorization header"))?;
+
+    if !auth_header.starts_with("Bearer ") {
+        return Err(ApiError::unauthorized("Invalid Authorization header format"));
+    }
+
+    let token = &auth_header[7..];
+    let claims = state.jwt.validate_token(token)?;
+
+    Ok(AuthenticatedUserWithRole {
+        wallet_address: claims.sub,
+        role: claims.role,
+    })
 }
 
 /// Determine user role based on wallet address

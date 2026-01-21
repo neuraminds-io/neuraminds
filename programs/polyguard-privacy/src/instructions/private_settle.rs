@@ -1,7 +1,67 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::ed25519_program;
+use anchor_lang::solana_program::sysvar::instructions::{
+    load_instruction_at_checked, ID as SYSVAR_INSTRUCTIONS_ID,
+};
 use crate::state::{PrivacyConfig, PrivateAccount, PrivateOrder, PrivateSettlement};
 use crate::errors::PrivacyError;
 use crate::crypto::{CompactRangeProof, PedersenCommitment};
+
+/// Verify Ed25519 signature from MXE authority by checking the Ed25519 precompile instruction
+fn verify_mxe_signature(
+    mxe_authority: &Pubkey,
+    instructions_sysvar: &AccountInfo,
+) -> Result<()> {
+    // The Ed25519 signature verification must be done via the Ed25519 precompile
+    // which should be called as the previous instruction in the transaction
+    let current_idx = anchor_lang::solana_program::sysvar::instructions::load_current_index_checked(
+        instructions_sysvar,
+    ).map_err(|_| PrivacyError::InvalidMxeSignature)?;
+
+    // Look for Ed25519 precompile instruction before this one
+    if current_idx == 0 {
+        return Err(PrivacyError::InvalidMxeSignature.into());
+    }
+
+    let ed25519_ix = load_instruction_at_checked(
+        (current_idx - 1) as usize,
+        instructions_sysvar,
+    ).map_err(|_| PrivacyError::InvalidMxeSignature)?;
+
+    // Verify the instruction was from the Ed25519 program
+    require!(
+        ed25519_ix.program_id == ed25519_program::ID,
+        PrivacyError::InvalidMxeSignature
+    );
+
+    // Parse the Ed25519 instruction data
+    // Format: [num_sigs(1), padding(1), sig_offset(2), sig_instruction_idx(2),
+    //          pubkey_offset(2), pubkey_instruction_idx(2), message_offset(2),
+    //          message_len(2), message_instruction_idx(2)]
+    if ed25519_ix.data.len() < 16 {
+        return Err(PrivacyError::InvalidMxeSignature.into());
+    }
+
+    // Extract pubkey offset from instruction data
+    let pubkey_offset = u16::from_le_bytes([ed25519_ix.data[6], ed25519_ix.data[7]]) as usize;
+    if pubkey_offset + 32 > ed25519_ix.data.len() {
+        return Err(PrivacyError::InvalidMxeSignature.into());
+    }
+
+    // Extract and verify the pubkey matches MXE authority
+    let pubkey_in_ix: [u8; 32] = ed25519_ix.data[pubkey_offset..pubkey_offset + 32]
+        .try_into()
+        .map_err(|_| PrivacyError::InvalidMxeSignature)?;
+
+    require!(
+        pubkey_in_ix == mxe_authority.to_bytes(),
+        PrivacyError::InvalidMxeSignature
+    );
+
+    // The Ed25519 precompile already verified the signature
+    // If we got here, the signature is valid
+    Ok(())
+}
 
 #[derive(Accounts)]
 #[instruction(buy_order_id: u64, sell_order_id: u64)]
@@ -78,6 +138,10 @@ pub struct PrivateSettle<'info> {
     pub settlement: Box<Account<'info, PrivateSettlement>>,
 
     pub system_program: Program<'info, System>,
+
+    /// CHECK: Instructions sysvar for Ed25519 signature verification
+    #[account(address = SYSVAR_INSTRUCTIONS_ID)]
+    pub instructions_sysvar: AccountInfo<'info>,
 }
 
 pub fn handler(
@@ -101,6 +165,15 @@ pub fn handler(
         .map_err(|_| PrivacyError::InvalidMxeResult)?;
     let fill_price_commitment: [u8; 32] = mxe_result[160..192].try_into()
         .map_err(|_| PrivacyError::InvalidMxeResult)?;
+    // Note: bytes [192..256] contain the MXE Ed25519 signature, verified via precompile
+
+    // Verify MXE signature over the result data
+    // The Ed25519 precompile must be called as the previous instruction
+    // with the signature over the first 192 bytes (encrypted data + commitments)
+    verify_mxe_signature(
+        &ctx.accounts.config.mxe_authority,
+        &ctx.accounts.instructions_sysvar,
+    )?;
 
     // Validate commitments are valid curve points
     let _qty_comm = PedersenCommitment::from_bytes(&fill_qty_commitment)

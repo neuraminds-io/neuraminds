@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use chrono::Utc;
 use std::sync::Arc;
 
@@ -9,6 +9,8 @@ use crate::models::{
 };
 use crate::AppState;
 use super::ApiError;
+use super::auth::extract_jwt_user;
+use super::jwt::UserRole;
 
 /// List all markets with filtering
 pub async fn list_markets(
@@ -58,11 +60,20 @@ pub async fn get_market(
     }
 }
 
-/// Create a new market
+/// Create a new market (requires Admin or Keeper role)
 pub async fn create_market(
+    req: HttpRequest,
     state: web::Data<Arc<AppState>>,
     body: web::Json<CreateMarketRequest>,
 ) -> Result<impl Responder, ApiError> {
+    // Require JWT authentication with role
+    let user = extract_jwt_user(&req, &state)?;
+
+    // Require Admin or Keeper role
+    if !matches!(user.role, UserRole::Admin | UserRole::Keeper) {
+        return Err(ApiError::forbidden("Only admins and keepers can create markets"));
+    }
+
     // Validate inputs
     if body.market_id.len() > 64 {
         return Err(ApiError::bad_request("INVALID_MARKET_ID", "Market ID too long"));

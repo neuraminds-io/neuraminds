@@ -56,21 +56,12 @@ unsafe impl Zeroable for ElGamalPubkey {}
 unsafe impl Pod for ElGamalPubkey {}
 
 impl ElGamalKeypair {
-    /// Generate a new random keypair
+    /// Generate a new random keypair (off-chain only)
+    #[cfg(feature = "std")]
     pub fn new_rand() -> Self {
+        use rand::RngCore;
         let mut seed = [0u8; 32];
-        // Use system randomness - in practice use getrandom
-        #[cfg(feature = "std")]
-        {
-            use rand::RngCore;
-            rand::thread_rng().fill_bytes(&mut seed);
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            // For no_std, seed must be provided externally
-            // This is just a fallback that should not be used in production
-            seed = [42u8; 32]; // Placeholder - MUST be replaced with proper RNG
-        }
+        rand::thread_rng().fill_bytes(&mut seed);
         Self::from_seed(&seed)
     }
 
@@ -112,22 +103,27 @@ impl ElGamalPubkey {
         *self.0.as_bytes()
     }
 
-    /// Encrypt an amount using random randomness
+    /// Encrypt an amount using system randomness (off-chain only)
+    #[cfg(feature = "std")]
     pub fn encrypt(&self, amount: u64) -> Result<ElGamalCiphertext, CryptoError> {
+        use rand::RngCore;
         let mut r_bytes = [0u8; 32];
-        #[cfg(feature = "std")]
-        {
-            use rand::RngCore;
-            rand::thread_rng().fill_bytes(&mut r_bytes);
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            // For Solana on-chain, use recent blockhash or other entropy
-            // This is a placeholder - real implementation must use proper randomness
-            return Err(CryptoError::RandomnessError);
-        }
-
+        rand::thread_rng().fill_bytes(&mut r_bytes);
         let r = Scalar::from_bytes_mod_order(r_bytes);
+        self.encrypt_with_randomness(amount, &r)
+    }
+
+    /// Encrypt an amount using provided entropy (for on-chain use)
+    /// The entropy should come from a combination of:
+    /// - Recent blockhash / slot hash
+    /// - Transaction signature
+    /// - User-provided randomness
+    pub fn encrypt_with_entropy(
+        &self,
+        amount: u64,
+        entropy: &[u8; 32],
+    ) -> Result<ElGamalCiphertext, CryptoError> {
+        let r = Scalar::from_bytes_mod_order(*entropy);
         self.encrypt_with_randomness(amount, &r)
     }
 

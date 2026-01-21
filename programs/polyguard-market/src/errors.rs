@@ -91,4 +91,7 @@ pub enum MarketError {
 
     #[msg("Invalid outcome")]
     InvalidOutcome,
+
+    #[msg("Insufficient vault balance for transfer")]
+    InsufficientVaultBalance,
 }

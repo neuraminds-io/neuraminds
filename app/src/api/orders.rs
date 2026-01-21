@@ -45,11 +45,15 @@ pub async fn list_orders(
     Ok(HttpResponse::Ok().json(OrderListResponse { orders, total }))
 }
 
-/// Get a single order
+/// Get a single order (requires authentication, only owner can view)
 pub async fn get_order(
+    req: HttpRequest,
     state: web::Data<Arc<AppState>>,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
+    // SECURITY: Require authentication
+    let user = require_auth!(&req, &state);
+
     let order_id = path.into_inner();
 
     // Validate order ID format
@@ -61,7 +65,13 @@ pub async fn get_order(
         .map_err(ApiError::from)?;
 
     match order {
-        Some(o) => Ok(HttpResponse::Ok().json(o)),
+        Some(o) => {
+            // SECURITY: Only order owner can view their order
+            if o.owner != user.wallet_address {
+                return Err(ApiError::forbidden("You can only view your own orders"));
+            }
+            Ok(HttpResponse::Ok().json(o))
+        }
         None => Err(ApiError::not_found("Order")),
     }
 }

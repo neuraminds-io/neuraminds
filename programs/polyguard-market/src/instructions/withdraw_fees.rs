@@ -75,6 +75,12 @@ pub fn handler(ctx: Context<WithdrawFees>, recipient_type: FeeRecipient) -> Resu
 
     require!(withdraw_amount > 0, MarketError::NoFeesToWithdraw);
 
+    // Verify vault has sufficient balance before transfer
+    require!(
+        ctx.accounts.vault.amount >= withdraw_amount,
+        MarketError::InsufficientVaultBalance
+    );
+
     // Transfer fees from vault to recipient
     let seeds = &[
         Market::SEED_PREFIX,

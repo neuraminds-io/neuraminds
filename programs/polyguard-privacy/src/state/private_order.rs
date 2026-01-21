@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use crate::crypto::PedersenCommitment;
 
 #[account]
 #[derive(InitSpace)]
@@ -58,28 +59,27 @@ impl PrivateOrder {
     pub const OUTCOME_YES: u8 = 0;
     pub const OUTCOME_NO: u8 = 1;
 
-    /// Create a simple Pedersen-style commitment (placeholder)
-    /// commitment = value * G + blinding * H
-    /// For MVP, we use a simple hash
+    /// Create a Pedersen commitment: commitment = value * G + blinding * H
     pub fn create_commitment(value: u64, blinding: &[u8; 32]) -> [u8; 32] {
-        let mut result = [0u8; 32];
-        let value_bytes = value.to_le_bytes();
-
-        // Simple commitment (placeholder for real Pedersen)
-        for i in 0..8 {
-            result[i] = value_bytes[i] ^ blinding[i];
-        }
-        for i in 8..32 {
-            result[i] = blinding[i];
-        }
-
-        result
+        use curve25519_dalek::scalar::Scalar;
+        let blinding_scalar = Scalar::from_bytes_mod_order(*blinding);
+        let commitment = PedersenCommitment::commit_with_blinding(value, &blinding_scalar);
+        commitment.to_bytes()
     }
 
-    /// Verify a commitment (placeholder)
-    pub fn verify_commitment(commitment: &[u8; 32], value: u64, blinding: &[u8; 32]) -> bool {
-        let expected = Self::create_commitment(value, blinding);
-        commitment == &expected
+    /// Verify a commitment matches the value and blinding factor
+    pub fn verify_commitment(
+        commitment: &[u8; 32],
+        value: u64,
+        blinding: &[u8; 32],
+    ) -> bool {
+        use curve25519_dalek::scalar::Scalar;
+        let blinding_scalar = Scalar::from_bytes_mod_order(*blinding);
+        let expected = PedersenCommitment::commit_with_blinding(value, &blinding_scalar);
+        match PedersenCommitment::from_bytes(commitment) {
+            Ok(stored) => expected.0 == stored.0,
+            Err(_) => false,
+        }
     }
 }
 

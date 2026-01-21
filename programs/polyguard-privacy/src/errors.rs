@@ -55,4 +55,7 @@ pub enum PrivacyError {
 
     #[msg("Invalid outcome type")]
     InvalidOutcomeType,
+
+    #[msg("Invalid MXE signature")]
+    InvalidMxeSignature,
 }

@@ -136,18 +136,8 @@ impl JwtService {
             })
     }
 
-    /// Extract claims without full validation (for debugging/introspection)
-    /// WARNING: Do not use for authentication - this skips signature verification
-    #[allow(dead_code)]
-    pub fn decode_claims_unsafe(&self, token: &str) -> Result<Claims, ApiError> {
-        let mut validation = Validation::new(Algorithm::HS256);
-        validation.insecure_disable_signature_validation();
-        validation.validate_exp = false;
-
-        decode::<Claims>(token, &self.decoding_key, &validation)
-            .map(|data| data.claims)
-            .map_err(|_| ApiError::unauthorized("Invalid token"))
-    }
+    // REMOVED: decode_claims_unsafe - security vulnerability
+    // Use validate_token() for all token validation
 }
 
 /// Token pair response for authentication endpoints

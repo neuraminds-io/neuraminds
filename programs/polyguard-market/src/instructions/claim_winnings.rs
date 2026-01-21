@@ -92,6 +92,12 @@ pub fn handler(ctx: Context<ClaimWinnings>) -> Result<()> {
 
     require!(payout_amount > 0, MarketError::InvalidAmount);
 
+    // Verify vault has sufficient balance before transfer
+    require!(
+        ctx.accounts.vault.amount >= payout_amount,
+        MarketError::InsufficientVaultBalance
+    );
+
     // Burn winning tokens
     let (winning_mint, winning_account) = match market.resolved_outcome {
         1 => (

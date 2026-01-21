@@ -91,6 +91,12 @@ pub fn handler(ctx: Context<RedeemOutcomeTokens>, amount: u64) -> Result<()> {
 
     require!(net_amount > 0, MarketError::InvalidAmount);
 
+    // Verify vault has sufficient balance before transfer
+    require!(
+        ctx.accounts.vault.amount >= net_amount,
+        MarketError::InsufficientVaultBalance
+    );
+
     // Burn YES tokens
     let burn_yes_ctx = CpiContext::new(
         ctx.accounts.token_program.to_account_info(),
