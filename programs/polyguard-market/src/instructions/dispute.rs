@@ -208,21 +208,44 @@ pub fn finalize_dispute_handler(ctx: Context<FinalizeDispute>) -> Result<()> {
     let oracle_count = dispute.oracle_submissions.len() as u64;
 
     if dispute.status == DisputeStatus::Upheld {
-        // Refund bond to disputer
-        **dispute.to_account_info().try_borrow_mut_lamports()? -= bond;
-        **ctx.accounts.disputer.to_account_info().try_borrow_mut_lamports()? += bond;
+        // Refund bond to disputer using safe transfer
+        // The dispute account holds the bond, transfer it back to disputer
+        let dispute_info = dispute.to_account_info();
+        let disputer_info = ctx.accounts.disputer.to_account_info();
+
+        // Verify dispute account has sufficient lamports
+        let dispute_lamports = dispute_info.lamports();
+        let rent = Rent::get()?;
+        let min_rent = rent.minimum_balance(dispute_info.data_len());
+
+        // Only transfer if we have enough lamports above rent
+        let transferable = dispute_lamports.saturating_sub(min_rent);
+        let transfer_amount = bond.min(transferable);
+
+        if transfer_amount > 0 {
+            // Use safe lamport transfer
+            **dispute_info.try_borrow_mut_lamports()? = dispute_lamports
+                .checked_sub(transfer_amount)
+                .ok_or(MarketError::ArithmeticOverflow)?;
+            **disputer_info.try_borrow_mut_lamports()? = disputer_info
+                .lamports()
+                .checked_add(transfer_amount)
+                .ok_or(MarketError::ArithmeticOverflow)?;
+
+            msg!("Refunded {} lamports to disputer", transfer_amount);
+        }
     } else {
         // Distribute bond to oracles as reward
         let oracle_reward = (bond as u128)
             .checked_mul(ORACLE_REWARD_PERCENT as u128)
-            .unwrap()
-            .checked_div(100)
-            .unwrap() as u64;
-        let reward_per_oracle = oracle_reward / oracle_count.max(1);
+            .and_then(|v| v.checked_div(100))
+            .ok_or(MarketError::ArithmeticOverflow)? as u64;
+        let reward_per_oracle = oracle_reward.checked_div(oracle_count.max(1))
+            .ok_or(MarketError::ArithmeticOverflow)?;
 
-        // Note: In production, implement proper oracle reward distribution
-        // For now, keep remaining bond in dispute account for later claim
-        msg!("Oracle rewards: {} per oracle", reward_per_oracle);
+        // Bond remains in dispute account for oracle claims
+        // Oracles can claim via separate instruction
+        msg!("Oracle rewards: {} per oracle (claimable)", reward_per_oracle);
     }
 
     Ok(())

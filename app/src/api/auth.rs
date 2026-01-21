@@ -1,20 +1,12 @@
 use actix_web::{HttpRequest, HttpResponse, web};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::collections::HashMap;
-use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::str::FromStr;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
 use crate::AppState;
 use crate::api::{ApiError, jwt::{UserRole, TokenPair}};
-
-/// Nonce cache for replay protection
-/// Maps nonce -> expiration timestamp
-lazy_static::lazy_static! {
-    static ref USED_NONCES: RwLock<HashMap<String, u64>> = RwLock::new(HashMap::new());
-}
 
 /// Message expiration time in seconds (5 minutes)
 const MESSAGE_EXPIRATION_SECS: u64 = 300;
@@ -68,18 +60,15 @@ impl AuthMessage {
     }
 }
 
-/// Extracts the authenticated user from the request
+/// Extracts the authenticated user from the request (async version)
 ///
 /// Authentication is done via wallet signature verification:
 /// - Authorization header format: "Bearer <wallet_pubkey>:<signature>:<message>"
 /// - The signature proves ownership of the wallet
 /// - Message format: "polyguard:{wallet}:{timestamp}:{nonce}"
 ///
-/// For MVP/development, we accept a simpler format:
-/// - Authorization header format: "Bearer <wallet_pubkey>"
-///
-/// In production, full signature verification is enforced.
-pub fn extract_authenticated_user(
+/// Nonce checking uses Redis for distributed, persistent storage.
+pub async fn extract_authenticated_user(
     req: &HttpRequest,
     state: &web::Data<Arc<AppState>>,
 ) -> Result<AuthenticatedUser, ApiError> {
@@ -95,10 +84,6 @@ pub fn extract_authenticated_user(
     }
 
     let token = &auth_header[7..]; // Skip "Bearer "
-
-    // SECURITY: Development mode bypass has been removed.
-    // All environments require proper signature verification.
-    // For testing, use proper test fixtures with valid signatures.
 
     // Production mode: require signature verification
     // Format: "Bearer <wallet_pubkey>:<signature_base58>:<message>"
@@ -139,8 +124,8 @@ pub fn extract_authenticated_user(
         return Err(ApiError::unauthorized("Authentication message timestamp in future"));
     }
 
-    // Check nonce for replay protection
-    check_and_record_nonce(&auth_message.nonce, auth_message.timestamp)?;
+    // Check nonce for replay protection (using Redis)
+    check_and_record_nonce_redis(&state.redis, &auth_message.nonce).await?;
 
     // Verify the Ed25519 signature
     if !verify_ed25519_signature(wallet_pubkey, signature_str, message) {
@@ -221,44 +206,25 @@ fn verify_ed25519_signature(wallet_pubkey: &str, signature_str: &str, message: &
 }
 
 /// Check if nonce has been used and record it for replay protection
-fn check_and_record_nonce(nonce: &str, timestamp: u64) -> Result<(), ApiError> {
-    // Periodically clean up old nonces
-    cleanup_old_nonces();
+/// Uses Redis for distributed, persistent nonce storage
+async fn check_and_record_nonce_redis(
+    redis: &crate::services::RedisService,
+    nonce: &str,
+) -> Result<(), ApiError> {
+    // Nonce TTL: 10 minutes (matches NONCE_CLEANUP_AGE_SECS)
+    let was_new = redis.check_and_record_nonce(nonce, NONCE_CLEANUP_AGE_SECS)
+        .await
+        .map_err(|e| {
+            log::error!("Redis nonce check failed: {}", e);
+            ApiError::internal("Nonce verification failed")
+        })?;
 
-    // Check if nonce already used
-    {
-        let nonces = USED_NONCES.read()
-            .map_err(|_| ApiError::internal("Failed to acquire nonce lock"))?;
-
-        if nonces.contains_key(nonce) {
-            log::warn!("Replay attack detected: nonce {} already used", nonce);
-            return Err(ApiError::unauthorized("Nonce already used (possible replay attack)"));
-        }
-    }
-
-    // Record the nonce with its timestamp for later cleanup
-    {
-        let mut nonces = USED_NONCES.write()
-            .map_err(|_| ApiError::internal("Failed to acquire nonce lock"))?;
-
-        nonces.insert(nonce.to_string(), timestamp);
+    if !was_new {
+        log::warn!("Replay attack detected: nonce {} already used", nonce);
+        return Err(ApiError::unauthorized("Nonce already used (possible replay attack)"));
     }
 
     Ok(())
-}
-
-/// Clean up expired nonces to prevent unbounded memory growth
-fn cleanup_old_nonces() {
-    let current_time = match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(d) => d.as_secs(),
-        Err(_) => return,
-    };
-
-    let cutoff_time = current_time.saturating_sub(NONCE_CLEANUP_AGE_SECS);
-
-    if let Ok(mut nonces) = USED_NONCES.write() {
-        nonces.retain(|_, &mut timestamp| timestamp > cutoff_time);
-    }
 }
 
 /// Generate a unique nonce for the client to use
@@ -292,7 +258,7 @@ pub fn generate_nonce() -> String {
 #[macro_export]
 macro_rules! require_auth {
     ($req:expr, $state:expr) => {
-        crate::api::auth::extract_authenticated_user($req, $state)?
+        crate::api::auth::extract_authenticated_user($req, $state).await?
     };
 }
 
@@ -369,8 +335,8 @@ pub async fn login(
         return Err(ApiError::unauthorized("Authentication message timestamp in future"));
     }
 
-    // Check nonce for replay protection
-    check_and_record_nonce(&auth_message.nonce, auth_message.timestamp)?;
+    // Check nonce for replay protection (using Redis for distributed storage)
+    check_and_record_nonce_redis(&state.redis, &auth_message.nonce).await?;
 
     // Verify the Ed25519 signature
     if !verify_ed25519_signature(&req.wallet, &req.signature, &req.message) {
@@ -573,20 +539,8 @@ mod tests {
         assert!(validate_solana_address(invalid).is_err());
     }
 
-    #[test]
-    fn test_nonce_replay_protection() {
-        let nonce = "test_nonce_12345";
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        // First use should succeed
-        assert!(check_and_record_nonce(nonce, timestamp).is_ok());
-
-        // Second use should fail (replay)
-        assert!(check_and_record_nonce(nonce, timestamp).is_err());
-    }
+    // Note: Nonce replay protection tests moved to integration tests
+    // because they require Redis
 
     #[test]
     fn test_generate_nonce_uniqueness() {

@@ -181,6 +181,7 @@ impl PedersenOpening {
     }
 
     /// Add two openings (corresponds to adding commitments)
+    /// Uses wrapping arithmetic - for cryptographic operations only
     pub fn add(&self, other: &PedersenOpening) -> Self {
         Self {
             value: self.value.wrapping_add(other.value),
@@ -188,12 +189,31 @@ impl PedersenOpening {
         }
     }
 
+    /// Add two openings with overflow checking
+    /// Returns None if the value would overflow
+    pub fn checked_add(&self, other: &PedersenOpening) -> Option<Self> {
+        self.value.checked_add(other.value).map(|value| Self {
+            value,
+            blinding: self.blinding + other.blinding,
+        })
+    }
+
     /// Subtract openings (corresponds to subtracting commitments)
+    /// Uses wrapping arithmetic - for cryptographic operations only
     pub fn subtract(&self, other: &PedersenOpening) -> Self {
         Self {
             value: self.value.wrapping_sub(other.value),
             blinding: self.blinding - other.blinding,
         }
+    }
+
+    /// Subtract openings with underflow checking
+    /// Returns None if the value would underflow
+    pub fn checked_subtract(&self, other: &PedersenOpening) -> Option<Self> {
+        self.value.checked_sub(other.value).map(|value| Self {
+            value,
+            blinding: self.blinding - other.blinding,
+        })
     }
 
     /// Get the commitment for this opening

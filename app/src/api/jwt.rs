@@ -16,7 +16,16 @@ pub struct Claims {
     pub role: UserRole,
     /// Token ID for revocation tracking
     pub jti: String,
+    /// Audience - the intended recipient of the token
+    pub aud: String,
+    /// Issuer - who created the token
+    pub iss: String,
 }
+
+/// Expected audience for tokens
+pub const TOKEN_AUDIENCE: &str = "polyguard-api";
+/// Token issuer
+pub const TOKEN_ISSUER: &str = "polyguard";
 
 /// User roles for RBAC
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -103,6 +112,8 @@ impl JwtService {
             exp: expiration.timestamp(),
             role,
             jti,
+            aud: TOKEN_AUDIENCE.to_string(),
+            iss: TOKEN_ISSUER.to_string(),
         };
 
         encode(&Header::default(), &claims, &self.encoding_key)
@@ -116,6 +127,10 @@ impl JwtService {
     pub fn validate_token(&self, token: &str) -> Result<Claims, ApiError> {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
+        // Validate audience claim
+        validation.set_audience(&[TOKEN_AUDIENCE]);
+        // Validate issuer claim
+        validation.set_issuer(&[TOKEN_ISSUER]);
 
         decode::<Claims>(token, &self.decoding_key, &validation)
             .map(|data| data.claims)
@@ -130,6 +145,12 @@ impl JwtService {
                     }
                     jsonwebtoken::errors::ErrorKind::InvalidSignature => {
                         ApiError::unauthorized("Invalid token signature")
+                    }
+                    jsonwebtoken::errors::ErrorKind::InvalidAudience => {
+                        ApiError::unauthorized("Invalid token audience")
+                    }
+                    jsonwebtoken::errors::ErrorKind::InvalidIssuer => {
+                        ApiError::unauthorized("Invalid token issuer")
                     }
                     _ => ApiError::unauthorized("Invalid token")
                 }

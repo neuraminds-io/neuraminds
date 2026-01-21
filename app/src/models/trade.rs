@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use super::{Outcome, OrderSide};
+use super::Outcome;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Trade {

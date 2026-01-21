@@ -2,13 +2,13 @@
 
 use actix_web::{web, HttpRequest, HttpResponse, Error};
 use actix_web_actors::ws;
-use actix::{Actor, StreamHandler, Handler, Message, AsyncContext, ActorContext};
+use actix::{Actor, StreamHandler, AsyncContext, ActorContext};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use log::{info, warn, error};
 
 use crate::AppState;
-use crate::services::websocket::{WsMessage, SubscribeRequest};
+use crate::services::websocket::SubscribeRequest;
 use super::jwt::UserRole;
 
 /// WebSocket connection timeout

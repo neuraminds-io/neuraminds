@@ -116,4 +116,7 @@ pub enum MultisigError {
 
     #[msg("Duplicate signer")]
     DuplicateSigner,
+
+    #[msg("Nonce overflow")]
+    NonceOverflow,
 }

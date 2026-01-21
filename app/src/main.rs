@@ -12,7 +12,7 @@ mod services;
 
 use api::JwtService;
 use config::AppConfig;
-use services::{DatabaseService, SolanaService, OrderBookService, RedisService, MetricsService, WebSocketHub};
+use services::{DatabaseService, SolanaService, OrderBookService, RedisService, MetricsService, WebSocketHub, ReconciliationService, ReconciliationConfig};
 
 pub struct AppState {
     pub config: AppConfig,
@@ -23,6 +23,7 @@ pub struct AppState {
     pub jwt: JwtService,
     pub metrics: MetricsService,
     pub ws_hub: WebSocketHub,
+    pub reconciliation: Arc<ReconciliationService>,
 }
 
 #[actix_web::main]
@@ -71,6 +72,24 @@ async fn main() -> std::io::Result<()> {
 
     let ws_hub = WebSocketHub::new();
 
+    // Initialize reconciliation service for DB-blockchain consistency
+    let reconciliation_config = ReconciliationConfig::default();
+    let reconciliation = Arc::new(ReconciliationService::new(
+        &config.solana_rpc_url,
+        db.pool().clone(),
+        solana.market_program_id(),
+        solana.orderbook_program_id(),
+        reconciliation_config,
+    ));
+
+    // Start background reconciliation
+    if !config.is_development {
+        info!("Starting background reconciliation service");
+        reconciliation.clone().start_background_reconciliation();
+    } else {
+        info!("Skipping reconciliation in development mode");
+    }
+
     let app_state = Arc::new(AppState {
         config: config.clone(),
         db,
@@ -80,6 +99,7 @@ async fn main() -> std::io::Result<()> {
         jwt,
         metrics,
         ws_hub,
+        reconciliation,
     });
 
     info!("Starting HTTP server on {}", bind_addr);

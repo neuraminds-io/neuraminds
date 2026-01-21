@@ -93,7 +93,9 @@ pub fn propose_transaction_handler(
     transaction.bump = ctx.bumps.transaction;
 
     // Increment nonce for next transaction
-    multisig.nonce = multisig.nonce.checked_add(1).unwrap();
+    multisig.nonce = multisig.nonce
+        .checked_add(1)
+        .ok_or(MultisigError::NonceOverflow)?;
 
     emit!(TransactionProposed {
         multisig: multisig.key(),

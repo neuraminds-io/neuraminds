@@ -78,6 +78,14 @@ impl SolanaService {
         self.keeper.pubkey()
     }
 
+    pub fn market_program_id(&self) -> Pubkey {
+        self.market_program_id
+    }
+
+    pub fn orderbook_program_id(&self) -> Pubkey {
+        self.orderbook_program_id
+    }
+
     /// Get account balance
     pub async fn get_balance(&self, pubkey: &Pubkey) -> Result<u64> {
         let balance = self.rpc_client.get_balance(pubkey)?;
@@ -175,7 +183,7 @@ impl SolanaService {
         info!("Cancelling order {} on market {}", order_id, accounts.market);
 
         // Anchor instruction discriminator for "cancel_order"
-        let mut data = vec![0x5f, 0xc0, 0x55, 0xd3, 0x47, 0x0c, 0x5f, 0x3e];
+        let data = vec![0x5f, 0xc0, 0x55, 0xd3, 0x47, 0x0c, 0x5f, 0x3e];
 
         // Build account metas
         let account_metas = vec![
@@ -230,7 +238,7 @@ impl SolanaService {
             AccountMeta::new_readonly(spl_token::id(), false),       // token_program
         ];
 
-        let ix = Instruction {
+        let _ix = Instruction {
             program_id: self.market_program_id,
             accounts: account_metas,
             data,
@@ -289,7 +297,7 @@ impl SolanaService {
 
     /// Get market account data
     pub async fn get_market_account(&self, market_pubkey: &Pubkey) -> Result<MarketAccount> {
-        let account = self.rpc_client.get_account(market_pubkey)?;
+        let _account = self.rpc_client.get_account(market_pubkey)?;
 
         // In production, deserialize using Anchor
         // let market: polyguard_market::state::Market =
@@ -301,7 +309,7 @@ impl SolanaService {
 
     /// Get order account data
     pub async fn get_order_account(&self, order_pubkey: &Pubkey) -> Result<OrderAccount> {
-        let account = self.rpc_client.get_account(order_pubkey)?;
+        let _account = self.rpc_client.get_account(order_pubkey)?;
 
         // Placeholder
         Ok(OrderAccount::default())

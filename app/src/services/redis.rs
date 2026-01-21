@@ -242,4 +242,33 @@ impl RedisService {
         let count: Option<i64> = conn.get(&rate_key).await?;
         Ok(count.unwrap_or(0))
     }
+
+    // =========================================================================
+    // Nonce Storage for Replay Protection
+    // =========================================================================
+
+    /// Check if a nonce has been used and record it
+    /// Returns Ok(false) if nonce was already used, Ok(true) if newly recorded
+    pub async fn check_and_record_nonce(&self, nonce: &str, ttl_secs: u64) -> Result<bool> {
+        let key = format!("auth_nonce:{}", nonce);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+
+        // Use SETNX (SET if Not eXists) for atomic check-and-set
+        let was_set: bool = conn.set_nx(&key, "1").await?;
+
+        if was_set {
+            // Set expiration for automatic cleanup
+            let _: () = conn.expire(&key, ttl_secs as i64).await?;
+        }
+
+        Ok(was_set)
+    }
+
+    /// Check if a nonce has been used without recording
+    pub async fn is_nonce_used(&self, nonce: &str) -> Result<bool> {
+        let key = format!("auth_nonce:{}", nonce);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let exists: bool = conn.exists(&key).await?;
+        Ok(exists)
+    }
 }

@@ -4,6 +4,7 @@ pub mod orderbook;
 pub mod redis;
 pub mod metrics;
 pub mod websocket;
+pub mod reconciliation;
 
 pub use database::DatabaseService;
 pub use solana::SolanaService;
@@ -17,3 +18,4 @@ pub use metrics::{
     HealthChecks,
 };
 pub use websocket::WebSocketHub;
+pub use reconciliation::{ReconciliationService, ReconciliationConfig};

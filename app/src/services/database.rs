@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use sqlx::{postgres::PgPoolOptions, PgPool, Row, Postgres};
 use log::info;
 use std::time::Duration;
