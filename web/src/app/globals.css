@@ -1,0 +1,401 @@
+@import '../styles/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply text-text-primary;
+    background-color: color-mix(in srgb, var(--color-bg-base) 95%, transparent);
+    min-height: 100vh;
+    font-feature-settings: 'cv09', 'cv01', 'cv08', 'case';
+    position: relative;
+    isolation: isolate;
+  }
+
+  /* Scrollbar styling for dark/light modes */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-bg-secondary);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: var(--radius-full);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+  }
+
+  /* Selection colors */
+  ::selection {
+    background: var(--color-accent-muted);
+    color: var(--color-text-primary);
+  }
+}
+
+@layer components {
+  /* Container */
+  .container-app {
+    @apply px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto;
+  }
+
+  /* Card base */
+  .card {
+    background-color: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+  }
+
+  @screen sm {
+    .card {
+      padding: var(--space-6);
+    }
+  }
+
+  /* Glass effect */
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: var(--backdrop-blur);
+    -webkit-backdrop-filter: var(--backdrop-blur);
+    border: 1px solid var(--glass-border);
+  }
+
+  /* Focus ring */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base;
+  }
+
+  /* Price display */
+  .price {
+    @apply font-mono tabular-nums;
+  }
+
+  .price-up {
+    @apply text-bid;
+  }
+
+  .price-down {
+    @apply text-ask;
+  }
+
+  /* Trading button base */
+  .btn-trade {
+    @apply font-semibold py-3 px-6 rounded-lg transition-all duration-fast;
+    @apply active:scale-[0.98];
+  }
+
+  .btn-trade-bid {
+    @apply btn-trade bg-bid text-white hover:bg-bid-hover;
+    @apply hover:shadow-glow-success;
+  }
+
+  .btn-trade-ask {
+    @apply btn-trade bg-ask text-white hover:bg-ask-hover;
+    @apply hover:shadow-glow-danger;
+  }
+}
+
+@layer utilities {
+  /* Animated gradient background */
+  .animated-gradient-bg {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    overflow: hidden;
+  }
+
+  .animated-gradient-bg::before,
+  .animated-gradient-bg::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(150px);
+    opacity: 0.12;
+  }
+
+  .animated-gradient-bg::before {
+    width: 700px;
+    height: 700px;
+    background: var(--color-accent);
+    top: -250px;
+    right: -150px;
+    animation: float-slow 25s ease-in-out infinite;
+  }
+
+  .animated-gradient-bg::after {
+    width: 600px;
+    height: 600px;
+    background: #a855f7;
+    bottom: -200px;
+    left: -150px;
+    animation: float-slow 30s ease-in-out infinite reverse;
+  }
+
+  .animated-gradient-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.08;
+  }
+
+  .animated-gradient-orb-1 {
+    width: 500px;
+    height: 500px;
+    background: linear-gradient(135deg, var(--color-accent), #6366f1);
+    top: 25%;
+    left: 15%;
+    animation: float-medium 22s ease-in-out infinite;
+  }
+
+  .animated-gradient-orb-2 {
+    width: 450px;
+    height: 450px;
+    background: linear-gradient(135deg, #a855f7, var(--color-accent));
+    top: 55%;
+    right: 10%;
+    animation: float-medium 28s ease-in-out infinite reverse;
+  }
+
+  /* Hide scrollbar but allow scrolling */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Line clamp */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, var(--kraken-royal), var(--kraken-lilac));
+  }
+
+  /* Glow on hover */
+  .hover-glow:hover {
+    box-shadow: var(--shadow-glow);
+  }
+
+  /* Tabular nums for prices */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Touch-friendly tap targets */
+@media (pointer: coarse) {
+  .btn,
+  button,
+  a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: max(0px)) {
+  .safe-area-inset {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Animated gradient keyframes */
+@keyframes float-slow {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(50px, 30px) scale(1.05);
+  }
+  50% {
+    transform: translate(20px, -40px) scale(0.95);
+  }
+  75% {
+    transform: translate(-30px, 20px) scale(1.02);
+  }
+}
+
+@keyframes float-medium {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  33% {
+    transform: translate(40px, -30px) rotate(5deg);
+  }
+  66% {
+    transform: translate(-20px, 40px) rotate(-5deg);
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus visible only for keyboard users */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Solana Wallet Adapter Modal Overrides */
+.wallet-adapter-modal-wrapper {
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(4px);
+}
+
+.wallet-adapter-modal-container {
+  background: var(--color-bg-primary) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+  max-width: 400px !important;
+  padding: 24px !important;
+}
+
+.wallet-adapter-modal-title {
+  color: var(--color-text-primary) !important;
+  font-size: 20px !important;
+  font-weight: 600 !important;
+  margin-bottom: 20px !important;
+  text-align: center !important;
+}
+
+.wallet-adapter-modal-list {
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wallet-adapter-modal-list li {
+  background: var(--color-bg-secondary) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 12px !important;
+  margin: 0 !important;
+  transition: all 150ms ease !important;
+}
+
+.wallet-adapter-modal-list li:hover {
+  background: var(--color-bg-hover) !important;
+  border-color: var(--color-border-hover) !important;
+  transform: translateY(-1px);
+}
+
+.wallet-adapter-modal-list .wallet-adapter-button {
+  color: var(--color-text-primary) !important;
+  font-weight: 500 !important;
+  padding: 14px 16px !important;
+  width: 100% !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+}
+
+.wallet-adapter-modal-list .wallet-adapter-button img,
+.wallet-adapter-modal-list .wallet-adapter-button svg {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 8px !important;
+}
+
+.wallet-adapter-modal-button-close {
+  background: var(--color-bg-secondary) !important;
+  border: 1px solid var(--color-border) !important;
+  color: var(--color-text-secondary) !important;
+  border-radius: 10px !important;
+  width: 32px !important;
+  height: 32px !important;
+  transition: all 150ms ease !important;
+}
+
+.wallet-adapter-modal-button-close:hover {
+  background: var(--color-bg-hover) !important;
+  border-color: var(--color-border-hover) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.wallet-adapter-modal-button-close svg {
+  fill: currentColor !important;
+}
+
+.wallet-adapter-collapse {
+  background: var(--color-bg-primary) !important;
+}
+
+.wallet-adapter-modal-list-more {
+  color: var(--color-accent) !important;
+  font-weight: 500 !important;
+  padding: 12px !important;
+  border-radius: 10px !important;
+  transition: all 150ms ease !important;
+}
+
+.wallet-adapter-modal-list-more:hover {
+  background: var(--color-bg-secondary) !important;
+}
+
+.wallet-adapter-modal-middle {
+  padding: 0 !important;
+}
+
+.wallet-adapter-modal-middle-button {
+  background: linear-gradient(135deg, var(--color-accent), #a855f7) !important;
+  border: none !important;
+  border-radius: 12px !important;
+  color: white !important;
+  font-weight: 600 !important;
+  padding: 14px 24px !important;
+  transition: all 150ms ease !important;
+}
+
+.wallet-adapter-modal-middle-button:hover {
+  opacity: 0.9 !important;
+  transform: translateY(-1px);
+}
