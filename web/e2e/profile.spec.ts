@@ -12,7 +12,7 @@ test.describe('Profile Page', () => {
   });
 
   test('has correct page title with truncated address', async ({ page }) => {
-    await expect(page).toHaveTitle(/7xKXtg.*AsU.*polyguard/i);
+    await expect(page).toHaveTitle(/7xKXtg.*AsU.*polybit/i);
   });
 
   test('displays container with proper layout', async ({ page }) => {

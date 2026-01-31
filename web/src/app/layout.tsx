@@ -20,13 +20,13 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Polyguard - Privacy-First Prediction Markets',
+  title: 'PolyBit - Privacy-First Prediction Markets',
   description: 'Trade on outcomes with privacy-preserving technology on Solana',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Polyguard',
+    title: 'PolyBit',
   },
 };
 

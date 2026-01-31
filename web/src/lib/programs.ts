@@ -18,6 +18,6 @@ export const NETWORK = 'devnet' as const;
 export const RPC_ENDPOINT = RPC_ENDPOINTS[NETWORK];
 
 // IDL imports
-export { default as MarketIDL } from './idl/polyguard_market.json';
-export { default as OrderbookIDL } from './idl/polyguard_orderbook.json';
-export { default as PrivacyIDL } from './idl/polyguard_privacy.json';
+export { default as MarketIDL } from './idl/polybit_market.json';
+export { default as OrderbookIDL } from './idl/polybit_orderbook.json';
+export { default as PrivacyIDL } from './idl/polybit_privacy.json';

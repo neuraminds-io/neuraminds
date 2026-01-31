@@ -1,10 +1,10 @@
 {
   "address": "59LqZtVU2YBrhv8B2E1iASJMzcyBHWhY2JuaJsCXkAS8",
   "metadata": {
-    "name": "polyguard_orderbook",
+    "name": "polybit_orderbook",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "Polyguard OrderBook - Order placement, matching, and settlement"
+    "description": "PolyBit OrderBook - Order placement, matching, and settlement"
   },
   "instructions": [
     {

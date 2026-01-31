@@ -8,7 +8,7 @@ test.describe('Mobile Responsive', () => {
 
   test('homepage renders correctly on mobile', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('link', { name: /polyguard/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /polybit/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /connect wallet/i })).toBeVisible();
   });
 
@@ -37,7 +37,7 @@ test.describe('Tablet Responsive', () => {
 
   test('homepage renders correctly on tablet', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('link', { name: /polyguard/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /polybit/i })).toBeVisible();
   });
 
   test('navigation is visible on tablet', async ({ page }) => {
@@ -54,7 +54,7 @@ test.describe('Desktop Responsive', () => {
 
   test('homepage renders correctly on desktop', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('link', { name: /polyguard/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /polybit/i })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Markets' })).toBeVisible();
   });
 
@@ -77,7 +77,7 @@ test.describe('Viewport Breakpoints', () => {
     test(`homepage loads at ${vp.name} (${vp.width}x${vp.height})`, async ({ page }) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await page.goto('/');
-      await expect(page.getByRole('link', { name: /polyguard/i })).toBeVisible();
+      await expect(page.getByRole('link', { name: /polybit/i })).toBeVisible();
     });
   }
 });

@@ -15,8 +15,8 @@ export async function generateMetadata({ params }: ProfilePageProps): Promise<Me
   const truncated = `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
 
   return {
-    title: `${truncated} | Polyguard`,
-    description: `View trading profile for ${truncated} on Polyguard`,
+    title: `${truncated} | PolyBit`,
+    description: `View trading profile for ${truncated} on PolyBit`,
   };
 }
 

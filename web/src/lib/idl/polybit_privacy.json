@@ -1,10 +1,10 @@
 {
   "address": "9QGtHZJvmjMKTME1s3mVfNXtGpEdXDQZJTxsxqve9GsL",
   "metadata": {
-    "name": "polyguard_privacy",
+    "name": "polybit_privacy",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "Polyguard Privacy Layer - Confidential trading with Arcium MPC"
+    "description": "PolyBit Privacy Layer - Confidential trading with Arcium MPC"
   },
   "docs": [
     "Privacy Layer",

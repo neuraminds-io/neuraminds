@@ -41,7 +41,7 @@ export function useAuth() {
       const nonce = await api.getNonce();
       const timestamp = Math.floor(Date.now() / 1000);
       const wallet = publicKey.toBase58();
-      const message = `polyguard:${wallet}:${timestamp}:${nonce}`;
+      const message = `polybit:${wallet}:${timestamp}:${nonce}`;
 
       const encoded = new TextEncoder().encode(message);
       const signature = await signMessage(encoded);

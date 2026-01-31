@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils';
 
-const API_BASE = 'https://api.polyguard.cc/v1';
+const API_BASE = 'https://api.polybit.cc/v1';
 
 interface Endpoint {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -42,7 +42,7 @@ const API_DOCS: EndpointGroup[] = [
         ],
         response: {
           example: `{
-  "nonce": "Sign this message to authenticate with Polyguard: abc123...",
+  "nonce": "Sign this message to authenticate with PolyBit: abc123...",
   "expiresAt": 1704067200
 }`,
         },
@@ -377,7 +377,7 @@ export function ApiDocumentation() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-text-primary mb-2">API Documentation</h1>
         <p className="text-text-secondary">
-          REST API for the Polyguard prediction market platform
+          REST API for the PolyBit prediction market platform
         </p>
       </div>
 

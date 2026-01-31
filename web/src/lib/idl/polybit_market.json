@@ -1,10 +1,10 @@
 {
   "address": "98jqxMe88XGjXzCY3bwV1Kuqzj32fcwdhPZa193RUffQ",
   "metadata": {
-    "name": "polyguard_market",
+    "name": "polybit_market",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "Polyguard Market Factory - Prediction market creation and resolution"
+    "description": "PolyBit Market Factory - Prediction market creation and resolution"
   },
   "instructions": [
     {

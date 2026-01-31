@@ -16,7 +16,7 @@ test.describe('Navigation', () => {
 
   test('navigates home via logo click', async ({ page }) => {
     await page.goto('/markets');
-    await page.getByRole('link', { name: /polyguard/i }).click();
+    await page.getByRole('link', { name: /polybit/i }).click();
     await expect(page).toHaveURL('/');
   });
 

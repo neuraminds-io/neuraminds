@@ -53,12 +53,12 @@ const nextConfig = {
       // Polyguard CDN (if used)
       {
         protocol: 'https',
-        hostname: 'cdn.polyguard.cc',
+        hostname: 'cdn.polybit.cc',
         pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: 'assets.polyguard.cc',
+        hostname: 'assets.polybit.cc',
         pathname: '/**',
       },
     ],

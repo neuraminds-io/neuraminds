@@ -22,7 +22,7 @@ const defaultContext: ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue>(defaultContext);
 
-const STORAGE_KEY = 'polyguard-theme';
+const STORAGE_KEY = 'polybit-theme';
 
 function getSystemTheme(): 'dark' | 'light' {
   if (typeof window === 'undefined') return 'light';

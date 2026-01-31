@@ -1,8 +1,8 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service | Polyguard',
-  description: 'Terms of Service for Polyguard prediction markets platform',
+  title: 'Terms of Service | PolyBit',
+  description: 'Terms of Service for PolyBit prediction markets platform',
 };
 
 export default function TermsOfServicePage() {
@@ -18,7 +18,7 @@ export default function TermsOfServicePage() {
             1. Acceptance of Terms
           </h2>
           <p>
-            By accessing or using Polyguard (&quot;the Platform&quot;), you agree to be bound by
+            By accessing or using PolyBit (&quot;the Platform&quot;), you agree to be bound by
             these Terms of Service. If you do not agree to these terms, do not use the
             Platform.
           </p>
@@ -54,7 +54,7 @@ export default function TermsOfServicePage() {
             4. Platform Services
           </h2>
           <p>
-            Polyguard provides a decentralized prediction market platform built on the
+            PolyBit provides a decentralized prediction market platform built on the
             Solana blockchain. Users can:
           </p>
           <ul className="list-disc pl-6 space-y-2 mt-2">
@@ -165,8 +165,8 @@ export default function TermsOfServicePage() {
           </h2>
           <p>
             For questions about these terms, contact us at{' '}
-            <a href="mailto:legal@polyguard.cc" className="text-accent hover:underline">
-              legal@polyguard.cc
+            <a href="mailto:legal@polybit.cc" className="text-accent hover:underline">
+              legal@polybit.cc
             </a>
           </p>
         </section>

@@ -3,14 +3,14 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 
 export const metadata: Metadata = {
-  title: 'Legal | Polyguard',
-  description: 'Legal information for Polyguard prediction markets platform',
+  title: 'Legal | PolyBit',
+  description: 'Legal information for PolyBit prediction markets platform',
 };
 
 const legalPages = [
   {
     title: 'Terms of Service',
-    description: 'Rules and conditions for using the Polyguard platform',
+    description: 'Rules and conditions for using the PolyBit platform',
     href: '/legal/terms',
   },
   {

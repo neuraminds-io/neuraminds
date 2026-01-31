@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { NotificationSettings } from '@/components/notifications';
 
 export const metadata: Metadata = {
-  title: 'Notification Settings | Polyguard',
+  title: 'Notification Settings | PolyBit',
   description: 'Manage your notification preferences',
 };
 

@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/v1';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-const REFRESH_TOKEN_COOKIE = 'polyguard_refresh';
+const REFRESH_TOKEN_COOKIE = 'polybit_refresh';
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7 days
 
 // POST /api/auth - Login and set refresh token cookie

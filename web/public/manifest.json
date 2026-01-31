@@ -1,6 +1,6 @@
 {
-  "name": "Polyguard",
-  "short_name": "Polyguard",
+  "name": "PolyBit",
+  "short_name": "PolyBit",
   "description": "Privacy-first prediction markets on Solana",
   "start_url": "/",
   "display": "standalone",

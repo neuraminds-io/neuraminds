@@ -1,8 +1,8 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy | Polyguard',
-  description: 'Privacy Policy for Polyguard prediction markets platform',
+  title: 'Privacy Policy | PolyBit',
+  description: 'Privacy Policy for PolyBit prediction markets platform',
 };
 
 export default function PrivacyPolicyPage() {
@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
             1. Introduction
           </h2>
           <p>
-            Polyguard (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) respects your privacy and is committed to
+            PolyBit (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) respects your privacy and is committed to
             protecting your personal data. This privacy policy explains how we collect,
             use, and share information about you when you use our platform.
           </p>
@@ -163,8 +163,8 @@ export default function PrivacyPolicyPage() {
           </h2>
           <p>
             For privacy-related inquiries, contact us at{' '}
-            <a href="mailto:privacy@polyguard.cc" className="text-accent hover:underline">
-              privacy@polyguard.cc
+            <a href="mailto:privacy@polybit.cc" className="text-accent hover:underline">
+              privacy@polybit.cc
             </a>
           </p>
         </section>

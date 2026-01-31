@@ -6,7 +6,7 @@ test.describe('Homepage', () => {
   });
 
   test('displays header with logo and navigation', async ({ page }) => {
-    await expect(page.getByRole('link', { name: /polyguard/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /polybit/i })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Markets' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Portfolio' })).toBeVisible();
   });
@@ -34,7 +34,7 @@ test.describe('Homepage', () => {
 
   test('page loads without errors', async ({ page }) => {
     // Page should load and have content
-    await expect(page).toHaveTitle(/polyguard/i);
+    await expect(page).toHaveTitle(/polybit/i);
   });
 
   test('theme toggle is visible', async ({ page }) => {

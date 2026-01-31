@@ -60,14 +60,14 @@ export function Header() {
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2 group">
               <Image
-                src="/polyguard-logo.svg"
-                alt="Polyguard"
+                src="/polybit-logo.svg"
+                alt="PolyBit"
                 width={28}
                 height={28}
                 className="w-7 h-7"
               />
               <span className="font-semibold text-lg text-text-primary">
-                Polyguard
+                PolyBit
               </span>
             </Link>
 

@@ -2,8 +2,8 @@ import { Metadata } from 'next';
 import { LeaderboardTable } from '@/components/leaderboard';
 
 export const metadata: Metadata = {
-  title: 'Leaderboard | Polyguard',
-  description: 'Top traders on the Polyguard prediction market',
+  title: 'Leaderboard | PolyBit',
+  description: 'Top traders on the PolyBit prediction market',
 };
 
 export default function LeaderboardPage() {
