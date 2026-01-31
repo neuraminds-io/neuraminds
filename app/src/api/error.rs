@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_all_status_codes_unique() {
-        let errors = vec![
+        let errors = [
             ApiError::bad_request("", ""),
             ApiError::unauthorized(""),
             ApiError::forbidden(""),
@@ -219,6 +219,6 @@ mod tests {
             ApiError::conflict("", ""),
         ];
         let statuses: Vec<u16> = errors.iter().map(|e| e.status).collect();
-        assert_eq!(statuses, vec![400, 401, 403, 404, 500, 429, 409]);
+        assert_eq!(statuses, [400, 401, 403, 404, 500, 429, 409]);
     }
 }

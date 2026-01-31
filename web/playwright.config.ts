@@ -42,9 +42,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- -p 3001',
+    command: 'npm run start -- -p 3001',
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
+    stdout: 'ignore',
+    stderr: 'pipe',
   },
 });
