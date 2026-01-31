@@ -1,205 +1,154 @@
 # Devnet Battle Test Plan
 
-Public stress testing on Solana devnet before mainnet launch.
+Internal stress testing on Solana devnet before mainnet launch.
 
 ## Overview
 
-- **Duration:** 2-4 weeks
+- **Duration:** 1 week
 - **Network:** Solana Devnet
-- **Goal:** Find bugs through real usage, build confidence without paid audit
+- **Testers:** Us only
+- **Goal:** Find bugs through automated + manual testing
 
-## Phase 1: Deployment (Day 1-2)
+## Phase 1: Deploy (Day 1)
 
-### Smart Contracts
 ```bash
-# Deploy to devnet
+# Deploy contracts to devnet
 anchor build
 anchor deploy --provider.cluster devnet
 
-# Verify program
-solana program show <PROGRAM_ID> --url devnet
-```
-
-### Backend API
-```bash
-# Deploy to staging with devnet RPC
+# Deploy backend to staging
 kubectl apply -k infra/k8s/staging/
-```
 
-### Frontend
-```bash
-# Deploy to Vercel preview or staging subdomain
+# Deploy frontend to staging
 vercel --env NEXT_PUBLIC_SOLANA_NETWORK=devnet
 ```
 
-## Phase 2: Internal Testing (Day 3-5)
+## Phase 2: Automated Testing (Day 1-3)
 
-### Functional Tests
-- [ ] Create market with various parameters
-- [ ] Place limit orders (buy/sell YES/NO)
-- [ ] Place market orders
-- [ ] Cancel orders
-- [ ] Match orders (self-trade with 2 wallets)
-- [ ] Resolve market (oracle and manual)
-- [ ] Redeem winnings
-- [ ] Check orderbook state consistency
+### Fuzz Campaign
+```bash
+# Run all 7 fuzz targets for 1 hour each
+./scripts/fuzz-campaign.sh --duration 3600
 
-### Edge Cases
-- [ ] Order at min/max price (0.01%, 99.99%)
-- [ ] Order at MAX_ORDER_QUANTITY
-- [ ] Rapid order placement (rate limit test)
-- [ ] Concurrent orders from multiple wallets
-- [ ] Market resolution at exact threshold
-- [ ] Partial fills
+# Or run overnight (8 hours per target)
+./scripts/fuzz-campaign.sh --duration 28800
+```
 
 ### Load Tests
 ```bash
-# Run k6 load tests against devnet
-k6 run tests/load/smoke.js --env API_URL=https://api-staging.polyguard.cc
-k6 run tests/load/stress.js --env API_URL=https://api-staging.polyguard.cc
+cd tests/load
+k6 run smoke.js
+k6 run load.js
+k6 run stress.js
 ```
 
-## Phase 3: Public Battle Test (Day 6-21)
-
-### Announcement
-Post on:
-- Twitter/X
-- Discord (Solana dev channels)
-- Telegram
-- Reddit r/solana
-
-### Incentives
-- Testnet leaderboard with prizes (real SOL for top traders)
-- Bug bounty for critical issues (0.5-5 SOL per bug)
-- NFT badges for early testers
-
-### Monitoring
-
-#### Metrics to Track
-- Total transactions
-- Unique wallets
-- Orders placed/matched/cancelled
-- Markets created
-- API error rates
-- WebSocket connection count
-- RPC error rates
-
-#### Alerts
-- Program error rate > 1%
-- API latency p99 > 2s
-- WebSocket disconnects > 10/min
-- Orderbook desync detected
-
-### Data Collection
+### E2E Tests
 ```bash
-# Export metrics daily
-curl https://api-staging.polyguard.cc/admin/metrics > metrics-$(date +%Y%m%d).json
-
-# Check program logs
-solana logs <PROGRAM_ID> --url devnet > program-logs-$(date +%Y%m%d).log
+cd web
+npm run test:e2e
 ```
 
-## Phase 4: Analysis (Day 22-28)
+## Phase 3: Manual Testing (Day 2-5)
 
-### Review Checklist
-- [ ] All bugs reported during battle test fixed
-- [ ] No critical issues found
-- [ ] Load test results acceptable
-- [ ] Fuzz campaign completed (10M+ iterations)
-- [ ] Manual code review of high-risk areas
+### Trading Flows
+- [ ] Create market with 24h expiry
+- [ ] Place YES limit order at 50%
+- [ ] Place NO limit order at 50%
+- [ ] Orders match, check fills
+- [ ] Cancel open order
+- [ ] Place market order
+- [ ] Check position updates
+- [ ] Resolve market via oracle
+- [ ] Redeem winning tokens
+- [ ] Check balance correct
 
-### High-Risk Areas for Manual Review
-1. Order matching logic (`instructions/place_order.rs`)
-2. Settlement calculations (`instructions/consume_events.rs`)
-3. Token minting/burning (`instructions/redeem.rs`)
-4. Oracle price handling (`state/oracle.rs`)
-5. Fee calculations
+### Edge Cases
+- [ ] Order at 0.01% price
+- [ ] Order at 99.99% price
+- [ ] Order at MAX_ORDER_QUANTITY (1B)
+- [ ] Rapid order spam (hit rate limits)
+- [ ] Order on resolved market (should fail)
+- [ ] Redeem on unresolved market (should fail)
+- [ ] Cancel already-filled order (should fail)
+- [ ] Double redeem (should fail)
 
-### Go/No-Go Criteria
-| Criteria | Threshold |
-|----------|-----------|
-| Critical bugs found | 0 |
-| High bugs unresolved | 0 |
-| Medium bugs unresolved | < 3 |
+### Multi-Wallet Tests
+- [ ] Wallet A buys YES, Wallet B buys NO
+- [ ] Orders match between wallets
+- [ ] Both wallets see correct positions
+- [ ] Market resolves, winner redeems
+- [ ] Loser balance unchanged
+
+### WebSocket Tests
+- [ ] Connect without auth (should timeout)
+- [ ] Connect with valid JWT
+- [ ] Subscribe to orderbook updates
+- [ ] Place order, verify update received
+- [ ] Disconnect/reconnect
+
+### API Tests
+- [ ] All endpoints return 200 with valid auth
+- [ ] All endpoints return 401 without auth
+- [ ] Rate limits trigger at thresholds
+- [ ] Invalid inputs return 400
+
+## Phase 4: Chaos Testing (Day 4-5)
+
+### Simulate Failures
+- [ ] Kill API pod, verify recovery
+- [ ] Restart database, verify reconnect
+- [ ] Flood with invalid requests
+- [ ] Send malformed WebSocket messages
+
+### Orderbook Stress
+```bash
+# Script to spam orders
+for i in {1..100}; do
+  curl -X POST $API/orders -d '{"side":"buy","price":50,"qty":10}'
+  curl -X POST $API/orders -d '{"side":"sell","price":50,"qty":10}'
+done
+```
+
+## Phase 5: Review (Day 6-7)
+
+### Checklist
+- [ ] All manual tests passed
+- [ ] Fuzz campaign: 0 crashes
+- [ ] Load tests: p99 < 500ms
+- [ ] E2E tests: 100% pass
+- [ ] No unhandled errors in logs
+- [ ] Orderbook state consistent
+
+### Go/No-Go
+| Criteria | Required |
+|----------|----------|
 | Fuzz crashes | 0 |
-| Load test pass rate | > 99% |
-| Community feedback | Positive |
+| Critical bugs | 0 |
+| High bugs | 0 |
+| E2E pass rate | 100% |
+| Manual tests | All pass |
 
-## Scripts
+## Quick Commands
 
-### Automated Battle Test Bot
-```typescript
-// scripts/battletest-bot.ts
-// Runs automated trading scenarios
-
-const scenarios = [
-  'randomOrders',      // Random limit orders
-  'arbitrage',         // Cross-market arb
-  'marketMaking',      // Bid/ask spread
-  'stressTest',        // Rapid fire orders
-  'edgeCases',         // Boundary conditions
-];
-
-// Run continuously during battle test
-for (const scenario of scenarios) {
-  await runScenario(scenario, { duration: '1h' });
-}
-```
-
-### Daily Report Generator
 ```bash
-#!/bin/bash
-# scripts/daily-report.sh
+# Check program logs
+solana logs <PROGRAM_ID> -u devnet
 
-echo "=== Polyguard Battle Test Daily Report ==="
-echo "Date: $(date)"
-echo ""
-echo "Transactions: $(curl -s $API_URL/stats | jq .totalTxs)"
-echo "Unique Wallets: $(curl -s $API_URL/stats | jq .uniqueWallets)"
-echo "Orders Placed: $(curl -s $API_URL/stats | jq .ordersPlaced)"
-echo "Bugs Reported: $(gh issue list --label bug --json number | jq length)"
+# Check API health
+curl https://api-staging.polyguard.cc/health
+
+# Run single fuzz target
+cd programs/polyguard-orderbook
+cargo +nightly fuzz run orderbook_operations -- -max_total_time=300
+
+# Get devnet SOL
+solana airdrop 2 -u devnet
 ```
 
-## Bug Bounty Program
+## After Battle Test
 
-### Scope
-- Smart contracts (polyguard-orderbook, polyguard-market)
-- Backend API
-- WebSocket server
-
-### Out of Scope
-- Frontend UI bugs (unless security-related)
-- Third-party dependencies
-- Devnet-specific issues
-
-### Rewards (in SOL)
-| Severity | Reward |
-|----------|--------|
-| Critical (funds at risk) | 5 SOL |
-| High (DoS, data leak) | 2 SOL |
-| Medium (logic errors) | 0.5 SOL |
-| Low (minor issues) | 0.1 SOL |
-
-### Submission
-Email: security@polyguard.cc
-Or: GitHub Security Advisory
-
-## Timeline
-
-```
-Week 1: Deploy + Internal Test
-Week 2: Public Battle Test (Phase 1)
-Week 3: Public Battle Test (Phase 2)
-Week 4: Analysis + Fixes + Final Fuzz
-Week 5: Mainnet Deploy (if all criteria met)
-```
-
-## Success Metrics
-
-After battle test, we should have:
-- 1000+ transactions processed
-- 100+ unique wallets tested
-- 50+ markets created
-- 0 critical bugs
-- 10M+ fuzz iterations with 0 crashes
-- Positive community feedback
+If all criteria met:
+1. Run final fuzz campaign (overnight)
+2. Deploy to mainnet
+3. Transfer upgrade authority to multisig
+4. Monitor first 24h closely
