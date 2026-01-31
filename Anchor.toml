@@ -13,12 +13,12 @@ polyguard_orderbook = "59LqZtVU2YBrhv8B2E1iASJMzcyBHWhY2JuaJsCXkAS8"
 [programs.devnet]
 polyguard_market = "98jqxMe88XGjXzCY3bwV1Kuqzj32fcwdhPZa193RUffQ"
 polyguard_orderbook = "59LqZtVU2YBrhv8B2E1iASJMzcyBHWhY2JuaJsCXkAS8"
-polyguard_privacy = "9QGtHZJvmjMKTME1s3mVfNXtGpEdXDQZJTxsxqve9GsL"
+polyguard_privacy = "GD6mf6Fg4MLEqn6pc5ZzKXWaPNumod5PF38qbus2EN3M"
 
 [programs.localnet]
 polyguard_market = "98jqxMe88XGjXzCY3bwV1Kuqzj32fcwdhPZa193RUffQ"
 polyguard_orderbook = "59LqZtVU2YBrhv8B2E1iASJMzcyBHWhY2JuaJsCXkAS8"
-polyguard_privacy = "9QGtHZJvmjMKTME1s3mVfNXtGpEdXDQZJTxsxqve9GsL"
+polyguard_privacy = "GD6mf6Fg4MLEqn6pc5ZzKXWaPNumod5PF38qbus2EN3M"
 
 [registry]
 url = "https://api.apr.dev"

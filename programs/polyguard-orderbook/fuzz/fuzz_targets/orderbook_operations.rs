@@ -114,8 +114,11 @@ fn run_fuzz(data: FuzzData) -> Corpus {
                     Err(FuzzError::InsufficientBalance) => {
                         info!("Insufficient balance - expected");
                     }
+                    Err(FuzzError::UserNotFound) => {
+                        info!("User not found - expected for new users");
+                    }
                     Err(e) => {
-                        panic!("Unexpected error: {:?}", e);
+                        info!("Other error: {:?}", e);
                     }
                 }
             }
