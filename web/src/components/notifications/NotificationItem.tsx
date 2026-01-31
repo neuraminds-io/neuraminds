@@ -109,7 +109,7 @@ export function NotificationItem({ notification, onClick }: NotificationItemProp
   const content = (
     <div
       className={cn(
-        'flex items-start gap-3 px-4 py-3 transition-colors cursor-pointer',
+        'flex items-start gap-3 px-4 py-3 transition-colors duration-fast cursor-pointer',
         'hover:bg-bg-tertiary',
         !notification.read && 'bg-accent/5'
       )}

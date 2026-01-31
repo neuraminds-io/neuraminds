@@ -8,6 +8,9 @@ pub enum OrderBookError {
     #[msg("Invalid quantity (must be > 0)")]
     InvalidQuantity,
 
+    #[msg("Quantity exceeds maximum allowed")]
+    QuantityTooLarge,
+
     #[msg("Invalid expiration time")]
     InvalidExpiration,
 
@@ -70,4 +73,40 @@ pub enum OrderBookError {
 
     #[msg("Order has expired and cannot be settled")]
     OrderExpiredCannotSettle,
+
+    #[msg("Orderbook is full")]
+    OrderbookFull,
+
+    #[msg("No free order slots available")]
+    NoFreeSlots,
+
+    #[msg("Fill or kill order could not be completely filled")]
+    FillOrKillNotSatisfied,
+
+    #[msg("Oracle feed is stale")]
+    OracleFeedStale,
+
+    #[msg("Oracle feed data invalid")]
+    OracleFeedInvalid,
+
+    #[msg("Oracle price out of expected range")]
+    OraclePriceOutOfRange,
+
+    #[msg("Market already resolved")]
+    MarketAlreadyResolved,
+
+    #[msg("Market not ready for resolution")]
+    MarketNotReadyForResolution,
+
+    #[msg("Resolution threshold not met")]
+    ResolutionThresholdNotMet,
+
+    #[msg("Invalid resolution outcome")]
+    InvalidResolutionOutcome,
+
+    #[msg("Invalid input parameter")]
+    InvalidInput,
+
+    #[msg("Arithmetic overflow")]
+    Overflow,
 }

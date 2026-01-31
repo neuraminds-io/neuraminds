@@ -156,9 +156,10 @@ export function LeaderboardTable({
                 {PERIODS.map((p) => (
                   <button
                     key={p.id}
+                    type="button"
                     onClick={() => setPeriod(p.id)}
                     className={cn(
-                      'px-3 py-1 text-sm rounded-md transition-colors cursor-pointer',
+                      'px-3 py-1 text-sm rounded-md transition-colors duration-fast cursor-pointer',
                       period === p.id
                         ? 'bg-accent text-white'
                         : 'text-text-secondary hover:text-text-primary'
@@ -174,9 +175,10 @@ export function LeaderboardTable({
                 {METRICS.map((m) => (
                   <button
                     key={m.id}
+                    type="button"
                     onClick={() => setMetric(m.id)}
                     className={cn(
-                      'px-3 py-1 text-sm rounded-md transition-colors cursor-pointer',
+                      'px-3 py-1 text-sm rounded-md transition-colors duration-fast cursor-pointer',
                       metric === m.id
                         ? 'bg-accent text-white'
                         : 'text-text-secondary hover:text-text-primary'
@@ -249,7 +251,7 @@ function LeaderboardRow({ entry, formatValue, metric, compact }: LeaderboardRowP
     <Link
       href={`/profile/${entry.wallet}`}
       className={cn(
-        'grid items-center py-2 hover:bg-bg-secondary rounded-lg transition-colors cursor-pointer',
+        'grid items-center py-2 hover:bg-bg-secondary rounded-lg transition-colors duration-fast cursor-pointer',
         compact ? 'grid-cols-3' : 'grid-cols-4'
       )}
     >

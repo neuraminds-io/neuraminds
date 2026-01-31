@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Market } from '@/types';
@@ -170,8 +171,26 @@ function BannerCard({ market }: { market: Market }) {
         <div className="lg:w-[420px] flex flex-col">
           {/* Image + Title */}
           <div className="flex gap-4 mb-8">
-            <div className="w-[72px] h-[72px] rounded-lg bg-gradient-to-br from-sky-400 to-emerald-400 flex-shrink-0 overflow-hidden">
-              <div className="w-full h-full bg-[url('https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=150&h=150&fit=crop')] bg-cover bg-center" />
+            <div className="w-[72px] h-[72px] rounded-lg bg-gradient-to-br from-sky-400 to-emerald-400 flex-shrink-0 overflow-hidden relative">
+              {market.imageUrl ? (
+                <Image
+                  src={market.imageUrl}
+                  alt=""
+                  fill
+                  sizes="72px"
+                  className="object-cover"
+                  priority
+                />
+              ) : (
+                <Image
+                  src="https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=150&h=150&fit=crop"
+                  alt=""
+                  fill
+                  sizes="72px"
+                  className="object-cover"
+                  priority
+                />
+              )}
             </div>
             <h2 className="text-xl lg:text-2xl font-semibold text-text-primary leading-snug">
               {market.question}

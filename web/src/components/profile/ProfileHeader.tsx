@@ -109,7 +109,8 @@ export function ProfileHeader({ wallet }: ProfileHeaderProps) {
                   width={80}
                   height={80}
                   className="w-full h-full rounded-full object-cover"
-                  unoptimized
+                  loading="eager"
+                  priority={false}
                 />
               ) : (
                 <span className="text-2xl font-bold text-white">
@@ -127,8 +128,9 @@ export function ProfileHeader({ wallet }: ProfileHeaderProps) {
               </h1>
               {profile.username && (
                 <button
+                  type="button"
                   onClick={handleCopyAddress}
-                  className="text-sm text-text-secondary hover:text-text-primary transition-colors cursor-pointer flex items-center gap-1"
+                  className="text-sm text-text-secondary hover:text-text-primary transition-colors duration-fast cursor-pointer flex items-center gap-1"
                 >
                   {truncateAddress(wallet)}
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

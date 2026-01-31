@@ -215,6 +215,22 @@ impl RedisService {
     // Rate Limiting Support
     // =========================================================================
 
+    /// Increment a counter with TTL, returns new count
+    /// Used for simple rate limiting (e.g., WebSocket connections by IP)
+    pub async fn increment_with_ttl(&self, key: &str, ttl_secs: u64) -> Result<i64> {
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+
+        // Increment counter
+        let count: i64 = conn.incr(key, 1i64).await?;
+
+        // Set expiry if this is the first request in the window
+        if count == 1 {
+            let _: () = conn.expire(key, ttl_secs as i64).await?;
+        }
+
+        Ok(count)
+    }
+
     /// Increment rate limit counter for an IP/user
     /// Returns the current count and remaining TTL
     pub async fn increment_rate_limit(&self, key: &str, window_secs: u64) -> Result<(i64, i64)> {
@@ -270,5 +286,48 @@ impl RedisService {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
         let exists: bool = conn.exists(&key).await?;
         Ok(exists)
+    }
+
+    // =========================================================================
+    // Idempotency Keys
+    // =========================================================================
+
+    /// Check idempotency key and return cached response if exists.
+    /// Returns None if key is new, Some(response) if duplicate request.
+    pub async fn check_idempotency_key(&self, key: &str) -> Result<Option<String>> {
+        let idem_key = format!("idempotency:{}", key);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let value: Option<String> = conn.get(&idem_key).await?;
+        Ok(value)
+    }
+
+    /// Store idempotency key with response. TTL: 24 hours.
+    pub async fn store_idempotency_key(&self, key: &str, response: &str) -> Result<()> {
+        let idem_key = format!("idempotency:{}", key);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        // 24 hour TTL
+        let _: () = conn.set_ex(&idem_key, response, 86400).await?;
+        Ok(())
+    }
+
+    /// Acquire lock for idempotency key (to handle concurrent requests).
+    /// Returns true if lock acquired, false if already processing.
+    pub async fn acquire_idempotency_lock(&self, key: &str) -> Result<bool> {
+        let lock_key = format!("idempotency_lock:{}", key);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        // Lock with 30 second TTL to handle crashes
+        let acquired: bool = conn.set_nx(&lock_key, "1").await?;
+        if acquired {
+            let _: () = conn.expire(&lock_key, 30).await?;
+        }
+        Ok(acquired)
+    }
+
+    /// Release idempotency lock
+    pub async fn release_idempotency_lock(&self, key: &str) -> Result<()> {
+        let lock_key = format!("idempotency_lock:{}", key);
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let _: () = conn.del(&lock_key).await?;
+        Ok(())
     }
 }

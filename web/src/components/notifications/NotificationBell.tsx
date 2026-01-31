@@ -53,7 +53,7 @@ export function NotificationBell() {
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'relative p-2 rounded-lg transition-colors duration-150 cursor-pointer',
+          'relative p-2 rounded-lg transition-colors duration-fast cursor-pointer',
           'text-text-secondary hover:text-text-primary hover:bg-bg-secondary',
           'focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-bg-primary',
           isOpen && 'bg-bg-secondary text-text-primary'

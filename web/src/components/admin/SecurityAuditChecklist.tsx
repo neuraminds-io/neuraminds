@@ -403,6 +403,7 @@ export function SecurityAuditChecklist() {
         return (
           <Card key={category.name}>
             <button
+              type="button"
               onClick={() => setExpandedCategory(isExpanded ? null : category.name)}
               className="w-full text-left cursor-pointer"
             >

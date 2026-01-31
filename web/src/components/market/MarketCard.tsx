@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { RefreshCw, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Market } from '@/types';
@@ -42,8 +43,19 @@ export function MarketCard({ market }: MarketCardProps) {
       >
         {/* Header: Image + Question */}
         <div className="flex items-start gap-3 mb-4">
-          <div className="w-12 h-12 rounded-lg bg-bg-secondary flex-shrink-0 overflow-hidden">
-            <div className="w-full h-full bg-gradient-to-br from-accent/20 to-purple-500/20" />
+          <div className="w-12 h-12 rounded-lg bg-bg-secondary flex-shrink-0 overflow-hidden relative">
+            {market.imageUrl ? (
+              <Image
+                src={market.imageUrl}
+                alt=""
+                fill
+                sizes="48px"
+                className="object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-accent/20 to-purple-500/20" />
+            )}
           </div>
           <h3 className="font-medium text-text-primary text-sm leading-snug line-clamp-2 group-hover:text-accent transition-colors">
             {market.question}

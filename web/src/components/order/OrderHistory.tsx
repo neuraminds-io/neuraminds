@@ -95,9 +95,10 @@ export function OrderHistory({ marketId }: OrderHistoryProps) {
             {(['all', 'open', 'closed'] as const).map((f) => (
               <button
                 key={f}
+                type="button"
                 onClick={() => setFilter(f)}
                 className={cn(
-                  'px-3 py-1 text-sm rounded-md transition-colors cursor-pointer capitalize',
+                  'px-3 py-1 text-sm rounded-md transition-colors duration-fast cursor-pointer capitalize',
                   filter === f
                     ? 'bg-accent text-white'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-secondary'

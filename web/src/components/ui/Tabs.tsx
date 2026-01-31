@@ -63,13 +63,14 @@ export interface TabsProps {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  disabled?: boolean;
 }
 
-const SimpleTabs = ({ tabs, value, onChange, className }: TabsProps) => (
+const SimpleTabs = ({ tabs, value, onChange, className, disabled }: TabsProps) => (
   <Tabs value={value} onValueChange={onChange} className={className}>
     <TabsList className="w-full">
       {tabs.map((tab) => (
-        <TabsTrigger key={tab.value} value={tab.value} className="flex-1">
+        <TabsTrigger key={tab.value} value={tab.value} className="flex-1" disabled={disabled}>
           {tab.label}
         </TabsTrigger>
       ))}

@@ -29,7 +29,7 @@ export function NotificationList({ onClose }: NotificationListProps) {
           <button
             type="button"
             onClick={handleMarkAllRead}
-            className="text-sm text-accent hover:text-accent/80 transition-colors duration-150 cursor-pointer focus:outline-none focus:underline"
+            className="text-sm text-accent hover:text-accent/80 transition-colors duration-fast cursor-pointer focus:outline-none focus:underline"
           >
             Mark all read
           </button>
@@ -84,7 +84,7 @@ export function NotificationList({ onClose }: NotificationListProps) {
         <div className="border-t border-border">
           <Link
             href="/settings/notifications"
-            className="block text-center py-3 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors duration-150 cursor-pointer focus:outline-none focus:bg-bg-tertiary"
+            className="block text-center py-3 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors duration-fast cursor-pointer focus:outline-none focus:bg-bg-tertiary"
             onClick={onClose}
           >
             Notification settings

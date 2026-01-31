@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
-use crate::state::{Order, OrderSide, OutcomeType, OrderStatus, OrderType, Position, OrderBookConfig};
+use crate::state::{Order, OrderSide, OutcomeType, OrderStatus, OrderType, Position, OrderBookConfig, MAX_ORDER_QUANTITY};
 use crate::errors::OrderBookError;
 
 #[derive(Accounts)]
@@ -91,6 +91,7 @@ pub fn handler(
     // Validate inputs
     require!(price_bps >= 1 && price_bps <= 9999, OrderBookError::InvalidPrice);
     require!(quantity > 0, OrderBookError::InvalidQuantity);
+    require!(quantity <= MAX_ORDER_QUANTITY, OrderBookError::QuantityTooLarge);
 
     let clock = Clock::get()?;
     let current_time = clock.unix_timestamp;

@@ -52,7 +52,7 @@ export function LeaderboardMini({ title = 'Top Traders', limit = 5 }: Leaderboar
           <CardTitle className="text-base">{title}</CardTitle>
           <Link
             href="/leaderboard"
-            className="text-sm text-accent hover:text-accent/80 transition-colors cursor-pointer"
+            className="text-sm text-accent hover:text-accent/80 transition-colors duration-fast cursor-pointer"
           >
             View all
           </Link>
@@ -66,7 +66,7 @@ export function LeaderboardMini({ title = 'Top Traders', limit = 5 }: Leaderboar
               <Link
                 key={entry.wallet}
                 href={`/profile/${entry.wallet}`}
-                className="flex items-center justify-between py-1.5 hover:bg-bg-secondary rounded-lg px-2 -mx-2 transition-colors cursor-pointer"
+                className="flex items-center justify-between py-1.5 hover:bg-bg-secondary rounded-lg px-2 -mx-2 transition-colors duration-fast cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <span

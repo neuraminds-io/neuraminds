@@ -218,9 +218,10 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
               {CATEGORIES.map((cat) => (
                 <button
                   key={cat.id}
+                  type="button"
                   onClick={() => setCategory(cat.id)}
                   className={cn(
-                    'p-4 rounded-lg border text-center transition-all cursor-pointer',
+                    'p-4 rounded-lg border text-center transition-all duration-fast cursor-pointer',
                     category === cat.id
                       ? 'border-accent bg-accent-muted'
                       : 'border-border hover:border-border-hover'
@@ -245,9 +246,10 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
                 {RESOLUTION_SOURCES.map((source) => (
                   <button
                     key={source.id}
+                    type="button"
                     onClick={() => setResolutionSource(source.id)}
                     className={cn(
-                      'w-full p-4 rounded-lg border text-left transition-all cursor-pointer',
+                      'w-full p-4 rounded-lg border text-left transition-all duration-fast cursor-pointer',
                       resolutionSource === source.id
                         ? 'border-accent bg-accent-muted'
                         : 'border-border hover:border-border-hover'

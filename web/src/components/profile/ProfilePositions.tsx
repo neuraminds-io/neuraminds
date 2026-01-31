@@ -67,7 +67,7 @@ export function ProfilePositions({ wallet }: ProfilePositionsProps) {
                 <Link
                   key={position.marketId}
                   href={`/markets/${position.marketId}`}
-                  className="block p-4 rounded-lg bg-bg-secondary hover:bg-bg-tertiary transition-colors cursor-pointer"
+                  className="block p-4 rounded-lg bg-bg-secondary hover:bg-bg-tertiary transition-colors duration-fast cursor-pointer"
                 >
                   <p className="text-sm text-text-primary font-medium mb-2 line-clamp-2">
                     {position.marketQuestion}

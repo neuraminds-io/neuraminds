@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Button, Input, Card, Tabs, useToast } from '@/components/ui';
+import { Button, Input, Card, Tabs, Spinner, useToast } from '@/components/ui';
 import { usePlaceOrder } from '@/hooks';
 import { formatPrice, cn } from '@/lib/utils';
 import type { Market, Outcome, OrderSide } from '@/types';
@@ -84,9 +84,21 @@ export function OrderForm({ market, onSuccess }: OrderFormProps) {
   };
 
   const isYes = outcome === 'yes';
+  const isPending = placeOrder.isPending;
 
   return (
-    <Card className="!p-4 sm:!p-6">
+    <Card className="!p-4 sm:!p-6 relative">
+      {/* Transaction pending overlay */}
+      {isPending && (
+        <div className="absolute inset-0 bg-bg-base/80 backdrop-blur-sm rounded-xl z-10 flex flex-col items-center justify-center gap-3">
+          <Spinner size="lg" className={isYes ? 'text-bid' : 'text-ask'} />
+          <div className="text-center">
+            <p className="font-medium text-text-primary">Confirming transaction...</p>
+            <p className="text-sm text-text-muted mt-1">Waiting for blockchain confirmation</p>
+          </div>
+        </div>
+      )}
+
       <h3 className="font-display font-semibold text-lg mb-4">Trade</h3>
 
       {/* Outcome selector - Yes/No */}
@@ -94,9 +106,11 @@ export function OrderForm({ market, onSuccess }: OrderFormProps) {
         <button
           type="button"
           onClick={() => setOutcome('yes')}
+          disabled={isPending}
           className={cn(
             "py-3 rounded-lg font-semibold text-center transition-all duration-fast",
-            "border-2",
+            "border-2 cursor-pointer",
+            "disabled:cursor-not-allowed disabled:opacity-50",
             isYes
               ? "bg-bid-muted border-bid text-bid"
               : "bg-bg-secondary border-border text-text-secondary hover:border-border-hover"
@@ -108,9 +122,11 @@ export function OrderForm({ market, onSuccess }: OrderFormProps) {
         <button
           type="button"
           onClick={() => setOutcome('no')}
+          disabled={isPending}
           className={cn(
             "py-3 rounded-lg font-semibold text-center transition-all duration-fast",
-            "border-2",
+            "border-2 cursor-pointer",
+            "disabled:cursor-not-allowed disabled:opacity-50",
             !isYes
               ? "bg-ask-muted border-ask text-ask"
               : "bg-bg-secondary border-border text-text-secondary hover:border-border-hover"
@@ -129,6 +145,7 @@ export function OrderForm({ market, onSuccess }: OrderFormProps) {
         ]}
         value={side}
         onChange={(v) => setSide(v as OrderSide)}
+        disabled={isPending}
         className="mb-4"
       />
 
@@ -143,6 +160,7 @@ export function OrderForm({ market, onSuccess }: OrderFormProps) {
             min="0"
             step="0.01"
             error={errors.amount}
+            disabled={isPending}
           />
 
           <Input
@@ -156,6 +174,7 @@ export function OrderForm({ market, onSuccess }: OrderFormProps) {
             step="0.01"
             hint="Leave empty for market order"
             error={errors.price}
+            disabled={isPending}
           />
         </div>
 

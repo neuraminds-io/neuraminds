@@ -141,7 +141,7 @@ export function ProfileActivity({ wallet }: ProfileActivityProps) {
               <Link
                 key={activity.id}
                 href={`/markets/${activity.marketId}`}
-                className="flex items-start gap-3 p-3 rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer"
+                className="flex items-start gap-3 p-3 rounded-lg hover:bg-bg-secondary transition-colors duration-fast cursor-pointer"
               >
                 {/* Icon */}
                 <div
