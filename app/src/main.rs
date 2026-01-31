@@ -1,12 +1,14 @@
 use actix_cors::Cors;
-use actix_web::{web, App, HttpServer, middleware, http::header};
+use actix_web::{web, App, HttpServer, middleware as actix_middleware, http::header};
 use actix_governor::{Governor, GovernorConfigBuilder};
+use std::sync::atomic::{AtomicBool, Ordering};
 use dotenv::dotenv;
 use log::{info, warn};
 use std::sync::Arc;
 
 mod api;
 mod config;
+mod middleware;
 mod models;
 mod services;
 
@@ -24,12 +26,29 @@ pub struct AppState {
     pub metrics: MetricsService,
     pub ws_hub: WebSocketHub,
     pub reconciliation: Arc<ReconciliationService>,
+    pub is_shutting_down: Arc<AtomicBool>,
+}
+
+/// Graceful shutdown handler
+async fn graceful_shutdown(state: Arc<AppState>) {
+    // Wait for shutdown signal
+    tokio::signal::ctrl_c().await.expect("Failed to install CTRL+C handler");
+    info!("Shutdown signal received, initiating graceful shutdown...");
+
+    // Set shutdown flag
+    state.is_shutting_down.store(true, Ordering::SeqCst);
+
+    // Give in-flight requests time to complete
+    info!("Waiting for in-flight requests to complete...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+    info!("Graceful shutdown complete");
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
-    env_logger::init();
+    services::logging::init();
 
     info!("Starting Polyguard Backend API...");
 
@@ -100,6 +119,13 @@ async fn main() -> std::io::Result<()> {
         metrics,
         ws_hub,
         reconciliation,
+        is_shutting_down: Arc::new(AtomicBool::new(false)),
+    });
+
+    // Spawn graceful shutdown handler
+    let shutdown_state = app_state.clone();
+    tokio::spawn(async move {
+        graceful_shutdown(shutdown_state).await;
     });
 
     info!("Starting HTTP server on {}", bind_addr);
@@ -141,9 +167,23 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(app_state.clone()))
             // SECURITY: Add rate limiting
             .wrap(Governor::new(&governor_conf))
+            // SECURITY: Geo-blocking (only in production)
+            .wrap(crate::middleware::GeoBlock::new(!config_clone.is_development))
             .wrap(cors)
-            .wrap(middleware::Logger::default())
-            .wrap(middleware::Compress::default())
+            // SECURITY: Add security headers
+            .wrap(
+                actix_middleware::DefaultHeaders::new()
+                    .add(("X-Content-Type-Options", "nosniff"))
+                    .add(("X-Frame-Options", "DENY"))
+                    .add(("X-XSS-Protection", "1; mode=block"))
+                    .add(("Referrer-Policy", "strict-origin-when-cross-origin"))
+                    .add(("Permissions-Policy", "geolocation=(), microphone=(), camera=()"))
+            )
+            .wrap(actix_middleware::Compress::default())
+            // Structured access log (replaces default Logger)
+            .wrap(crate::middleware::AccessLog)
+            // Request tracing with unique IDs
+            .wrap(crate::middleware::RequestIdMiddleware)
             // SECURITY: Limit request body size to 4KB for JSON
             .app_data(web::JsonConfig::default().limit(4096))
             // Health check
@@ -187,6 +227,16 @@ async fn main() -> std::io::Result<()> {
                             .route("/profile", web::get().to(api::user::get_profile))
                             .route("/transactions", web::get().to(api::user::get_transactions))
                     )
+                    // Wallet
+                    .service(
+                        web::scope("/wallet")
+                            .route("/balance", web::get().to(api::wallet::get_balance))
+                            .route("/deposit/address", web::get().to(api::wallet::get_deposit_address))
+                            .route("/deposit", web::post().to(api::wallet::deposit))
+                            .route("/withdraw", web::post().to(api::wallet::withdraw))
+                    )
+                    // Webhooks (no auth, signature verified)
+                    .route("/webhooks/blindfold", web::post().to(api::wallet::blindfold_webhook))
                     // Authentication
                     .service(
                         web::scope("/auth")

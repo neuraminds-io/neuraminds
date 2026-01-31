@@ -1,0 +1,665 @@
+name: Deploy Mainnet
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: 'Deployment target'
+        required: true
+        type: choice
+        options:
+          - 'api-only'
+          - 'programs-only'
+          - 'full'
+        default: 'api-only'
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - 'staging'
+          - 'production'
+        default: 'staging'
+      image_tag:
+        description: 'Docker image tag (leave empty for latest commit SHA)'
+        required: false
+        type: string
+      program_version:
+        description: 'Program version tag (for programs-only or full deploy)'
+        required: false
+        type: string
+      skip_tests:
+        description: 'Skip pre-deployment tests'
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Dry run (no actual deployment)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  SOLANA_VERSION: 2.2.0
+  ANCHOR_VERSION: 0.31.0
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/backend
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  # Gate: Validate inputs and check prerequisites
+  validate:
+    name: Validate Deployment
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.set-tag.outputs.image_tag }}
+      should_deploy_api: ${{ steps.targets.outputs.deploy_api }}
+      should_deploy_programs: ${{ steps.targets.outputs.deploy_programs }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate environment
+        run: |
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Deploy target: ${{ github.event.inputs.deploy_target }}"
+          echo "Dry run: ${{ github.event.inputs.dry_run }}"
+
+          if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+            echo "Production deployment requested - approval required"
+          fi
+
+      - name: Determine image tag
+        id: set-tag
+        run: |
+          if [[ -n "${{ github.event.inputs.image_tag }}" ]]; then
+            echo "image_tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "image_tag=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine deployment targets
+        id: targets
+        run: |
+          case "${{ github.event.inputs.deploy_target }}" in
+            "api-only")
+              echo "deploy_api=true" >> $GITHUB_OUTPUT
+              echo "deploy_programs=false" >> $GITHUB_OUTPUT
+              ;;
+            "programs-only")
+              echo "deploy_api=false" >> $GITHUB_OUTPUT
+              echo "deploy_programs=true" >> $GITHUB_OUTPUT
+              ;;
+            "full")
+              echo "deploy_api=true" >> $GITHUB_OUTPUT
+              echo "deploy_programs=true" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  # Pre-deployment tests
+  pre-deploy-tests:
+    name: Pre-Deployment Tests
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event.inputs.skip_tests != 'true'
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: polyguard
+          POSTGRES_PASSWORD: polyguard
+          POSTGRES_DB: polyguard_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-deploy-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run clippy
+        working-directory: app
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run unit tests
+        working-directory: app
+        run: cargo test --lib
+
+      - name: Run integration tests
+        working-directory: app
+        env:
+          DATABASE_URL: postgres://polyguard:polyguard@localhost:5432/polyguard_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-secret-key-for-ci
+          SOLANA_RPC_URL: https://api.devnet.solana.com
+          SOLANA_ENABLED: "false"
+        run: |
+          cargo install sqlx-cli --no-default-features --features postgres || true
+          sqlx database create || true
+          sqlx migrate run --source ../migrations || true
+          cargo test --release
+
+      - name: Security audit
+        working-directory: app
+        run: |
+          cargo install cargo-audit || true
+          cargo audit
+
+  # Build and verify programs (if deploying programs)
+  build-programs:
+    name: Build Solana Programs
+    runs-on: ubuntu-latest
+    needs: [validate, pre-deploy-tests]
+    if: |
+      always() &&
+      needs.validate.outputs.should_deploy_programs == 'true' &&
+      (needs.pre-deploy-tests.result == 'success' || needs.pre-deploy-tests.result == 'skipped')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-programs-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Solana
+        run: |
+          sh -c "$(curl -sSfL https://release.solana.com/v${{ env.SOLANA_VERSION }}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install Anchor
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+          avm install ${{ env.ANCHOR_VERSION }}
+          avm use ${{ env.ANCHOR_VERSION }}
+
+      - name: Build verifiable programs
+        run: anchor build --verifiable
+
+      - name: Generate checksums
+        run: |
+          cd target/deploy
+          sha256sum *.so > checksums.txt
+          cat checksums.txt
+
+      - name: Run program tests
+        run: anchor test
+
+      - name: Upload program artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: program-binaries
+          path: |
+            target/deploy/*.so
+            target/deploy/checksums.txt
+            target/idl/*.json
+          retention-days: 30
+
+  # Build Docker image (if deploying API)
+  build-image:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [validate, pre-deploy-tests]
+    if: |
+      always() &&
+      needs.validate.outputs.should_deploy_api == 'true' &&
+      (needs.pre-deploy-tests.result == 'success' || needs.pre-deploy-tests.result == 'skipped')
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha
+            type=raw,value=${{ needs.validate.outputs.image_tag }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Deploy Solana programs to mainnet
+  deploy-programs:
+    name: Deploy Programs (${{ github.event.inputs.environment }})
+    runs-on: ubuntu-latest
+    needs: [validate, build-programs]
+    if: needs.validate.outputs.should_deploy_programs == 'true'
+    environment:
+      name: ${{ github.event.inputs.environment }}-programs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download program artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: program-binaries
+          path: target/deploy
+
+      - name: Install Solana
+        run: |
+          sh -c "$(curl -sSfL https://release.solana.com/v${{ env.SOLANA_VERSION }}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Configure Solana CLI
+        run: |
+          mkdir -p ~/.config/solana
+          echo "${{ secrets.MAINNET_DEPLOYER_KEYPAIR }}" > ~/.config/solana/deployer.json
+          solana config set --url "${{ secrets.MAINNET_RPC_URL }}" --keypair ~/.config/solana/deployer.json
+
+      - name: Check deployer balance
+        id: balance
+        run: |
+          BALANCE=$(solana balance | awk '{print $1}')
+          echo "balance=$BALANCE" >> $GITHUB_OUTPUT
+          echo "Deployer balance: $BALANCE SOL"
+          if (( $(echo "$BALANCE < 5" | bc -l) )); then
+            echo "::error::Insufficient deployer balance. Need at least 5 SOL."
+            exit 1
+          fi
+
+      - name: Display deployment plan
+        run: |
+          echo "Deployment Plan"
+          echo "==============="
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Dry run: ${{ github.event.inputs.dry_run }}"
+          echo ""
+          echo "Programs to deploy:"
+          ls -lh target/deploy/*.so
+          echo ""
+          echo "Checksums:"
+          cat target/deploy/checksums.txt
+
+      - name: Deploy programs
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          set -e
+
+          RPC_URL="${{ secrets.MAINNET_RPC_URL }}"
+          KEYPAIR=~/.config/solana/deployer.json
+          PRIORITY_FEE=50000
+
+          deploy_program() {
+            local name=$1
+            local so_path=$2
+            local keypair_path=$3
+
+            echo "Deploying $name..."
+
+            # Create buffer
+            BUFFER_OUTPUT=$(solana program write-buffer "$so_path" \
+              --with-compute-unit-price $PRIORITY_FEE \
+              2>&1)
+
+            BUFFER_ADDRESS=$(echo "$BUFFER_OUTPUT" | grep -oE '[1-9A-HJ-NP-Za-km-z]{32,44}' | head -1)
+
+            if [[ -z "$BUFFER_ADDRESS" ]]; then
+              echo "::error::Failed to create buffer for $name"
+              exit 1
+            fi
+
+            echo "Buffer created: $BUFFER_ADDRESS"
+
+            # Deploy from buffer
+            solana program deploy \
+              --program-id "$keypair_path" \
+              --buffer "$BUFFER_ADDRESS" \
+              --with-compute-unit-price $PRIORITY_FEE \
+              --upgrade-authority "$KEYPAIR"
+
+            echo "$name deployed successfully"
+
+            # Reclaim buffer rent
+            solana program close "$BUFFER_ADDRESS" \
+              --recipient "$(solana-keygen pubkey $KEYPAIR)" \
+              2>/dev/null || echo "Buffer may already be closed"
+          }
+
+          # Deploy orderbook program
+          if [[ -f "target/deploy/polyguard_orderbook.so" ]]; then
+            deploy_program "polyguard-orderbook" \
+              "target/deploy/polyguard_orderbook.so" \
+              "target/deploy/polyguard_orderbook-keypair.json"
+          fi
+
+          echo "Program deployment complete"
+
+      - name: Verify program deployment
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          echo "Verifying deployed programs..."
+
+          # Get program IDs
+          if [[ -f "target/deploy/polyguard_orderbook-keypair.json" ]]; then
+            ORDERBOOK_ID=$(solana-keygen pubkey target/deploy/polyguard_orderbook-keypair.json)
+            echo "Orderbook program: $ORDERBOOK_ID"
+            solana program show "$ORDERBOOK_ID" || echo "::warning::Could not verify orderbook program"
+          fi
+
+      - name: Upload deployment record
+        if: github.event.inputs.dry_run != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-record-programs
+          path: |
+            target/deploy/checksums.txt
+            target/deploy/*-program-id.txt
+          retention-days: 90
+
+  # Deploy API to Kubernetes
+  deploy-api:
+    name: Deploy API (${{ github.event.inputs.environment }})
+    runs-on: ubuntu-latest
+    needs: [validate, build-image]
+    if: needs.validate.outputs.should_deploy_api == 'true'
+    environment:
+      name: ${{ github.event.inputs.environment }}
+      url: ${{ github.event.inputs.environment == 'production' && 'https://api.polyguard.cc' || 'https://api-staging.polyguard.cc' }}
+    outputs:
+      deployment_status: ${{ steps.deploy.outputs.status }}
+      previous_image: ${{ steps.get-current.outputs.current_image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+            echo "${{ secrets.PRODUCTION_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          else
+            echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          fi
+          chmod 600 $HOME/.kube/config
+
+      - name: Get current deployment
+        id: get-current
+        run: |
+          NAMESPACE="polyguard-${{ github.event.inputs.environment }}"
+          CURRENT_IMAGE=$(kubectl get deployment polyguard-api-blue -n $NAMESPACE \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "none")
+          echo "current_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
+          echo "Current image: $CURRENT_IMAGE"
+
+      - name: Display deployment plan
+        run: |
+          echo "Deployment Plan"
+          echo "==============="
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "New image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.image_tag }}"
+          echo "Previous image: ${{ steps.get-current.outputs.current_image }}"
+          echo "Dry run: ${{ github.event.inputs.dry_run }}"
+
+      - name: Run database migrations
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          NAMESPACE="polyguard-${{ github.event.inputs.environment }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.image_tag }}"
+
+          # Run migrations in a job
+          kubectl run migrate-${{ github.sha }} \
+            --image="$IMAGE" \
+            --namespace=$NAMESPACE \
+            --restart=Never \
+            --env="DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+            --command -- ./sqlx migrate run --source /home/polyguard/migrations
+
+          # Wait for completion
+          kubectl wait --for=condition=Complete pod/migrate-${{ github.sha }} \
+            -n $NAMESPACE --timeout=120s
+
+          # Clean up
+          kubectl delete pod migrate-${{ github.sha }} -n $NAMESPACE
+
+      - name: Deploy to Kubernetes
+        id: deploy
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          NAMESPACE="polyguard-${{ github.event.inputs.environment }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.image_tag }}"
+
+          # Update the blue deployment
+          kubectl set image deployment/polyguard-api-blue \
+            api="$IMAGE" \
+            -n $NAMESPACE
+
+          # Wait for rollout
+          if kubectl rollout status deployment/polyguard-api-blue \
+            -n $NAMESPACE --timeout=300s; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Dry run summary
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "Dry run completed. No changes were made."
+          echo "Would deploy: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.image_tag }}"
+
+  # Health check after deployment
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-api]
+    if: |
+      always() &&
+      needs.deploy-api.result == 'success' &&
+      github.event.inputs.dry_run != 'true'
+    steps:
+      - name: Wait for service stabilization
+        run: sleep 30
+
+      - name: Check health endpoint
+        id: health
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+            HEALTH_URL="https://api.polyguard.cc/health"
+            DEEP_HEALTH_URL="https://api.polyguard.cc/health/deep"
+          else
+            HEALTH_URL="https://api-staging.polyguard.cc/health"
+            DEEP_HEALTH_URL="https://api-staging.polyguard.cc/health/deep"
+          fi
+
+          echo "Checking $HEALTH_URL..."
+
+          # Basic health check
+          for i in {1..5}; do
+            if curl -sf "$HEALTH_URL" > /dev/null; then
+              echo "Health check passed"
+              break
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 10
+          done
+
+          # Deep health check
+          echo "Checking $DEEP_HEALTH_URL..."
+          DEEP_RESPONSE=$(curl -sf "$DEEP_HEALTH_URL" || echo '{"status":"unhealthy"}')
+          echo "Deep health response: $DEEP_RESPONSE"
+
+          if echo "$DEEP_RESPONSE" | grep -q '"status":"healthy"'; then
+            echo "Deep health check passed"
+          else
+            echo "::warning::Deep health check returned non-healthy status"
+          fi
+
+      - name: Verify API endpoints
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+            BASE_URL="https://api.polyguard.cc"
+          else
+            BASE_URL="https://api-staging.polyguard.cc"
+          fi
+
+          echo "Verifying API endpoints..."
+
+          # Check markets endpoint
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/v1/markets")
+          if [[ "$HTTP_CODE" == "200" || "$HTTP_CODE" == "401" ]]; then
+            echo "Markets endpoint: OK ($HTTP_CODE)"
+          else
+            echo "::warning::Markets endpoint returned $HTTP_CODE"
+          fi
+
+  # Rollback capability
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-api, health-check]
+    if: |
+      always() &&
+      needs.deploy-api.result == 'success' &&
+      needs.health-check.result == 'failure' &&
+      github.event.inputs.dry_run != 'true'
+    environment:
+      name: ${{ github.event.inputs.environment }}-rollback
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+            echo "${{ secrets.PRODUCTION_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          else
+            echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          fi
+          chmod 600 $HOME/.kube/config
+
+      - name: Rollback deployment
+        run: |
+          NAMESPACE="polyguard-${{ github.event.inputs.environment }}"
+
+          echo "Rolling back to previous deployment..."
+          kubectl rollout undo deployment/polyguard-api-blue -n $NAMESPACE
+
+          # Wait for rollback
+          kubectl rollout status deployment/polyguard-api-blue \
+            -n $NAMESPACE --timeout=300s
+
+          echo "Rollback completed"
+
+      - name: Verify rollback
+        run: |
+          NAMESPACE="polyguard-${{ github.event.inputs.environment }}"
+
+          CURRENT_IMAGE=$(kubectl get deployment polyguard-api-blue -n $NAMESPACE \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')
+          echo "Rolled back to: $CURRENT_IMAGE"
+
+  # Deployment summary
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-api, deploy-programs, health-check, rollback]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ github.event.inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Target | ${{ github.event.inputs.deploy_target }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Tag | ${{ needs.validate.outputs.image_tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dry Run | ${{ github.event.inputs.dry_run }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.deploy-api.result }}" == "success" ]]; then
+            echo "API deployment: Success" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.deploy-api.result }}" == "skipped" ]]; then
+            echo "API deployment: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "API deployment: ${{ needs.deploy-api.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.deploy-programs.result }}" == "success" ]]; then
+            echo "Program deployment: Success" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.deploy-programs.result }}" == "skipped" ]]; then
+            echo "Program deployment: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Program deployment: ${{ needs.deploy-programs.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.health-check.result }}" == "success" ]]; then
+            echo "Health check: Passed" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.health-check.result }}" == "skipped" ]]; then
+            echo "Health check: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Health check: ${{ needs.health-check.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.rollback.result }}" == "success" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Automatic rollback was triggered due to health check failure" >> $GITHUB_STEP_SUMMARY
+          fi

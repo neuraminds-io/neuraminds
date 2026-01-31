@@ -561,4 +561,85 @@ mod tests {
         assert_ne!(nonce1, nonce2);
         assert!(nonce1.len() >= 32); // Should be sufficiently long
     }
+
+    #[test]
+    fn test_generate_nonce_format() {
+        let nonce = generate_nonce();
+        // Should be hexadecimal characters
+        assert!(nonce.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_auth_message_to_string() {
+        let msg = AuthMessage {
+            wallet: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU".to_string(),
+            timestamp: 1705680000,
+            nonce: "abc123".to_string(),
+        };
+        assert_eq!(
+            msg.to_string(),
+            "polyguard:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU:1705680000:abc123"
+        );
+    }
+
+    #[test]
+    fn test_auth_message_parse_roundtrip() {
+        let original = "polyguard:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU:1705680000:abc123";
+        let parsed = AuthMessage::parse(original).unwrap();
+        assert_eq!(parsed.to_string(), original);
+    }
+
+    #[test]
+    fn test_auth_message_invalid_timestamp() {
+        let msg = "polyguard:wallet:notanumber:nonce";
+        assert!(AuthMessage::parse(msg).is_err());
+    }
+
+    #[test]
+    fn test_validate_solana_address_various_valid() {
+        // Various valid Solana addresses
+        let addresses = [
+            "11111111111111111111111111111111",
+            "So11111111111111111111111111111111111111112",
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        ];
+        for addr in addresses {
+            assert!(validate_solana_address(addr).is_ok(), "Address {} should be valid", addr);
+        }
+    }
+
+    #[test]
+    fn test_validate_solana_address_invalid_length() {
+        // Too short
+        assert!(validate_solana_address("1234567890123456789012345678901").is_err());
+        // Too long
+        assert!(validate_solana_address("12345678901234567890123456789012345678901234567890").is_err());
+    }
+
+    #[test]
+    fn test_authenticated_user_struct() {
+        let user = AuthenticatedUser {
+            wallet_address: "test_wallet".to_string(),
+        };
+        assert_eq!(user.wallet_address, "test_wallet");
+    }
+
+    #[test]
+    fn test_message_expiration_constant() {
+        // Verify message expiration is 5 minutes
+        assert_eq!(MESSAGE_EXPIRATION_SECS, 300);
+    }
+
+    #[test]
+    fn test_nonce_cleanup_age_constant() {
+        // Verify nonce cleanup age is 10 minutes
+        assert_eq!(NONCE_CLEANUP_AGE_SECS, 600);
+    }
+
+    #[test]
+    fn test_generate_multiple_nonces_all_unique() {
+        use std::collections::HashSet;
+        let nonces: HashSet<String> = (0..100).map(|_| generate_nonce()).collect();
+        assert_eq!(nonces.len(), 100, "All generated nonces should be unique");
+    }
 }

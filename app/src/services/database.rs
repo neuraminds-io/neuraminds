@@ -99,8 +99,16 @@ impl DatabaseService {
 
         info!("Database connected successfully");
 
-        // Run migrations (uncomment in production)
-        // sqlx::migrate!("./migrations").run(&pool).await?;
+        // Run migrations automatically
+        info!("Running database migrations...");
+        sqlx::migrate!("../migrations")
+            .run(&pool)
+            .await
+            .map_err(|e| {
+                log::error!("Migration failed: {}", e);
+                anyhow::anyhow!("Database migration failed: {}", e)
+            })?;
+        info!("Database migrations completed");
 
         Ok(Self { pool })
     }

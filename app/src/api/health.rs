@@ -81,14 +81,24 @@ pub async fn get_metrics_prometheus(
 async fn check_database_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth {
     let start = Instant::now();
 
-    // Get pool stats as a proxy for health
-    let stats = state.db.pool_stats();
-    let latency_ms = start.elapsed().as_millis() as u64;
+    // Execute actual query to verify database connectivity
+    match sqlx::query("SELECT 1")
+        .execute(state.db.pool())
+        .await
+    {
+        Ok(_) => {
+            let latency_ms = start.elapsed().as_millis() as u64;
+            let stats = state.db.pool_stats();
 
-    if stats.size > 0 {
-        ComponentHealth::healthy(latency_ms)
-    } else {
-        ComponentHealth::unhealthy("No database connections available")
+            if stats.size == 0 {
+                ComponentHealth::unhealthy("No database connections available")
+            } else if latency_ms > 500 {
+                ComponentHealth::degraded(latency_ms, "High query latency")
+            } else {
+                ComponentHealth::healthy(latency_ms)
+            }
+        }
+        Err(e) => ComponentHealth::unhealthy(&format!("Database query failed: {}", e)),
     }
 }
 

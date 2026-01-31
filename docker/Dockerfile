@@ -30,6 +30,9 @@ COPY app/src ./app/src
 RUN touch app/src/main.rs && \
     cargo build --release --manifest-path app/Cargo.toml
 
+# Build sqlx-cli for migrations
+RUN cargo install sqlx-cli --no-default-features --features postgres
+
 # Runtime stage
 FROM debian:bookworm-slim
 
@@ -44,8 +47,12 @@ RUN useradd --create-home --shell /bin/bash polyguard
 USER polyguard
 WORKDIR /home/polyguard
 
-# Copy binary from builder
+# Copy binary and sqlx-cli from builder
 COPY --from=builder /usr/src/polyguard/target/release/polyguard-api ./
+COPY --from=builder /usr/local/cargo/bin/sqlx ./
+
+# Copy migrations
+COPY migrations ./migrations
 
 # Runtime configuration
 ENV RUST_LOG=info

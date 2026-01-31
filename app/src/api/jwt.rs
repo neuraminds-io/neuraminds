@@ -1,6 +1,8 @@
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation, Algorithm};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::RwLock;
 use crate::api::ApiError;
 
 /// JWT token claims
@@ -56,19 +58,111 @@ pub enum TokenType {
     Refresh,
 }
 
-/// JWT service for token management
-pub struct JwtService {
+/// A signing key with its ID for rotation support
+struct SigningKey {
+    #[allow(dead_code)]
+    kid: String,
     encoding_key: EncodingKey,
     decoding_key: DecodingKey,
+}
+
+/// JWT service for token management with key rotation support
+///
+/// Supports multiple active keys for graceful rotation:
+/// 1. Add new key via `add_key()`
+/// 2. Set it as primary via `set_primary_key()`
+/// 3. Old tokens continue to validate during grace period
+/// 4. Remove old key via `remove_key()` after grace period
+pub struct JwtService {
+    /// Current primary key ID (used for signing new tokens)
+    primary_kid: RwLock<String>,
+    /// All valid keys (can validate tokens signed with any of these)
+    keys: RwLock<HashMap<String, SigningKey>>,
 }
 
 impl JwtService {
     /// Create a new JWT service with the given secret
     pub fn new(secret: &str) -> Self {
-        Self {
+        let kid = Self::generate_kid();
+        let signing_key = SigningKey {
+            kid: kid.clone(),
             encoding_key: EncodingKey::from_secret(secret.as_bytes()),
             decoding_key: DecodingKey::from_secret(secret.as_bytes()),
+        };
+
+        let mut keys = HashMap::new();
+        keys.insert(kid.clone(), signing_key);
+
+        Self {
+            primary_kid: RwLock::new(kid),
+            keys: RwLock::new(keys),
         }
+    }
+
+    /// Generate a unique key ID
+    fn generate_kid() -> String {
+        format!("k{}_{:08x}", Utc::now().timestamp(), rand::random::<u32>())
+    }
+
+    /// Add a new key for rotation. Returns the key ID.
+    /// The key is not used for signing until set as primary.
+    pub fn add_key(&self, secret: &str) -> String {
+        let kid = Self::generate_kid();
+        let signing_key = SigningKey {
+            kid: kid.clone(),
+            encoding_key: EncodingKey::from_secret(secret.as_bytes()),
+            decoding_key: DecodingKey::from_secret(secret.as_bytes()),
+        };
+
+        let mut keys = self.keys.write().unwrap();
+        keys.insert(kid.clone(), signing_key);
+        log::info!("Added new JWT signing key: {}", kid);
+        kid
+    }
+
+    /// Set the primary key (used for signing new tokens)
+    pub fn set_primary_key(&self, kid: &str) -> Result<(), ApiError> {
+        let keys = self.keys.read().unwrap();
+        if !keys.contains_key(kid) {
+            return Err(ApiError::bad_request("INVALID_KEY_ID", "Key not found"));
+        }
+        drop(keys);
+
+        let mut primary = self.primary_kid.write().unwrap();
+        log::info!("Rotating primary JWT key from {} to {}", *primary, kid);
+        *primary = kid.to_string();
+        Ok(())
+    }
+
+    /// Remove an old key after grace period
+    pub fn remove_key(&self, kid: &str) -> Result<(), ApiError> {
+        let primary = self.primary_kid.read().unwrap();
+        if *primary == kid {
+            return Err(ApiError::bad_request(
+                "CANNOT_REMOVE_PRIMARY",
+                "Cannot remove the primary signing key",
+            ));
+        }
+        drop(primary);
+
+        let mut keys = self.keys.write().unwrap();
+        if keys.remove(kid).is_some() {
+            log::info!("Removed old JWT signing key: {}", kid);
+            Ok(())
+        } else {
+            Err(ApiError::bad_request("INVALID_KEY_ID", "Key not found"))
+        }
+    }
+
+    /// Get list of active key IDs
+    pub fn list_key_ids(&self) -> Vec<String> {
+        let keys = self.keys.read().unwrap();
+        keys.keys().cloned().collect()
+    }
+
+    /// Get the current primary key ID
+    pub fn primary_key_id(&self) -> String {
+        self.primary_kid.read().unwrap().clone()
     }
 
     /// Generate an access token for a user
@@ -116,7 +210,19 @@ impl JwtService {
             iss: TOKEN_ISSUER.to_string(),
         };
 
-        encode(&Header::default(), &claims, &self.encoding_key)
+        // Get primary key for signing
+        let primary_kid = self.primary_kid.read().unwrap().clone();
+        let keys = self.keys.read().unwrap();
+        let signing_key = keys.get(&primary_kid).ok_or_else(|| {
+            log::error!("Primary key {} not found", primary_kid);
+            ApiError::internal("Signing key not available")
+        })?;
+
+        // Include kid in header for key identification during validation
+        let mut header = Header::default();
+        header.kid = Some(primary_kid);
+
+        encode(&header, &claims, &signing_key.encoding_key)
             .map_err(|e| {
                 log::error!("Failed to generate JWT: {}", e);
                 ApiError::internal("Failed to generate authentication token")
@@ -125,14 +231,33 @@ impl JwtService {
 
     /// Validate and decode a token
     pub fn validate_token(&self, token: &str) -> Result<Claims, ApiError> {
+        // First, decode header to get kid
+        let header = jsonwebtoken::decode_header(token).map_err(|_| {
+            ApiError::unauthorized("Invalid token format")
+        })?;
+
+        let keys = self.keys.read().unwrap();
+
+        // If kid specified, use that key; otherwise try all keys
+        let decoding_key = if let Some(kid) = &header.kid {
+            keys.get(kid).map(|k| &k.decoding_key).ok_or_else(|| {
+                log::debug!("Token signed with unknown key: {}", kid);
+                ApiError::unauthorized("Token signed with unknown key")
+            })?
+        } else {
+            // Legacy token without kid - try primary key
+            let primary_kid = self.primary_kid.read().unwrap().clone();
+            keys.get(&primary_kid).map(|k| &k.decoding_key).ok_or_else(|| {
+                ApiError::unauthorized("No valid signing key")
+            })?
+        };
+
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
-        // Validate audience claim
         validation.set_audience(&[TOKEN_AUDIENCE]);
-        // Validate issuer claim
         validation.set_issuer(&[TOKEN_ISSUER]);
 
-        decode::<Claims>(token, &self.decoding_key, &validation)
+        decode::<Claims>(token, decoding_key, &validation)
             .map(|data| data.claims)
             .map_err(|e| {
                 log::debug!("JWT validation failed: {}", e);
@@ -156,9 +281,6 @@ impl JwtService {
                 }
             })
     }
-
-    // REMOVED: decode_claims_unsafe - security vulnerability
-    // Use validate_token() for all token validation
 }
 
 /// Token pair response for authentication endpoints
@@ -294,5 +416,54 @@ mod tests {
 
         // Token IDs should be unique
         assert_ne!(claims1.jti, claims2.jti);
+    }
+
+    #[test]
+    fn test_key_rotation() {
+        let service = test_jwt_service();
+        let wallet = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+
+        // Generate token with original key
+        let token1 = service.generate_access_token(wallet, UserRole::User).unwrap();
+        let original_kid = service.primary_key_id();
+
+        // Add new key and rotate
+        let new_kid = service.add_key("new-secret-key-for-rotation-test-12345");
+        service.set_primary_key(&new_kid).unwrap();
+
+        // Generate token with new key
+        let token2 = service.generate_access_token(wallet, UserRole::User).unwrap();
+
+        // Both tokens should validate (old key still present)
+        assert!(service.validate_token(&token1).is_ok());
+        assert!(service.validate_token(&token2).is_ok());
+
+        // Remove old key
+        service.remove_key(&original_kid).unwrap();
+
+        // Old token should still work (until expiry) if kid matches existing key
+        // But since old key is removed, it should fail
+        assert!(service.validate_token(&token1).is_err());
+        // New token still works
+        assert!(service.validate_token(&token2).is_ok());
+    }
+
+    #[test]
+    fn test_cannot_remove_primary_key() {
+        let service = test_jwt_service();
+        let primary_kid = service.primary_key_id();
+
+        let result = service.remove_key(&primary_kid);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_list_keys() {
+        let service = test_jwt_service();
+
+        assert_eq!(service.list_key_ids().len(), 1);
+
+        service.add_key("another-secret-key");
+        assert_eq!(service.list_key_ids().len(), 2);
     }
 }

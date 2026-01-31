@@ -1,4 +1,5 @@
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use actix_web::http::header::HeaderMap;
 use chrono::Utc;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -11,6 +12,17 @@ use crate::models::{
 use crate::AppState;
 use crate::require_auth;
 use super::{ApiError, validate_order_price, validate_order_quantity, validate_market_id, validate_uuid, validate_pagination};
+use super::rate_limit::check_order_rate_limit;
+
+const IDEMPOTENCY_KEY_HEADER: &str = "idempotency-key";
+
+/// Extract idempotency key from request headers
+fn get_idempotency_key(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(IDEMPOTENCY_KEY_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .map(String::from)
+}
 
 /// List orders for authenticated user
 pub async fn list_orders(
@@ -77,6 +89,7 @@ pub async fn get_order(
 }
 
 /// Place a new order
+/// Supports Idempotency-Key header to prevent duplicate orders
 pub async fn place_order(
     req: HttpRequest,
     state: web::Data<Arc<AppState>>,
@@ -84,6 +97,53 @@ pub async fn place_order(
 ) -> Result<impl Responder, ApiError> {
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
+
+    let owner = user.wallet_address;
+
+    // SECURITY: Per-user rate limit (10 orders/min)
+    check_order_rate_limit(&owner, &state.redis).await?;
+
+    // Check for idempotency key
+    let idempotency_key = get_idempotency_key(req.headers());
+
+    if let Some(ref key) = idempotency_key {
+        // Validate key format (UUID or similar)
+        if key.len() > 64 || key.is_empty() {
+            return Err(ApiError::bad_request(
+                "INVALID_IDEMPOTENCY_KEY",
+                "Idempotency key must be 1-64 characters",
+            ));
+        }
+
+        // Combine with user wallet to prevent cross-user key collisions
+        let full_key = format!("{}:{}", owner, key);
+
+        // Check if we have a cached response
+        if let Ok(Some(cached)) = state.redis.check_idempotency_key(&full_key).await {
+            log::info!("Returning cached response for idempotency key: {}", key);
+            return Ok(HttpResponse::Created()
+                .content_type("application/json")
+                .body(cached));
+        }
+
+        // Try to acquire lock for concurrent request handling
+        match state.redis.acquire_idempotency_lock(&full_key).await {
+            Ok(true) => {
+                // Lock acquired, proceed with order
+            }
+            Ok(false) => {
+                // Another request is processing with same key
+                return Err(ApiError::conflict(
+                    "DUPLICATE_REQUEST",
+                    "Request with this idempotency key is already being processed",
+                ));
+            }
+            Err(e) => {
+                log::error!("Failed to acquire idempotency lock: {}", e);
+                // Fail open - proceed without idempotency protection
+            }
+        }
+    }
 
     // Validate all inputs using centralized validation
     validate_market_id(&body.market_id)?;
@@ -100,8 +160,6 @@ pub async fn place_order(
             ));
         }
     }
-
-    let owner = user.wallet_address;
 
     let now = Utc::now();
     let order_id = Uuid::new_v4().to_string();
@@ -239,7 +297,7 @@ pub async fn place_order(
         .await
         .ok();
 
-    Ok(HttpResponse::Created().json(PlaceOrderResponse {
+    let response = PlaceOrderResponse {
         order_id,
         market_id: body.market_id.clone(),
         side: body.side,
@@ -252,7 +310,18 @@ pub async fn place_order(
         created_at: now,
         expires_at: body.expires_at,
         tx_signature: None,
-    }))
+    };
+
+    // Store idempotency key if provided
+    if let Some(ref key) = idempotency_key {
+        let full_key = format!("{}:{}", owner, key);
+        if let Ok(json) = serde_json::to_string(&response) {
+            state.redis.store_idempotency_key(&full_key, &json).await.ok();
+        }
+        state.redis.release_idempotency_lock(&full_key).await.ok();
+    }
+
+    Ok(HttpResponse::Created().json(response))
 }
 
 /// Cancel an open order

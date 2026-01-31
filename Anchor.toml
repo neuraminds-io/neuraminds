@@ -5,6 +5,11 @@ anchor_version = "0.31.1"
 resolution = true
 skip-lint = false
 
+[programs.mainnet]
+# Generated at deploy time - update after running scripts/deploy-mainnet.sh
+polyguard_market = "98jqxMe88XGjXzCY3bwV1Kuqzj32fcwdhPZa193RUffQ"
+polyguard_orderbook = "59LqZtVU2YBrhv8B2E1iASJMzcyBHWhY2JuaJsCXkAS8"
+
 [programs.devnet]
 polyguard_market = "98jqxMe88XGjXzCY3bwV1Kuqzj32fcwdhPZa193RUffQ"
 polyguard_orderbook = "59LqZtVU2YBrhv8B2E1iASJMzcyBHWhY2JuaJsCXkAS8"

@@ -1,4 +1,5 @@
 pub mod database;
+pub mod logging;
 pub mod solana;
 pub mod orderbook;
 pub mod redis;

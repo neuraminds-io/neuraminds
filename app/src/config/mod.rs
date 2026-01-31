@@ -20,6 +20,12 @@ pub struct AppConfig {
     pub is_development: bool,
     /// Whether to submit transactions to Solana (disable for testing without RPC)
     pub solana_enabled: bool,
+    /// Blindfold Finance webhook secret for signature verification
+    pub blindfold_webhook_secret: String,
+    /// Program vault address for USDC deposits
+    pub program_vault_address: String,
+    /// USDC mint address
+    pub usdc_mint: String,
 }
 
 impl AppConfig {
@@ -93,6 +99,184 @@ impl AppConfig {
             solana_enabled: env::var("SOLANA_ENABLED")
                 .unwrap_or_else(|_| "true".to_string())
                 .to_lowercase() == "true",
+            blindfold_webhook_secret: env::var("BLINDFOLD_WEBHOOK_SECRET").unwrap_or_else(|_| {
+                if is_development {
+                    warn!("SECURITY WARNING: Using default BLINDFOLD_WEBHOOK_SECRET");
+                    "dev-blindfold-secret".to_string()
+                } else {
+                    panic!("SECURITY ERROR: BLINDFOLD_WEBHOOK_SECRET must be set in production");
+                }
+            }),
+            program_vault_address: env::var("PROGRAM_VAULT_ADDRESS")
+                .unwrap_or_else(|_| "".to_string()),
+            usdc_mint: env::var("USDC_MINT")
+                .unwrap_or_else(|_| "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // Global mutex to ensure env var tests run serially
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
+
+    fn with_clean_env<F, R>(f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        let _guard = TEST_MUTEX.lock().unwrap();
+
+        // Save current values
+        let env_vars = [
+            "ENVIRONMENT", "JWT_SECRET", "DATABASE_URL", "CORS_ORIGINS",
+            "HOST", "PORT", "REDIS_URL", "SOLANA_RPC_URL", "SOLANA_WS_URL",
+            "SOLANA_ENABLED"
+        ];
+        let saved: Vec<_> = env_vars.iter()
+            .map(|k| (*k, std::env::var(*k).ok()))
+            .collect();
+
+        // Clear all
+        for k in &env_vars {
+            std::env::remove_var(*k);
+        }
+
+        let result = f();
+
+        // Restore
+        for (k, v) in saved {
+            match v {
+                Some(val) => std::env::set_var(k, val),
+                None => std::env::remove_var(k),
+            }
+        }
+
+        result
+    }
+
+    #[test]
+    fn test_development_mode_defaults() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "development");
+
+            let config = AppConfig::from_env();
+
+            assert!(config.is_development);
+            assert_eq!(config.host, "0.0.0.0");
+            assert_eq!(config.port, 8080);
+            assert!(config.cors_origins.contains(&"*".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_cors_origins_parsing() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "development");
+            std::env::set_var("CORS_ORIGINS", "http://localhost:3000, https://app.example.com");
+
+            let config = AppConfig::from_env();
+
+            assert_eq!(config.cors_origins.len(), 2);
+            assert!(config.cors_origins.contains(&"http://localhost:3000".to_string()));
+            assert!(config.cors_origins.contains(&"https://app.example.com".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_cors_origins_empty_string_filtered() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "development");
+            std::env::set_var("CORS_ORIGINS", "");
+
+            let config = AppConfig::from_env();
+
+            assert!(config.cors_origins.is_empty());
+        });
+    }
+
+    #[test]
+    fn test_solana_enabled_true() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "development");
+            std::env::set_var("SOLANA_ENABLED", "true");
+
+            let config = AppConfig::from_env();
+            assert!(config.solana_enabled);
+        });
+    }
+
+    #[test]
+    fn test_solana_enabled_false() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "development");
+            std::env::set_var("SOLANA_ENABLED", "false");
+
+            let config = AppConfig::from_env();
+            assert!(!config.solana_enabled);
+        });
+    }
+
+    #[test]
+    fn test_solana_enabled_case_insensitive() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "development");
+            std::env::set_var("SOLANA_ENABLED", "TRUE");
+
+            let config = AppConfig::from_env();
+            assert!(config.solana_enabled);
+        });
+    }
+
+    #[test]
+    fn test_custom_host_and_port() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "development");
+            std::env::set_var("HOST", "127.0.0.1");
+            std::env::set_var("PORT", "3000");
+
+            let config = AppConfig::from_env();
+
+            assert_eq!(config.host, "127.0.0.1");
+            assert_eq!(config.port, 3000);
+        });
+    }
+
+    #[test]
+    fn test_custom_redis_url() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "development");
+            std::env::set_var("REDIS_URL", "redis://custom:6380");
+
+            let config = AppConfig::from_env();
+
+            assert_eq!(config.redis_url, "redis://custom:6380");
+        });
+    }
+
+    #[test]
+    fn test_custom_solana_urls() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "development");
+            std::env::set_var("SOLANA_RPC_URL", "https://custom.rpc.com");
+            std::env::set_var("SOLANA_WS_URL", "wss://custom.rpc.com");
+
+            let config = AppConfig::from_env();
+
+            assert_eq!(config.solana_rpc_url, "https://custom.rpc.com");
+            assert_eq!(config.solana_ws_url, "wss://custom.rpc.com");
+        });
+    }
+
+    #[test]
+    fn test_environment_case_insensitive() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "DEVELOPMENT");
+
+            let config = AppConfig::from_env();
+            assert!(config.is_development);
+        });
     }
 }

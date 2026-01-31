@@ -11,6 +11,7 @@ use crate::AppState;
 use super::ApiError;
 use super::auth::extract_jwt_user;
 use super::jwt::UserRole;
+use super::rate_limit::check_market_create_rate_limit;
 
 /// List all markets with filtering
 pub async fn list_markets(
@@ -73,6 +74,9 @@ pub async fn create_market(
     if !matches!(user.role, UserRole::Admin | UserRole::Keeper) {
         return Err(ApiError::forbidden("Only admins and keepers can create markets"));
     }
+
+    // SECURITY: Per-user rate limit (1 market/hour)
+    check_market_create_rate_limit(&user.wallet_address, &state.redis).await?;
 
     // Validate inputs
     if body.market_id.len() > 64 {

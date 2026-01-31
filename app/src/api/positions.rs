@@ -5,6 +5,7 @@ use crate::models::{PositionListResponse, ClaimWinningsResponse, Outcome};
 use crate::AppState;
 use crate::require_auth;
 use super::ApiError;
+use super::rate_limit::check_claim_rate_limit;
 
 /// List all positions for authenticated user
 pub async fn list_positions(
@@ -55,6 +56,9 @@ pub async fn claim_winnings(
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
     let owner = &user.wallet_address;
+
+    // SECURITY: Per-user rate limit (5 claims/min)
+    check_claim_rate_limit(owner, &state.redis).await?;
 
     let market_id = path.into_inner();
 
