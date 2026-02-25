@@ -2,8 +2,8 @@ import { Metadata } from 'next';
 import { CreateMarketForm } from '@/components/market';
 
 export const metadata: Metadata = {
-  title: 'Create Market | PolyBit',
-  description: 'Create a new prediction market on PolyBit',
+  title: 'Create Market | neuraminds',
+  description: 'Create a new prediction market on neuraminds',
 };
 
 export default function CreateMarketPage() {

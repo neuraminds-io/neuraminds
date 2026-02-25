@@ -82,7 +82,7 @@ const CHECKLIST: ChecklistCategory[] = [
         status: 'complete',
         priority: 'high',
         category: 'Smart Contract Security',
-        notes: 'Fuzz tests added in programs/polybit-orderbook/fuzz/',
+        notes: 'Fuzz tests added in programs/orderbook/fuzz/',
       },
     ],
   },

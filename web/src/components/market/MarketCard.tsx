@@ -54,7 +54,7 @@ export function MarketCard({ market }: MarketCardProps) {
                 loading="lazy"
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-accent/20 to-purple-500/20" />
+              <div className="w-full h-full bg-gradient-to-br from-accent/20 to-[#ff8b5f]/20" />
             )}
           </div>
           <h3 className="font-medium text-text-primary text-sm leading-snug line-clamp-2 group-hover:text-accent transition-colors">

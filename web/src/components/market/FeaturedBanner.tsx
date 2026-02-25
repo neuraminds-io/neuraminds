@@ -12,13 +12,13 @@ export interface FeaturedBannerProps {
 }
 
 // Generate mock timeframe data for a market
-// Using purple-based colors consistent with design system
+// Using orange-forward colors consistent with design system
 function generateTimeframes(market: Market) {
   const yesPercent = Math.round(market.yesPrice * 100);
   return [
-    { label: 'Before January 21, 2029', percent: yesPercent, color: '#8b5cf6' },      // yes color (violet)
-    { label: 'Before 2027', percent: Math.max(10, yesPercent - 21), color: '#6366f1' }, // no color (indigo)
-    { label: 'Before April 2026', percent: Math.max(5, yesPercent - 43), color: '#a855f7' }, // accent purple
+    { label: 'Before January 21, 2029', percent: yesPercent, color: '#ff5a1f' },      // yes color (primary orange)
+    { label: 'Before 2027', percent: Math.max(10, yesPercent - 21), color: '#ff8b5f' }, // no color (indigo)
+    { label: 'Before April 2026', percent: Math.max(5, yesPercent - 43), color: '#ffd2bf' }, // accent amber
   ];
 }
 
@@ -163,9 +163,9 @@ function BannerCard({ market }: { market: Market }) {
   return (
     <div className="relative bg-bg-primary/80 backdrop-blur-sm rounded-2xl p-6 lg:p-8 overflow-hidden min-h-[420px] border border-border/50">
       {/* Gradient shadow background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-transparent to-purple-500/10 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-transparent to-[#ff8b5f]/12 pointer-events-none" />
       <div className="absolute -top-24 -right-24 w-64 h-64 bg-accent/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-purple-500/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-[#ff8b5f]/15 rounded-full blur-3xl pointer-events-none" />
       <div className="relative flex flex-col lg:flex-row gap-8 h-full">
         {/* Left side - Market info */}
         <div className="lg:w-[420px] flex flex-col">

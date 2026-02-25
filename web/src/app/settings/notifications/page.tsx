@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { NotificationSettings } from '@/components/notifications';
 
 export const metadata: Metadata = {
-  title: 'Notification Settings | PolyBit',
+  title: 'Notification Settings | neuraminds',
   description: 'Manage your notification preferences',
 };
 

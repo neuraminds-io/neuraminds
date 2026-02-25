@@ -1,8 +1,8 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy | PolyBit',
-  description: 'Privacy Policy for PolyBit prediction markets platform',
+  title: 'Privacy Policy | neuraminds',
+  description: 'Privacy Policy for neuraminds prediction markets platform',
 };
 
 export default function PrivacyPolicyPage() {
@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
             1. Introduction
           </h2>
           <p>
-            PolyBit (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) respects your privacy and is committed to
+            neuraminds (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) respects your privacy and is committed to
             protecting your personal data. This privacy policy explains how we collect,
             use, and share information about you when you use our platform.
           </p>
@@ -163,8 +163,8 @@ export default function PrivacyPolicyPage() {
           </h2>
           <p>
             For privacy-related inquiries, contact us at{' '}
-            <a href="mailto:privacy@polybit.cc" className="text-accent hover:underline">
-              privacy@polybit.cc
+            <a href="mailto:privacy@neuraminds.ai" className="text-accent hover:underline">
+              privacy@neuraminds.ai
             </a>
           </p>
         </section>

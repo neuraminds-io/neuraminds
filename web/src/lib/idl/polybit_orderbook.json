@@ -4,7 +4,7 @@
     "name": "polybit_orderbook",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "PolyBit OrderBook - Order placement, matching, and settlement"
+    "description": "neuraminds OrderBook - Order placement, matching, and settlement"
   },
   "instructions": [
     {

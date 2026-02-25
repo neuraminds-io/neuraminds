@@ -36,7 +36,7 @@ function ConnectWalletButton() {
       onClick={handleClick}
       className={cn(
         'h-9 px-5 rounded-full text-sm font-medium',
-        'bg-gradient-to-r from-accent to-[#a855f7]',
+        'bg-gradient-to-r from-accent to-[#ff8b5f]',
         'text-white',
         'hover:opacity-90 hover:shadow-lg hover:shadow-accent/25',
         'transition-all cursor-pointer'
@@ -60,14 +60,14 @@ export function Header() {
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2 group">
               <Image
-                src="/polybit-logo.svg"
-                alt="PolyBit"
+                src="/neuraminds.svg"
+                alt="neuraminds"
                 width={28}
                 height={28}
                 className="w-7 h-7"
               />
               <span className="font-semibold text-lg text-text-primary">
-                PolyBit
+                neuraminds
               </span>
             </Link>
 

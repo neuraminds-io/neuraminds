@@ -4,7 +4,7 @@
     "name": "polybit_market",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "PolyBit Market Factory - Prediction market creation and resolution"
+    "description": "neuraminds Market Factory - Prediction market creation and resolution"
   },
   "instructions": [
     {

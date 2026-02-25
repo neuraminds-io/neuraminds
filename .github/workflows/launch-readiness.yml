@@ -1,0 +1,67 @@
+name: Launch Readiness
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "web/**"
+      - "scripts/**"
+      - "docs/**"
+      - ".github/workflows/launch-readiness.yml"
+      - "package.json"
+      - "package-lock.json"
+
+concurrency:
+  group: launch-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  readiness:
+    name: Readiness Gates
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_API_URL: https://api.neuraminds.ai/v1
+      NEXT_PUBLIC_RPC_URL: https://api.mainnet-beta.solana.com
+      AUTH_ALLOWED_ORIGINS: https://app.neuraminds.ai
+      CORS_ORIGINS: https://app.neuraminds.ai
+      SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
+      SOLANA_WS_URL: wss://api.mainnet-beta.solana.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install web dependencies
+        run: npm ci --prefix web
+
+      - name: Validate launch config
+        run: npm run launch:config:soft
+
+      - name: Run strict production gates
+        env:
+          PRODUCTION_GATE_TIMEOUT_MS: "900000"
+        run: npm run production:gates:strict
+
+      - name: Generate launch summary
+        run: npm run launch:summary
+
+      - name: Upload readiness reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: launch-readiness-reports
+          path: |
+            docs/reports/*.json
+            docs/reports/*.md
+          if-no-files-found: warn

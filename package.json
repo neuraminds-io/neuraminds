@@ -1,11 +1,19 @@
 {
-  "name": "polyguard",
+  "name": "neuralminds",
   "version": "0.1.0",
-  "description": "Privacy-first prediction market on Solana",
+  "description": "Autonomous market infrastructure on Solana",
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
-    "test": "anchor test"
+    "test": "anchor test",
+    "launch:config": "node scripts/validate-launch-config.mjs --mode=production --write-report",
+    "launch:config:soft": "node scripts/validate-launch-config.mjs --mode=production --allow-missing-secrets --write-report",
+    "launch:readiness": "bash scripts/launch-readiness.sh --mode=production --allow-missing-secrets",
+    "launch:readiness:strict": "bash scripts/launch-readiness.sh --strict --mode=production --allow-missing-secrets",
+    "launch:summary": "node scripts/generate-launch-summary.mjs",
+    "launch:e2e": "npm run launch:readiness && npm run production:gates",
+    "production:gates": "node scripts/production-loop-report.mjs",
+    "production:gates:strict": "node scripts/production-loop-report.mjs --strict"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",

@@ -1,8 +1,8 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Risk Disclaimer | PolyBit',
-  description: 'Risk Disclaimer for PolyBit prediction markets platform',
+  title: 'Risk Disclaimer | neuraminds',
+  description: 'Risk Disclaimer for neuraminds prediction markets platform',
 };
 
 export default function DisclaimerPage() {

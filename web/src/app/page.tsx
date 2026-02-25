@@ -53,7 +53,7 @@ export default function HomePage() {
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer',
                   sortTab === 'trending'
-                    ? '[&>span]:bg-gradient-to-r [&>span]:from-accent [&>span]:to-[#a855f7] [&>span]:bg-clip-text [&>span]:text-transparent [&>svg]:text-accent'
+                    ? '[&>span]:bg-gradient-to-r [&>span]:from-accent [&>span]:to-[#ff8b5f] [&>span]:bg-clip-text [&>span]:text-transparent [&>svg]:text-accent'
                     : 'text-text-secondary hover:bg-bg-hover'
                 )}
               >
@@ -65,7 +65,7 @@ export default function HomePage() {
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer',
                   sortTab === 'new'
-                    ? '[&>span]:bg-gradient-to-r [&>span]:from-accent [&>span]:to-[#a855f7] [&>span]:bg-clip-text [&>span]:text-transparent [&>svg]:text-accent'
+                    ? '[&>span]:bg-gradient-to-r [&>span]:from-accent [&>span]:to-[#ff8b5f] [&>span]:bg-clip-text [&>span]:text-transparent [&>svg]:text-accent'
                     : 'text-text-secondary hover:bg-bg-hover'
                 )}
               >

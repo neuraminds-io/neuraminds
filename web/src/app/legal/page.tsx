@@ -3,14 +3,14 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 
 export const metadata: Metadata = {
-  title: 'Legal | PolyBit',
-  description: 'Legal information for PolyBit prediction markets platform',
+  title: 'Legal | neuraminds',
+  description: 'Legal information for neuraminds prediction markets platform',
 };
 
 const legalPages = [
   {
     title: 'Terms of Service',
-    description: 'Rules and conditions for using the PolyBit platform',
+    description: 'Rules and conditions for using the neuraminds platform',
     href: '/legal/terms',
   },
   {

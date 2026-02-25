@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { SecurityAuditChecklist } from '@/components/admin/SecurityAuditChecklist';
 
 export const metadata: Metadata = {
-  title: 'Security Audit | PolyBit Admin',
+  title: 'Security Audit | neuraminds Admin',
   description: 'Security audit checklist and preparation',
 };
 

@@ -9,6 +9,7 @@ const withPWA = require('next-pwa')({
 
 const nextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
 
   images: {
     // Modern formats for better compression
@@ -50,15 +51,15 @@ const nextConfig = {
         hostname: 'gateway.pinata.cloud',
         pathname: '/ipfs/**',
       },
-      // Polyguard CDN (if used)
+      // CDN domains
       {
         protocol: 'https',
-        hostname: 'cdn.polybit.cc',
+        hostname: 'cdn.neuraminds.ai',
         pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: 'assets.polybit.cc',
+        hostname: 'assets.neuraminds.ai',
         pathname: '/**',
       },
     ],
@@ -84,6 +85,37 @@ const nextConfig = {
       tls: false,
     };
     return config;
+  },
+
+  async headers() {
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data: https:",
+      "connect-src 'self' https: wss:",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join('; ');
+
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=(), payment=()',
+          },
+          { key: 'Content-Security-Policy', value: csp },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' },
+        ],
+      },
+    ];
   },
 };
 

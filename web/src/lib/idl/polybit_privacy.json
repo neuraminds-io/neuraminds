@@ -4,7 +4,7 @@
     "name": "polybit_privacy",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "PolyBit Privacy Layer - Confidential trading with Arcium MPC"
+    "description": "neuraminds Privacy Layer - Confidential trading with Arcium MPC"
   },
   "docs": [
     "Privacy Layer",
