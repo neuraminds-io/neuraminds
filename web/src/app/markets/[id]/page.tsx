@@ -3,16 +3,20 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { useBaseWallet } from '@/hooks/useBaseWallet';
 import { PageShell } from '@/components/layout';
 import { LoadingScreen } from '@/components/ui';
 import { MarketHeader, MarketStats, MarketInfo } from '@/components/market';
 import { OrderForm, OrderBookDisplay, OrderList } from '@/components/order';
 import { useMarket } from '@/hooks';
+import { CHAIN_MODE } from '@/lib/constants';
 
 export default function MarketDetailPage() {
   const params = useParams();
   const marketId = params.id as string;
   const { connected } = useWallet();
+  const baseWallet = useBaseWallet();
+  const walletConnected = CHAIN_MODE === 'base' ? baseWallet.isConnected : connected;
 
   const { data: market, isLoading, error } = useMarket(marketId);
 
@@ -52,7 +56,7 @@ export default function MarketDetailPage() {
 
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
         {market.status === 'active' ? (
-          connected ? (
+          walletConnected ? (
             <OrderForm market={market} />
           ) : (
             <div className="card flex items-center justify-center py-12">
@@ -68,7 +72,7 @@ export default function MarketDetailPage() {
         <OrderBookDisplay marketId={marketId} />
       </div>
 
-      {connected && (
+      {walletConnected && (
         <div className="mb-6">
           <h3 className="font-semibold mb-4">Your Orders</h3>
           <OrderList marketId={marketId} />

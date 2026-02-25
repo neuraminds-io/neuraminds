@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -30,7 +30,7 @@ export function OrderHistory({ marketId }: OrderHistoryProps) {
   const [filter, setFilter] = useState<'all' | 'open' | 'closed'>('all');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.getOrders({ marketId, limit: 50 });
@@ -40,11 +40,11 @@ export function OrderHistory({ marketId }: OrderHistoryProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [marketId]);
 
   useEffect(() => {
-    fetchOrders();
-  }, [marketId]);
+    void fetchOrders();
+  }, [fetchOrders]);
 
   const handleCancel = async (orderId: string) => {
     setCancellingId(orderId);
@@ -98,7 +98,7 @@ export function OrderHistory({ marketId }: OrderHistoryProps) {
                 type="button"
                 onClick={() => setFilter(f)}
                 className={cn(
-                  'px-3 py-1 text-sm rounded-md transition-colors duration-fast cursor-pointer capitalize',
+                  'px-3 py-1 text-sm  transition-colors duration-fast cursor-pointer capitalize',
                   filter === f
                     ? 'bg-accent text-white'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-secondary'
@@ -130,12 +130,12 @@ export function OrderHistory({ marketId }: OrderHistoryProps) {
               return (
                 <div
                   key={order.id}
-                  className="flex items-center justify-between p-4 rounded-lg bg-bg-secondary"
+                  className="flex items-center justify-between p-4  bg-bg-secondary"
                 >
                   <div className="flex items-center gap-4">
                     <div
                       className={cn(
-                        'w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium',
+                        'w-10 h-10  flex items-center justify-center text-sm font-medium',
                         isBuy ? 'bg-bid/10 text-bid' : 'bg-ask/10 text-ask'
                       )}
                     >

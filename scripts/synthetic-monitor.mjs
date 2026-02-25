@@ -56,7 +56,7 @@ function markdownEscape(value) {
 }
 
 function usage() {
-  console.log('usage: node scripts/synthetic-monitor.mjs --env <name> --api-url <url> [--web-url <url>] [--timeout-ms <ms>]');
+  console.log('usage: node scripts/synthetic-monitor.mjs --env <name> --api-url <url> [--web-url <url>] [--chain-mode base|solana|dual] [--timeout-ms <ms>]');
 }
 
 async function fetchWithTimeout(url, timeoutMs, acceptJson = true) {
@@ -115,8 +115,15 @@ async function run() {
   const timeoutMs = Number(args['timeout-ms'] || 10_000);
   const apiUrl = args['api-url'] ? normalizeBaseUrl(String(args['api-url'])) : '';
   const webUrl = args['web-url'] ? normalizeBaseUrl(String(args['web-url'])) : '';
+  const chainMode = String(args['chain-mode'] || process.env.CHAIN_MODE || 'base').toLowerCase();
 
   if (!apiUrl) {
+    usage();
+    process.exit(1);
+  }
+
+  if (!['base', 'solana', 'dual'].includes(chainMode)) {
+    console.error(`invalid --chain-mode: ${chainMode}`);
     usage();
     process.exit(1);
   }
@@ -159,6 +166,9 @@ async function run() {
     });
   }
 
+  const requiresSolana = chainMode === 'solana' || chainMode === 'dual';
+  const requiresBase = chainMode === 'base' || chainMode === 'dual';
+
   const detailed = await fetchWithTimeout(`${apiUrl}/health/detailed`, timeoutMs);
   if (!detailed.ok) {
     checks.push({
@@ -171,46 +181,152 @@ async function run() {
     });
   } else {
     const payload = parseJsonOrNull(detailed.bodyText);
-    const components = payload?.components || {};
+    const components = payload?.checks || payload?.components || {};
     const componentStatuses = {
       database: components.database?.status,
       redis: components.redis?.status,
       solana: components.solana?.status,
+      base: components.base?.status,
     };
-    const healthyComponents = Object.values(componentStatuses).every((value) => value === 'healthy');
-    const pass = detailed.status === 200 && healthyComponents;
+    const componentMessages = {
+      database: String(components.database?.message || ''),
+      redis: String(components.redis?.message || ''),
+      solana: String(components.solana?.message || ''),
+      base: String(components.base?.message || ''),
+    };
+    const disabled = {
+      solana: componentMessages.solana.toLowerCase().includes('disabled'),
+      base: componentMessages.base.toLowerCase().includes('disabled'),
+    };
+    const requiredComponents = ['database', 'redis'];
+    if (requiresSolana) requiredComponents.push('solana');
+    if (requiresBase) requiredComponents.push('base');
+
+    const healthyRequiredComponents = requiredComponents.every((name) => {
+      if (name === 'solana' && disabled.solana) return false;
+      if (name === 'base' && disabled.base) return false;
+      return componentStatuses[name] === 'healthy';
+    });
+    const pass = detailed.status === 200 && healthyRequiredComponents;
+
     checks.push({
       id: 'api_health_detailed',
       required: true,
       status: pass ? 'pass' : 'fail',
       latencyMs: detailed.latencyMs,
-      details: `http=${detailed.status} db=${componentStatuses.database ?? 'unknown'} redis=${componentStatuses.redis ?? 'unknown'} solana=${componentStatuses.solana ?? 'unknown'}`,
+      details: `http=${detailed.status} db=${componentStatuses.database ?? 'unknown'} redis=${componentStatuses.redis ?? 'unknown'} solana=${componentStatuses.solana ?? 'unknown'} base=${componentStatuses.base ?? 'unknown'} mode=${chainMode}`,
       url: `${apiUrl}/health/detailed`,
     });
   }
 
-  const markets = await fetchWithTimeout(`${apiUrl}/v1/markets?limit=1`, timeoutMs);
-  if (!markets.ok) {
-    checks.push({
-      id: 'api_markets_public',
-      required: true,
-      status: 'fail',
-      latencyMs: markets.latencyMs,
-      details: `request failed: ${markets.error}`,
-      url: `${apiUrl}/v1/markets?limit=1`,
-    });
-  } else {
-    const payload = parseJsonOrNull(markets.bodyText);
-    const hasArray = Array.isArray(payload?.markets);
-    const pass = markets.status === 200 && hasArray;
-    checks.push({
-      id: 'api_markets_public',
-      required: true,
-      status: pass ? 'pass' : 'fail',
-      latencyMs: markets.latencyMs,
-      details: pass ? `marketCount=${payload.markets.length}` : `http=${markets.status} marketsArray=${hasArray}`,
-      url: `${apiUrl}/v1/markets?limit=1`,
-    });
+  if (requiresSolana) {
+    const markets = await fetchWithTimeout(`${apiUrl}/v1/markets?limit=1`, timeoutMs);
+    if (!markets.ok) {
+      checks.push({
+        id: 'api_markets_public',
+        required: true,
+        status: 'fail',
+        latencyMs: markets.latencyMs,
+        details: `request failed: ${markets.error}`,
+        url: `${apiUrl}/v1/markets?limit=1`,
+      });
+    } else {
+      const payload = parseJsonOrNull(markets.bodyText);
+      const hasArray = Array.isArray(payload?.markets);
+      const pass = markets.status === 200 && hasArray;
+      checks.push({
+        id: 'api_markets_public',
+        required: true,
+        status: pass ? 'pass' : 'fail',
+        latencyMs: markets.latencyMs,
+        details: pass ? `marketCount=${payload.markets.length}` : `http=${markets.status} marketsArray=${hasArray}`,
+        url: `${apiUrl}/v1/markets?limit=1`,
+      });
+    }
+  }
+
+  if (requiresBase) {
+    const evmMarkets = await fetchWithTimeout(`${apiUrl}/v1/evm/markets?limit=1`, timeoutMs);
+    if (!evmMarkets.ok) {
+      checks.push({
+        id: 'api_evm_markets_public',
+        required: true,
+        status: 'fail',
+        latencyMs: evmMarkets.latencyMs,
+        details: `request failed: ${evmMarkets.error}`,
+        url: `${apiUrl}/v1/evm/markets?limit=1`,
+      });
+    } else {
+      const payload = parseJsonOrNull(evmMarkets.bodyText);
+      const hasArray = Array.isArray(payload?.markets);
+      const pass = evmMarkets.status === 200 && hasArray;
+      checks.push({
+        id: 'api_evm_markets_public',
+        required: true,
+        status: pass ? 'pass' : 'fail',
+        latencyMs: evmMarkets.latencyMs,
+        details: pass
+          ? `marketCount=${payload.markets.length}`
+          : `http=${evmMarkets.status} marketsArray=${hasArray}`,
+        url: `${apiUrl}/v1/evm/markets?limit=1`,
+      });
+    }
+
+    const evmOrderbook = await fetchWithTimeout(
+      `${apiUrl}/v1/evm/markets/1/orderbook?outcome=yes&depth=5`,
+      timeoutMs
+    );
+    if (!evmOrderbook.ok) {
+      checks.push({
+        id: 'api_evm_orderbook_smoke',
+        required: true,
+        status: 'fail',
+        latencyMs: evmOrderbook.latencyMs,
+        details: `request failed: ${evmOrderbook.error}`,
+        url: `${apiUrl}/v1/evm/markets/1/orderbook?outcome=yes&depth=5`,
+      });
+    } else {
+      const payload = parseJsonOrNull(evmOrderbook.bodyText);
+      const pass = evmOrderbook.status === 200 && Array.isArray(payload?.bids) && Array.isArray(payload?.asks);
+      checks.push({
+        id: 'api_evm_orderbook_smoke',
+        required: true,
+        status: pass ? 'pass' : 'fail',
+        latencyMs: evmOrderbook.latencyMs,
+        details: pass
+          ? `bids=${payload.bids.length} asks=${payload.asks.length}`
+          : `http=${evmOrderbook.status}`,
+        url: `${apiUrl}/v1/evm/markets/1/orderbook?outcome=yes&depth=5`,
+      });
+    }
+
+    const evmTrades = await fetchWithTimeout(
+      `${apiUrl}/v1/evm/markets/1/trades?limit=1`,
+      timeoutMs
+    );
+    if (!evmTrades.ok) {
+      checks.push({
+        id: 'api_evm_trades_smoke',
+        required: true,
+        status: 'fail',
+        latencyMs: evmTrades.latencyMs,
+        details: `request failed: ${evmTrades.error}`,
+        url: `${apiUrl}/v1/evm/markets/1/trades?limit=1`,
+      });
+    } else {
+      const payload = parseJsonOrNull(evmTrades.bodyText);
+      const pass = evmTrades.status === 200 && Array.isArray(payload?.trades);
+      checks.push({
+        id: 'api_evm_trades_smoke',
+        required: true,
+        status: pass ? 'pass' : 'fail',
+        latencyMs: evmTrades.latencyMs,
+        details: pass
+          ? `tradeCount=${payload.trades.length}`
+          : `http=${evmTrades.status}`,
+        url: `${apiUrl}/v1/evm/markets/1/trades?limit=1`,
+      });
+    }
   }
 
   if (webUrl) {
@@ -246,6 +362,7 @@ async function run() {
     targets: {
       apiUrl,
       webUrl: webUrl || null,
+      chainMode,
     },
     summary: {
       total: checks.length,
@@ -264,6 +381,7 @@ async function run() {
     `Generated: ${report.generatedAt}`,
     `API: ${apiUrl}`,
     webUrl ? `Web: ${webUrl}` : 'Web: (not set)',
+    `Chain mode: ${chainMode}`,
     '',
     `Decision: ${report.summary.ready ? 'PASS' : 'FAIL'}`,
     '',

@@ -43,7 +43,7 @@ function MarketsContent() {
               <button
                 onClick={() => setSortTab('trending')}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer',
+                  'flex items-center gap-1.5 px-3 py-1.5  text-sm font-medium transition-colors cursor-pointer',
                   sortTab === 'trending'
                     ? 'bg-accent text-white'
                     : 'text-text-secondary hover:bg-bg-hover'
@@ -55,7 +55,7 @@ function MarketsContent() {
               <button
                 onClick={() => setSortTab('new')}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer',
+                  'flex items-center gap-1.5 px-3 py-1.5  text-sm font-medium transition-colors cursor-pointer',
                   sortTab === 'new'
                     ? 'bg-accent text-white'
                     : 'text-text-secondary hover:bg-bg-hover'
@@ -67,7 +67,7 @@ function MarketsContent() {
               <button
                 onClick={() => setSortTab('ending')}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer',
+                  'flex items-center gap-1.5 px-3 py-1.5  text-sm font-medium transition-colors cursor-pointer',
                   sortTab === 'ending'
                     ? 'bg-accent text-white'
                     : 'text-text-secondary hover:bg-bg-hover'
@@ -87,7 +87,7 @@ function MarketsContent() {
                   key={cat}
                   onClick={() => setCategory(cat)}
                   className={cn(
-                    'px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors cursor-pointer',
+                    'px-3 py-1.5  text-sm font-medium whitespace-nowrap transition-colors cursor-pointer',
                     category === cat
                       ? 'bg-bg-tertiary text-text-primary'
                       : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
@@ -133,7 +133,7 @@ function MarketsLoading() {
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-3">
           <div className="flex gap-2">
             {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-8 w-20 rounded-lg" />
+              <Skeleton key={i} className="h-8 w-20 " />
             ))}
           </div>
         </div>
@@ -142,7 +142,7 @@ function MarketsLoading() {
         <Skeleton className="h-8 w-48 mb-6" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-40 rounded-xl" />
+            <Skeleton key={i} className="h-40 " />
           ))}
         </div>
       </div>

@@ -39,8 +39,18 @@ pub async fn health_detailed(
     // Check Solana RPC health
     let solana_health = check_solana_health(&state).await;
 
+    // Check Base RPC health
+    let base_health = check_base_health(&state).await;
+
     // Determine overall status
-    let overall_status = determine_overall_status(&db_health, &redis_health, &solana_health);
+    let overall_status = determine_overall_status(
+        &db_health,
+        &redis_health,
+        &solana_health,
+        &base_health,
+        state.config.solana_enabled,
+        state.config.evm_enabled,
+    );
 
     let health = SystemHealth {
         status: overall_status,
@@ -50,6 +60,7 @@ pub async fn health_detailed(
             database: db_health,
             redis: redis_health,
             solana: solana_health,
+            base: base_health,
         },
     };
 
@@ -120,6 +131,10 @@ async fn check_redis_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth
 }
 
 async fn check_solana_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth {
+    if !state.config.solana_enabled {
+        return ComponentHealth::disabled("Solana integration disabled");
+    }
+
     let start = Instant::now();
 
     // Try to get keeper balance as a health check
@@ -137,10 +152,61 @@ async fn check_solana_health(state: &web::Data<Arc<AppState>>) -> ComponentHealt
     }
 }
 
+#[derive(serde::Deserialize)]
+struct BaseBlockNumberResponse {
+    result: Option<String>,
+}
+
+async fn check_base_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth {
+    if !state.config.evm_enabled {
+        return ComponentHealth::disabled("Base integration disabled");
+    }
+
+    let start = Instant::now();
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_blockNumber",
+        "params": []
+    });
+
+    let response = reqwest::Client::new()
+        .post(&state.config.base_rpc_url)
+        .json(&body)
+        .send()
+        .await;
+
+    let latency_ms = start.elapsed().as_millis() as u64;
+    let Ok(response) = response else {
+        return ComponentHealth::unhealthy("Base RPC request failed");
+    };
+    if !response.status().is_success() {
+        return ComponentHealth::unhealthy("Base RPC returned non-success status");
+    }
+
+    let payload = response.json::<BaseBlockNumberResponse>().await;
+    let Ok(payload) = payload else {
+        return ComponentHealth::unhealthy("Failed to decode Base RPC response");
+    };
+
+    if payload.result.is_none() {
+        return ComponentHealth::unhealthy("Base RPC response missing block number");
+    }
+
+    if latency_ms > 2000 {
+        ComponentHealth::degraded(latency_ms, "High RPC latency")
+    } else {
+        ComponentHealth::healthy(latency_ms)
+    }
+}
+
 fn determine_overall_status(
     db: &ComponentHealth,
     redis: &ComponentHealth,
     solana: &ComponentHealth,
+    base: &ComponentHealth,
+    solana_enabled: bool,
+    evm_enabled: bool,
 ) -> HealthStatus {
     // If any critical component is unhealthy, overall is unhealthy
     if db.status == HealthStatus::Unhealthy {
@@ -148,15 +214,22 @@ fn determine_overall_status(
     }
 
     // If any component is degraded, overall is degraded
-    if db.status == HealthStatus::Degraded
-        || redis.status == HealthStatus::Degraded
-        || solana.status == HealthStatus::Degraded
+    if db.status == HealthStatus::Degraded || redis.status == HealthStatus::Degraded {
+        return HealthStatus::Degraded;
+    }
+
+    if solana_enabled
+        && (solana.status == HealthStatus::Degraded || solana.status == HealthStatus::Unhealthy)
     {
         return HealthStatus::Degraded;
     }
 
-    // Redis/Solana being unhealthy means degraded (not fully down)
-    if redis.status == HealthStatus::Unhealthy || solana.status == HealthStatus::Unhealthy {
+    if evm_enabled && (base.status == HealthStatus::Degraded || base.status == HealthStatus::Unhealthy)
+    {
+        return HealthStatus::Degraded;
+    }
+
+    if redis.status == HealthStatus::Unhealthy {
         return HealthStatus::Degraded;
     }
 

@@ -82,7 +82,7 @@ function ToastItem({ toast, onClose }: ToastItemProps) {
   return (
     <div
       className={cn(
-        'flex items-center gap-3 px-4 py-3 rounded-lg text-white shadow-lg animate-slide-in',
+        'flex items-center gap-3 px-4 py-3  text-white shadow-lg animate-slide-in',
         bgColor
       )}
     >

@@ -11,17 +11,17 @@ export interface MarketListProps {
 
 function MarketCardSkeleton() {
   return (
-    <div className="bg-bg-primary rounded-xl border border-border p-4">
+    <div className="bg-bg-primary  border border-border p-4">
       <div className="flex items-start gap-3 mb-3">
-        <Skeleton className="w-10 h-10 rounded-lg" />
+        <Skeleton className="w-10 h-10 " />
         <div className="flex-1 space-y-2">
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-3/4" />
         </div>
       </div>
       <div className="flex gap-2">
-        <Skeleton className="h-9 flex-1 rounded-lg" />
-        <Skeleton className="h-9 flex-1 rounded-lg" />
+        <Skeleton className="h-9 flex-1 " />
+        <Skeleton className="h-9 flex-1 " />
       </div>
     </div>
   );

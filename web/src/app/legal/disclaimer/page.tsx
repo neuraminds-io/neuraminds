@@ -11,7 +11,7 @@ export default function DisclaimerPage() {
       <h1 className="text-3xl font-bold text-text-primary mb-8">Risk Disclaimer</h1>
 
       <div className="prose prose-invert max-w-none space-y-6 text-text-secondary">
-        <div className="p-4 rounded-lg bg-ask/10 border border-ask/20 mb-8">
+        <div className="p-4  bg-ask/10 border border-ask/20 mb-8">
           <p className="text-ask font-medium">
             IMPORTANT: Trading on prediction markets involves substantial risk of loss.
             Only trade with funds you can afford to lose.
@@ -35,7 +35,7 @@ export default function DisclaimerPage() {
             Cryptocurrency Volatility
           </h2>
           <p>
-            The platform operates with USDC on the Solana blockchain. While USDC is
+            The platform operates with USDC on the Base blockchain. While USDC is
             designed to maintain a stable value, cryptocurrency markets are inherently
             volatile. Network congestion, smart contract issues, or market conditions may
             affect your ability to deposit, withdraw, or trade.
@@ -47,7 +47,7 @@ export default function DisclaimerPage() {
             Smart Contract Risk
           </h2>
           <p>
-            The platform relies on smart contracts deployed on the Solana blockchain.
+            The platform relies on smart contracts deployed on Base.
             While these contracts have been tested, there is no guarantee they are free
             from bugs or vulnerabilities. Exploits or bugs could result in loss of funds.
           </p>
@@ -124,7 +124,7 @@ export default function DisclaimerPage() {
           </ul>
         </section>
 
-        <section className="mt-8 p-4 rounded-lg bg-bg-secondary">
+        <section className="mt-8 p-4  bg-bg-secondary">
           <p className="text-sm">
             If you do not understand these risks or do not agree with this disclaimer,
             please do not use the platform.

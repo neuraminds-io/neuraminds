@@ -53,7 +53,7 @@ export function NotificationBell() {
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'relative p-2 rounded-lg transition-colors duration-fast cursor-pointer',
+          'relative p-2  transition-colors duration-fast cursor-pointer',
           'text-text-secondary hover:text-text-primary hover:bg-bg-secondary',
           'focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-bg-primary',
           isOpen && 'bg-bg-secondary text-text-primary'
@@ -79,7 +79,7 @@ export function NotificationBell() {
 
         {unreadCount > 0 && (
           <span
-            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-xs font-medium bg-accent text-white rounded-full"
+            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-xs font-medium bg-accent text-white "
             aria-hidden="true"
           >
             {displayCount > 99 ? '99+' : displayCount}

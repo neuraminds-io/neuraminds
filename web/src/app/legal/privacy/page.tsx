@@ -52,7 +52,7 @@ export default function PrivacyPolicyPage() {
             2.3 Blockchain Data
           </h3>
           <p>
-            All transactions on the Solana blockchain are public and permanent. This
+            All transactions on Base are public and permanent. This
             includes your wallet address, transaction amounts, and trading history. This
             data is not controlled by us and is inherent to blockchain technology.
           </p>

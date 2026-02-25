@@ -21,17 +21,16 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const baseStyles = cn(
-      'inline-flex items-center justify-center font-medium rounded-lg',
+      'inline-flex items-center justify-center font-medium',
       'transition-all duration-fast ease-out',
       'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
-      'active:scale-[0.98]',
       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base'
     );
 
     const variants = {
       primary: cn(
         'bg-accent text-white',
-        'hover:bg-accent-hover hover:shadow-glow'
+        'hover:bg-accent-hover'
       ),
       secondary: cn(
         'bg-bg-secondary text-text-primary',
@@ -47,7 +46,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ),
       success: cn(
         'bg-accent text-white',
-        'hover:bg-accent-hover hover:shadow-glow'
+        'hover:bg-accent-hover'
       ),
       danger: cn(
         'bg-bg-tertiary text-text-primary',
@@ -55,11 +54,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ),
       bid: cn(
         'bg-bid text-white font-semibold',
-        'hover:bg-bid-hover hover:shadow-glow'
+        'hover:bg-bid-hover'
       ),
       ask: cn(
         'bg-ask text-white font-semibold',
-        'hover:bg-ask-hover hover:shadow-glow'
+        'hover:bg-ask-hover'
       ),
     };
 

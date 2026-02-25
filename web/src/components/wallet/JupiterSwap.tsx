@@ -118,7 +118,7 @@ export function JupiterSwap({ onSuccess, onError }: JupiterSwapProps) {
 
   return (
     <div className="space-y-4">
-      <div className="p-4 rounded-lg bg-bg-secondary">
+      <div className="p-4  bg-bg-secondary">
         <p className="text-sm text-text-secondary mb-2">
           Swap any token to USDC using Jupiter
         </p>
@@ -132,7 +132,7 @@ export function JupiterSwap({ onSuccess, onError }: JupiterSwapProps) {
       <div
         ref={containerRef}
         id="jupiter-swap-container"
-        className="min-h-[400px] rounded-lg overflow-hidden"
+        className="min-h-[400px]  overflow-hidden"
       />
     </div>
   );

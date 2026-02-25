@@ -56,7 +56,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 export function ErrorMessage({ message }: { message: string }) {
   return (
     <div className="text-center py-8">
-      <div className="w-12 h-12 bg-bg-tertiary rounded-full flex items-center justify-center mx-auto mb-4">
+      <div className="w-12 h-12 bg-bg-tertiary  flex items-center justify-center mx-auto mb-4">
         <svg
           className="w-6 h-6 text-text-muted"
           fill="none"

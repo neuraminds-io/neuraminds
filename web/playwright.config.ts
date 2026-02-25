@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = process.env.PORT || 3001;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const isLocalBaseUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(BASE_URL);
 
 export default defineConfig({
   testDir: './e2e',
@@ -41,12 +42,14 @@ export default defineConfig({
       use: { ...devices['iPhone 12'] },
     },
   ],
-  webServer: {
-    command: 'npm run start -- -p 3001',
-    url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-    stdout: 'ignore',
-    stderr: 'pipe',
-  },
+  webServer: isLocalBaseUrl
+    ? {
+        command: 'npm run start -- -p 3001',
+        url: BASE_URL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120 * 1000,
+        stdout: 'ignore',
+        stderr: 'pipe',
+      }
+    : undefined,
 });

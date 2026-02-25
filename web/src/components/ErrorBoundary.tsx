@@ -41,7 +41,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="min-h-screen flex items-center justify-center bg-bg-primary p-4">
           <div className="max-w-md w-full text-center">
             <div className="mb-6">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-destructive/10 flex items-center justify-center">
+              <div className="w-16 h-16 mx-auto mb-4  bg-destructive/10 flex items-center justify-center">
                 <svg
                   className="w-8 h-8 text-destructive"
                   fill="none"
@@ -63,7 +63,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 An unexpected error occurred. Please try again.
               </p>
               {process.env.NODE_ENV === 'development' && this.state.error && (
-                <pre className="text-left text-xs bg-bg-secondary p-3 rounded-lg overflow-auto max-h-32 mb-4">
+                <pre className="text-left text-xs bg-bg-secondary p-3  overflow-auto max-h-32 mb-4">
                   {this.state.error.message}
                 </pre>
               )}

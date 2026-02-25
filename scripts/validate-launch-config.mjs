@@ -18,52 +18,116 @@ const reportPath = path.join(ROOT, 'docs', 'reports', 'launch-config-report.json
 
 const requiredByMode = {
   production: {
-    backend: [
+    backendCommon: [
       'DATABASE_URL',
       'REDIS_URL',
       'JWT_SECRET',
       'CORS_ORIGINS',
       'METRICS_TOKEN',
       'BLINDFOLD_WEBHOOK_SECRET',
-      'PROGRAM_VAULT_ADDRESS',
+    ],
+    frontendCommon: [
+      'NEXT_PUBLIC_API_URL',
+      'AUTH_ALLOWED_ORIGINS',
+      'NEXT_PUBLIC_CHAIN_MODE',
+    ],
+    backendBase: [
+      'BASE_RPC_URL',
+      'BASE_WS_URL',
+      'BASE_CHAIN_ID',
+      'SIWE_DOMAIN',
+      'NEURA_TOKEN_ADDRESS',
+      'MARKET_CORE_ADDRESS',
+      'ORDER_BOOK_ADDRESS',
+      'EVM_ENABLED',
+    ],
+    frontendBase: [
+      'NEXT_PUBLIC_BASE_RPC_URL',
+      'NEXT_PUBLIC_BASE_CHAIN_ID',
+      'NEXT_PUBLIC_SIWE_DOMAIN',
+    ],
+    backendSolana: [
       'SOLANA_RPC_URL',
       'SOLANA_WS_URL',
+      'PROGRAM_VAULT_ADDRESS',
+      'SOLANA_ENABLED',
     ],
-    frontend: [
-      'NEXT_PUBLIC_API_URL',
-      'NEXT_PUBLIC_RPC_URL',
-      'AUTH_ALLOWED_ORIGINS',
-    ],
+    frontendSolana: ['NEXT_PUBLIC_RPC_URL'],
   },
   staging: {
-    backend: [
-      'DATABASE_URL',
-      'REDIS_URL',
-      'JWT_SECRET',
-      'CORS_ORIGINS',
-      'SOLANA_RPC_URL',
-      'SOLANA_WS_URL',
+    backendCommon: ['DATABASE_URL', 'REDIS_URL', 'JWT_SECRET', 'CORS_ORIGINS'],
+    frontendCommon: ['NEXT_PUBLIC_API_URL', 'AUTH_ALLOWED_ORIGINS', 'NEXT_PUBLIC_CHAIN_MODE'],
+    backendBase: [
+      'BASE_RPC_URL',
+      'BASE_WS_URL',
+      'BASE_CHAIN_ID',
+      'SIWE_DOMAIN',
+      'NEURA_TOKEN_ADDRESS',
+      'MARKET_CORE_ADDRESS',
+      'ORDER_BOOK_ADDRESS',
+      'EVM_ENABLED',
     ],
-    frontend: [
-      'NEXT_PUBLIC_API_URL',
-      'NEXT_PUBLIC_RPC_URL',
-      'AUTH_ALLOWED_ORIGINS',
+    frontendBase: [
+      'NEXT_PUBLIC_BASE_RPC_URL',
+      'NEXT_PUBLIC_BASE_CHAIN_ID',
+      'NEXT_PUBLIC_SIWE_DOMAIN',
     ],
+    backendSolana: ['SOLANA_RPC_URL', 'SOLANA_WS_URL', 'SOLANA_ENABLED'],
+    frontendSolana: ['NEXT_PUBLIC_RPC_URL'],
   },
   development: {
-    backend: ['DATABASE_URL', 'REDIS_URL'],
-    frontend: ['NEXT_PUBLIC_API_URL'],
+    backendCommon: ['DATABASE_URL', 'REDIS_URL'],
+    frontendCommon: ['NEXT_PUBLIC_API_URL'],
+    backendBase: [],
+    frontendBase: [],
+    backendSolana: [],
+    frontendSolana: [],
   },
 };
-
-function getRequired() {
-  return requiredByMode[mode] || requiredByMode.production;
-}
 
 function readValue(key) {
   const value = process.env[key];
   if (typeof value !== 'string') return '';
   return value.trim();
+}
+
+function parseBool(value) {
+  return String(value || '').toLowerCase() === 'true';
+}
+
+function determineChainMode() {
+  const explicit = readValue('CHAIN_MODE').toLowerCase();
+  if (explicit === 'base' || explicit === 'solana' || explicit === 'dual') {
+    return explicit;
+  }
+
+  const evmEnabled = parseBool(readValue('EVM_ENABLED'));
+  const solanaEnabled = parseBool(readValue('SOLANA_ENABLED'));
+
+  if (evmEnabled && solanaEnabled) return 'dual';
+  if (evmEnabled) return 'base';
+  return 'solana';
+}
+
+function getRequired(chainMode) {
+  const requirements = requiredByMode[mode] || requiredByMode.production;
+  const backend = [...requirements.backendCommon];
+  const frontend = [...requirements.frontendCommon];
+
+  if (chainMode === 'base' || chainMode === 'dual') {
+    backend.push(...requirements.backendBase);
+    frontend.push(...requirements.frontendBase);
+  }
+
+  if (chainMode === 'solana' || chainMode === 'dual') {
+    backend.push(...requirements.backendSolana);
+    frontend.push(...requirements.frontendSolana);
+  }
+
+  return {
+    backend: [...new Set(backend)],
+    frontend: [...new Set(frontend)],
+  };
 }
 
 function isHttpsUrl(value) {
@@ -83,7 +147,8 @@ function parseOrigins(raw) {
 }
 
 function validate() {
-  const required = getRequired();
+  const chainMode = determineChainMode();
+  const required = getRequired(chainMode);
   const missing = [];
   const warnings = [];
   const errors = [];
@@ -109,6 +174,10 @@ function validate() {
   if (rpcUrl && mode !== 'development' && !isHttpsUrl(rpcUrl)) {
     errors.push('NEXT_PUBLIC_RPC_URL must be https in staging/production');
   }
+  const baseRpcUrl = readValue('NEXT_PUBLIC_BASE_RPC_URL');
+  if (baseRpcUrl && mode !== 'development' && !isHttpsUrl(baseRpcUrl)) {
+    errors.push('NEXT_PUBLIC_BASE_RPC_URL must be https in staging/production');
+  }
 
   const corsOrigins = parseOrigins(readValue('CORS_ORIGINS'));
   const authAllowedOrigins = parseOrigins(readValue('AUTH_ALLOWED_ORIGINS'));
@@ -132,10 +201,46 @@ function validate() {
   if (solanaRpc && mode !== 'development' && !isHttpsUrl(solanaRpc)) {
     errors.push('SOLANA_RPC_URL must be https in staging/production');
   }
+  const baseRpc = readValue('BASE_RPC_URL');
+  if (baseRpc && mode !== 'development' && !isHttpsUrl(baseRpc)) {
+    errors.push('BASE_RPC_URL must be https in staging/production');
+  }
+  const baseWs = readValue('BASE_WS_URL');
+  if (baseWs && mode !== 'development' && !baseWs.startsWith('wss://')) {
+    errors.push('BASE_WS_URL must use wss:// in staging/production');
+  }
+
+  const frontendChainMode = readValue('NEXT_PUBLIC_CHAIN_MODE').toLowerCase();
+  const evmEnabledRaw = readValue('EVM_ENABLED');
+  const solanaEnabledRaw = readValue('SOLANA_ENABLED');
+  const evmEnabled = parseBool(readValue('EVM_ENABLED'));
+  const solanaEnabled = parseBool(readValue('SOLANA_ENABLED'));
+
+  if (chainMode === 'base' || chainMode === 'dual') {
+    if (!evmEnabled && mode !== 'development' && (!allowMissingSecrets || evmEnabledRaw)) {
+      errors.push('EVM_ENABLED must be true when chain mode includes base');
+    }
+    if (frontendChainMode && frontendChainMode !== 'base') {
+      errors.push('NEXT_PUBLIC_CHAIN_MODE must be base when chain mode includes base');
+    }
+  }
+
+  if (chainMode === 'solana' || chainMode === 'dual') {
+    if (
+      !solanaEnabled &&
+      mode !== 'development' &&
+      (!allowMissingSecrets || solanaEnabledRaw)
+    ) {
+      errors.push('SOLANA_ENABLED must be true when chain mode includes solana');
+    }
+    if (frontendChainMode && chainMode === 'solana' && frontendChainMode !== 'solana') {
+      errors.push('NEXT_PUBLIC_CHAIN_MODE must be solana when chain mode is solana');
+    }
+  }
 
   if (mode === 'production') {
     const vault = readValue('PROGRAM_VAULT_ADDRESS');
-    if (!vault && !allowMissingSecrets) {
+    if (!vault && !allowMissingSecrets && (chainMode === 'solana' || chainMode === 'dual')) {
       errors.push('PROGRAM_VAULT_ADDRESS must be set in production mode');
     }
   }
@@ -156,6 +261,7 @@ function validate() {
   return {
     generatedAt: new Date().toISOString(),
     mode,
+    chainMode,
     allowMissingSecrets,
     summary: {
       missingCount: missing.length,
@@ -176,6 +282,7 @@ function persistReport(report) {
 
 function printReport(report) {
   console.log(`launch config validation (${report.mode})`);
+  console.log(`chain mode: ${report.chainMode}`);
   console.log(`generated: ${report.generatedAt}`);
   console.log(`ready: ${report.summary.ready ? 'YES' : 'NO'}`);
   console.log('');

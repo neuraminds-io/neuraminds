@@ -90,7 +90,7 @@ export function OrderForm({ market, onSuccess }: OrderFormProps) {
     <Card className="!p-4 sm:!p-6 relative">
       {/* Transaction pending overlay */}
       {isPending && (
-        <div className="absolute inset-0 bg-bg-base/80 backdrop-blur-sm rounded-xl z-10 flex flex-col items-center justify-center gap-3">
+        <div className="absolute inset-0 bg-bg-base/80   z-10 flex flex-col items-center justify-center gap-3">
           <Spinner size="lg" className={isYes ? 'text-bid' : 'text-ask'} />
           <div className="text-center">
             <p className="font-medium text-text-primary">Confirming transaction...</p>
@@ -108,7 +108,7 @@ export function OrderForm({ market, onSuccess }: OrderFormProps) {
           onClick={() => setOutcome('yes')}
           disabled={isPending}
           className={cn(
-            "py-3 rounded-lg font-semibold text-center transition-all duration-fast",
+            "py-3  font-semibold text-center transition-all duration-fast",
             "border-2 cursor-pointer",
             "disabled:cursor-not-allowed disabled:opacity-50",
             isYes
@@ -124,7 +124,7 @@ export function OrderForm({ market, onSuccess }: OrderFormProps) {
           onClick={() => setOutcome('no')}
           disabled={isPending}
           className={cn(
-            "py-3 rounded-lg font-semibold text-center transition-all duration-fast",
+            "py-3  font-semibold text-center transition-all duration-fast",
             "border-2 cursor-pointer",
             "disabled:cursor-not-allowed disabled:opacity-50",
             !isYes
@@ -179,7 +179,7 @@ export function OrderForm({ market, onSuccess }: OrderFormProps) {
         </div>
 
         {/* Order summary */}
-        <div className="bg-bg-secondary rounded-lg p-3 mb-4 space-y-2 text-sm">
+        <div className="bg-bg-secondary  p-3 mb-4 space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-text-muted">
               {side === 'buy' ? 'Avg Price' : 'Est. Return'}

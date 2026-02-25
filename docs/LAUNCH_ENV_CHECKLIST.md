@@ -1,20 +1,48 @@
 # Launch Environment Checklist
 
-## Backend Required (Production)
+## Backend Required (Production, Common)
 - `DATABASE_URL`
 - `REDIS_URL`
 - `JWT_SECRET` (>= 32 chars)
 - `CORS_ORIGINS` (no wildcard, https origins only)
 - `METRICS_TOKEN`
 - `BLINDFOLD_WEBHOOK_SECRET`
+
+## Frontend/Edge Required (Production, Common)
+- `NEXT_PUBLIC_API_URL` (https)
+- `AUTH_ALLOWED_ORIGINS` (no wildcard, https origins only)
+- `NEXT_PUBLIC_CHAIN_MODE` (`base` or `solana`)
+
+## Base Mode Required
+
+Backend:
+- `CHAIN_MODE=base` (recommended)
+- `EVM_ENABLED=true`
+- `BASE_RPC_URL` (https)
+- `BASE_WS_URL` (wss)
+- `BASE_CHAIN_ID` (`8453` mainnet)
+- `SIWE_DOMAIN`
+- `NEURA_TOKEN_ADDRESS`
+- `MARKET_CORE_ADDRESS`
+- `ORDER_BOOK_ADDRESS`
+
+Frontend:
+- `NEXT_PUBLIC_CHAIN_MODE=base`
+- `NEXT_PUBLIC_BASE_RPC_URL` (https)
+- `NEXT_PUBLIC_BASE_CHAIN_ID` (`8453` mainnet)
+- `NEXT_PUBLIC_SIWE_DOMAIN`
+
+## Solana Mode Required (Legacy)
+
+Backend:
+- `SOLANA_ENABLED=true`
 - `PROGRAM_VAULT_ADDRESS`
 - `SOLANA_RPC_URL` (https)
 - `SOLANA_WS_URL`
 
-## Frontend/Edge Required (Production)
-- `NEXT_PUBLIC_API_URL` (https)
+Frontend:
+- `NEXT_PUBLIC_CHAIN_MODE=solana`
 - `NEXT_PUBLIC_RPC_URL` (https)
-- `AUTH_ALLOWED_ORIGINS` (no wildcard, https origins only)
 
 ## Verification
 Run:

@@ -51,7 +51,7 @@ export default function HomePage() {
               <button
                 onClick={() => setSortTab('trending')}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer',
+                  'flex items-center gap-1.5 px-3 py-1.5  text-sm font-medium transition-colors cursor-pointer',
                   sortTab === 'trending'
                     ? '[&>span]:bg-gradient-to-r [&>span]:from-accent [&>span]:to-[#ff8b5f] [&>span]:bg-clip-text [&>span]:text-transparent [&>svg]:text-accent'
                     : 'text-text-secondary hover:bg-bg-hover'
@@ -63,7 +63,7 @@ export default function HomePage() {
               <button
                 onClick={() => setSortTab('new')}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer',
+                  'flex items-center gap-1.5 px-3 py-1.5  text-sm font-medium transition-colors cursor-pointer',
                   sortTab === 'new'
                     ? '[&>span]:bg-gradient-to-r [&>span]:from-accent [&>span]:to-[#ff8b5f] [&>span]:bg-clip-text [&>span]:text-transparent [&>svg]:text-accent'
                     : 'text-text-secondary hover:bg-bg-hover'
@@ -83,7 +83,7 @@ export default function HomePage() {
                   key={cat}
                   onClick={() => setCategory(cat)}
                   className={cn(
-                    'px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors cursor-pointer',
+                    'px-3 py-1.5  text-sm font-medium whitespace-nowrap transition-colors cursor-pointer',
                     category === cat
                       ? 'bg-bg-tertiary text-text-primary'
                       : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
@@ -105,7 +105,7 @@ export default function HomePage() {
               <button
                 key={topic}
                 className={cn(
-                  'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all cursor-pointer',
+                  'px-4 py-2  text-sm font-medium whitespace-nowrap transition-all cursor-pointer',
                   'border',
                   i === 0
                     ? 'bg-transparent text-accent border-accent'

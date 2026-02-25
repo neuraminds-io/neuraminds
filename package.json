@@ -1,7 +1,7 @@
 {
   "name": "neuralminds",
   "version": "0.1.0",
-  "description": "Autonomous market infrastructure on Solana",
+  "description": "Autonomous market infrastructure on Base",
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
@@ -13,9 +13,16 @@
     "launch:summary": "node scripts/generate-launch-summary.mjs",
     "launch:e2e": "npm run launch:readiness && npm run production:gates",
     "synthetic:check": "node scripts/synthetic-monitor.mjs",
+    "base:smoke:sepolia": "node scripts/base-sepolia-smoke.mjs",
+    "base:web:e2e:sepolia": "node scripts/base-sepolia-web-smoke.mjs",
     "load:baseline:report": "node scripts/load-baseline-report.mjs",
     "production:gates": "node scripts/production-loop-report.mjs",
-    "production:gates:strict": "node scripts/production-loop-report.mjs --strict"
+    "production:gates:strict": "node scripts/production-loop-report.mjs --strict",
+    "evm:build": "forge build --root evm",
+    "evm:test": "forge test --root evm",
+    "evm:fmt": "forge fmt --root evm",
+    "evm:deploy:base-sepolia": "forge script script/DeployCore.s.sol:DeployCoreScript --root evm --rpc-url $BASE_SEPOLIA_RPC_URL --account $FOUNDRY_ACCOUNT --broadcast --verify",
+    "evm:deploy:base": "forge script script/DeployCore.s.sol:DeployCoreScript --root evm --rpc-url $BASE_RPC_URL --account $FOUNDRY_ACCOUNT --broadcast --verify"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",

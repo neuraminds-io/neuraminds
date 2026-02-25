@@ -19,7 +19,7 @@ interface StatCardProps {
 
 function StatCard({ label, value, subValue, trend }: StatCardProps) {
   return (
-    <div className="p-4 bg-bg-secondary rounded-lg">
+    <div className="p-4 bg-bg-secondary ">
       <p className="text-sm text-text-secondary mb-1">{label}</p>
       <p
         className={cn(

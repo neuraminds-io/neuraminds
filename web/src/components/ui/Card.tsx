@@ -11,7 +11,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
     <div
       ref={ref}
       className={cn(
-        "rounded-lg border bg-bg-primary text-text-primary p-4 sm:p-5",
+        "border bg-bg-primary text-text-primary p-4 sm:p-5",
         "border-border",
         hover && [
           "cursor-pointer",
@@ -20,7 +20,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
           "hover:shadow-md hover:-translate-y-0.5",
         ],
         glass && [
-          "bg-[var(--glass-bg)] backdrop-blur-glass",
+          "bg-[var(--glass-bg)]",
           "border-[var(--glass-border)]",
         ],
         className

@@ -101,14 +101,14 @@ export function ProfileHeader({ wallet }: ProfileHeaderProps) {
         <div className="flex flex-col md:flex-row md:items-start gap-6">
           {/* Avatar */}
           <div className="flex-shrink-0">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-accent to-accent/50 flex items-center justify-center">
+            <div className="w-20 h-20  bg-gradient-to-br from-accent to-accent/50 flex items-center justify-center">
               {profile.avatarUrl ? (
                 <Image
                   src={profile.avatarUrl}
                   alt={profile.username || 'Profile'}
                   width={80}
                   height={80}
-                  className="w-full h-full rounded-full object-cover"
+                  className="w-full h-full  object-cover"
                   loading="eager"
                   priority={false}
                 />
@@ -162,7 +162,7 @@ export function ProfileHeader({ wallet }: ProfileHeaderProps) {
                 {profile.badges.map((badge) => (
                   <div
                     key={badge.id}
-                    className="flex items-center gap-1.5 px-2 py-1 bg-bg-tertiary rounded-full"
+                    className="flex items-center gap-1.5 px-2 py-1 bg-bg-tertiary "
                     title={badge.description}
                   >
                     <span>{badge.icon}</span>

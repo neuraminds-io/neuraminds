@@ -16,7 +16,7 @@ test.describe('Navigation', () => {
 
   test('navigates home via logo click', async ({ page }) => {
     await page.goto('/markets');
-    await page.getByRole('link', { name: /polybit/i }).click();
+    await page.getByRole('link', { name: /neuraminds/i }).click();
     await expect(page).toHaveURL('/');
   });
 
@@ -32,7 +32,7 @@ test.describe('Navigation', () => {
   });
 
   test('navigates to profile page with wallet address', async ({ page }) => {
-    const testWallet = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+    const testWallet = '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
     await page.goto(`/profile/${testWallet}`);
     await expect(page).toHaveURL(`/profile/${testWallet}`);
   });

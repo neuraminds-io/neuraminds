@@ -167,7 +167,7 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
             <div
               key={s}
               className={cn(
-                'h-1 flex-1 rounded-full transition-colors',
+                'h-1 flex-1  transition-colors',
                 s <= step ? 'bg-accent' : 'bg-bg-tertiary'
               )}
             />
@@ -202,7 +202,7 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Add context, resolution criteria, or relevant links..."
-                className="w-full h-24 px-3 py-2 rounded-lg bg-bg-secondary border border-border text-text-primary placeholder:text-text-secondary resize-none focus:outline-none focus:ring-2 focus:ring-accent"
+                className="w-full h-24 px-3 py-2  bg-bg-secondary border border-border text-text-primary placeholder:text-text-secondary resize-none focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
           </div>
@@ -221,7 +221,7 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
                   type="button"
                   onClick={() => setCategory(cat.id)}
                   className={cn(
-                    'p-4 rounded-lg border text-center transition-all duration-fast cursor-pointer',
+                    'p-4  border text-center transition-all duration-fast cursor-pointer',
                     category === cat.id
                       ? 'border-accent bg-accent-muted'
                       : 'border-border hover:border-border-hover'
@@ -249,7 +249,7 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
                     type="button"
                     onClick={() => setResolutionSource(source.id)}
                     className={cn(
-                      'w-full p-4 rounded-lg border text-left transition-all duration-fast cursor-pointer',
+                      'w-full p-4  border text-left transition-all duration-fast cursor-pointer',
                       resolutionSource === source.id
                         ? 'border-accent bg-accent-muted'
                         : 'border-border hover:border-border-hover'
@@ -304,7 +304,7 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
           <div className="space-y-4">
             <h3 className="font-medium text-text-primary">Review Your Market</h3>
 
-            <div className="space-y-3 p-4 rounded-lg bg-bg-secondary">
+            <div className="space-y-3 p-4  bg-bg-secondary">
               <div>
                 <p className="text-sm text-text-secondary">Question</p>
                 <p className="text-text-primary">{question}</p>
@@ -358,7 +358,7 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
               </p>
             </div>
 
-            <div className="p-4 rounded-lg bg-bg-tertiary">
+            <div className="p-4  bg-bg-tertiary">
               <p className="text-sm text-text-secondary">Creation Fee</p>
               <p className="text-xl font-semibold text-text-primary">0.5 SOL</p>
             </div>
@@ -367,7 +367,7 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
 
         {/* Error */}
         {error && (
-          <div className="p-3 rounded-lg bg-ask/10 border border-ask/20">
+          <div className="p-3  bg-ask/10 border border-ask/20">
             <p className="text-sm text-ask">{error}</p>
           </div>
         )}

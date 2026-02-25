@@ -383,9 +383,9 @@ export function SecurityAuditChecklist() {
               {stats.complete}/{stats.total} items
             </span>
           </div>
-          <div className="h-3 bg-bg-tertiary rounded-full overflow-hidden">
+          <div className="h-3 bg-bg-tertiary  overflow-hidden">
             <div
-              className="h-full bg-bid rounded-full transition-all duration-500"
+              className="h-full bg-bid  transition-all duration-500"
               style={{ width: `${completionPercent}%` }}
             />
           </div>
@@ -445,7 +445,7 @@ export function SecurityAuditChecklist() {
                     return (
                       <div
                         key={item.id}
-                        className="p-4 rounded-lg bg-bg-secondary"
+                        className="p-4  bg-bg-secondary"
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">

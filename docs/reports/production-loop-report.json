@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-02-25T08:52:24.530Z",
-  "mode": "fast",
+  "generatedAt": "2026-02-25T23:14:25.006Z",
+  "mode": "strict",
   "summary": {
-    "total": 6,
-    "passed": 4,
+    "total": 7,
+    "passed": 7,
     "failed": 0,
-    "skipped": 2,
+    "skipped": 0,
     "requiredFailed": 0,
     "ready": true
   },
@@ -36,15 +36,30 @@
     },
     {
       "id": "web_build",
-      "required": false,
-      "status": "skip",
-      "details": "run with --strict"
+      "required": true,
+      "status": "pass",
+      "details": "ok (13594ms)",
+      "command": "npm -C web run build",
+      "stdout": "> neuraminds-web@0.1.0 build\n> next build\n\n  ▲ Next.js 14.2.28\n\n   Creating an optimized production build ...\n> [PWA] Compile server\n> [PWA] Compile server\n> [PWA] Compile client (static)\n> [PWA] Auto register service worker with: <redacted>/web/node_modules/next-pwa/register.js\n> [PWA] Service worker: <redacted>/web/public/sw.js\n> [PWA]   url: /sw.js\n> [PWA]   scope: /\n   Linting and checking validity of types ...\n\n./src/components/market/FeaturedBanner.tsx\n284:6  Warning: React Hook useEffect has a missing dependency: 'goToNext'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\n\n./src/components/market/PriceChart.tsx\n95:6  Warning: React Hook useMemo has a missing dependency: 'filteredData.length'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\n\n./src/components/order/OrderHistory.tsx\n47:6  Warning: React Hook useEffect has a missing dependency: 'fetchOrders'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\n\n./src/components/wallet/TransactionHistory.tsx\n67:6  Warning: React Hook useEffect has a missing dependency: 'fetchTransactions'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\n\ninfo  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/basic-features/eslint#disabling-rules\n   Collecting page data ...\n   Generating static pages (0/19) ...\n   Generating static pages (4/19) \r\n   Generating static pages (9/19) \r\n   Generating static pages (14/19) \r\n ✓ Generating static pages (19/19)\n   Finalizing page optimization ...\n   Collecting build traces ...\n\nRoute (app)                              Size     First Load JS\n┌ ○ /                                    1.5 kB          272 kB\n├ ○ /_not-found                          883 B          88.5 kB\n├ ○ /admin                               3.98 kB        99.6 kB\n├ ○ /admin/security                      4.95 kB         101 kB\n├ ƒ /api/auth                            0 B                0 B\n├ ○ /docs/api                            4.69 kB         100 kB\n├ ○ /leaderboard                         2.89 kB         112 kB\n├ ○ /legal                               179 B          96.4 kB\n├ ○ /legal/disclaimer                    152 B          87.7 kB\n├ ○ /legal/privacy                       152 B          87.7 kB\n├ ○ /legal/terms                         152 B          87.7 kB\n├ ○ /markets                             1.48 kB         272 kB\n├ ƒ /markets/[id]                        966 B           274 kB\n├ ○ /markets/create                      1.29 kB         152 kB\n├ ○ /portfolio                           1.56 kB         266 kB\n├ ƒ /profile/[wallet]                    4.99 kB         119 kB\n├ ○ /settings                            3.71 kB         163 kB\n├ ○ /settings/notifications              5.34 kB         114 kB\n└ ○ /wallet                              6.33 kB         123 kB\n+ First Load JS shared by all            87.6 kB\n  ├ chunks/2117-1eaa9deea3eb02c8.js      31.7 kB\n  ├ chunks/fd9d1056-986e88678380c101.js  53.7 kB\n  └ other shared chunks (total)          2.16 kB\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand",
+      "stderr": "⚠ Compiled with warnings\n\n./node_modules/pino/lib/tools.js\nModule not found: Can't resolve 'pino-pretty' in '<redacted>/web/node_modules/pino/lib'\n\nImport trace for requested module:\n./node_modules/pino/lib/tools.js\n./node_modules/pino/pino.js\n./node_modules/@walletconnect/logger/dist/index.es.js\n./node_modules/@walletconnect/universal-provider/dist/index.es.js\n./node_modules/@walletconnect/solana-adapter/dist/core.js\n./node_modules/@walletconnect/solana-adapter/dist/adapter.js\n./node_modules/@solana/wallet-adapter-walletconnect/lib/esm/index.js\n./node_modules/@solana/wallet-adapter-wallets/lib/esm/index.js\n./src/components/Providers.tsx\n\n(node:81248) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:81252) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:81249) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:81251) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:81247) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:81254) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:81253) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:81250) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:81255) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)"
     },
     {
       "id": "backend_cargo_check",
-      "required": false,
-      "status": "skip",
-      "details": "run with --strict"
+      "required": true,
+      "status": "pass",
+      "details": "ok (1923ms)",
+      "command": "cargo check --manifest-path app/Cargo.toml",
+      "stdout": "",
+      "stderr": "warning: fields `currency` and `status` are never read\n   --> app/src/api/wallet.rs:300:9\n    |\n296 | pub struct BlindpayWebhook {\n    |            --------------- fields in this struct\n...\n300 |     pub currency: String,\n    |         ^^^^^^^^\n301 |     pub wallet_address: String,\n302 |     pub status: String,\n    |         ^^^^^^\n    |\n    = note: `BlindpayWebhook` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: `polyguard-backend` (bin \"polyguard-api\") generated 1 warning\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.81s"
+    },
+    {
+      "id": "evm_forge_tests",
+      "required": true,
+      "status": "pass",
+      "details": "ok (897ms)",
+      "command": "npm run evm:test",
+      "stdout": "> neuralminds@0.1.0 evm:test\n> forge test --root evm\n\nNo files changed, compilation skipped\n2026-02-25T23:14:24.594273Z  WARN evm::traces::external: etherscan config not found\n\nRan 6 tests for test/OrderBook.t.sol:OrderBookTest\n[PASS] test_cancelOrder() (gas: 156148)\n[PASS] test_fillFailsForUnauthorizedMatcher() (gas: 155969)\n[PASS] test_fillFailsWhenAmountExceedsRemaining() (gas: 156990)\n[PASS] test_fillOrder() (gas: 162019)\n[PASS] test_orderExpires() (gas: 157280)\n[PASS] test_placeOrder() (gas: 153058)\nSuite result: ok. 6 passed; 0 failed; 0 skipped; finished in 5.36ms (398.46µs CPU time)\n\nRan 5 tests for test/NeuraToken.t.sol:NeuraTokenTest\n[PASS] test_initialConfig() (gas: 13594)\n[PASS] test_initialSupplyCannotExceedCap() (gas: 91910)\n[PASS] test_mintCannotExceedCap() (gas: 52169)\n[PASS] test_onlyMinterCanMint() (gas: 52301)\n[PASS] test_pauseBlocksTransfers() (gas: 58846)\nSuite result: ok. 5 passed; 0 failed; 0 skipped; finished in 5.44ms (5.45ms CPU time)\n\nRan 6 tests for test/MarketCore.t.sol:MarketCoreTest\n[PASS] test_cannotResolveBeforeCloseTime() (gas: 113307)\n[PASS] test_createMarket() (gas: 111105)\n[PASS] test_onlyCreatorCanCreate() (gas: 15787)\n[PASS] test_onlyDesignatedResolverCanResolve() (gas: 149993)\n[PASS] test_pauseBlocksCreateAndResolve() (gas: 151869)\n[PASS] test_resolveMarket() (gas: 118368)\nSuite result: ok. 6 passed; 0 failed; 0 skipped; finished in 5.43ms (395.13µs CPU time)\n\nRan 6 tests for test/CollateralVault.t.sol:CollateralVaultTest\n[PASS] test_depositAndWithdraw() (gas: 88667)\n[PASS] test_lockAndUnlock() (gas: 114013)\n[PASS] test_onlyOperatorCanLock() (gas: 78446)\n[PASS] test_pauseBlocksStateChanges() (gas: 44964)\n[PASS] test_settleMovesLockedBalance() (gas: 136019)\n[PASS] test_withdrawFailsWhenInsufficientAvailable() (gas: 79236)\nSuite result: ok. 6 passed; 0 failed; 0 skipped; finished in 5.43ms (350.21µs CPU time)\n\nRan 4 test suites in 127.89ms (21.65ms CPU time): 23 tests passed, 0 failed, 0 skipped (23 total tests)",
+      "stderr": ""
     }
   ]
 }

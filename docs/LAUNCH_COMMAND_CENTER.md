@@ -21,11 +21,32 @@ Optional local timeout override for strict checks:
 PRODUCTION_GATE_TIMEOUT_MS=60000 npm run launch:readiness:strict
 ```
 
+Strict mode with live synthetic checks:
+
+```bash
+bash scripts/launch-readiness.sh --strict --mode=production --api-url=https://api.neuraminds.ai --web-url=https://app.neuraminds.ai --chain-mode=base
+```
+
+Strict mode with live synthetic checks + Base Sepolia frontend smoke:
+
+```bash
+bash scripts/launch-readiness.sh --strict --mode=staging --api-url=https://staging-api.neuraminds.ai --web-url=https://staging.neuraminds.ai --chain-mode=base --run-web-e2e
+```
+
 Synthetic probe (external endpoint verification):
 
 ```bash
-npm run synthetic:check -- --env production --api-url https://api.neuraminds.ai --web-url https://app.neuraminds.ai
+npm run synthetic:check -- --env production --api-url https://api.neuraminds.ai --web-url https://app.neuraminds.ai --chain-mode base
 ```
+
+Base Sepolia frontend smoke (Playwright, remote target):
+
+```bash
+npm run base:web:e2e:sepolia -- --api-url https://staging-api.neuraminds.ai --web-url https://staging.neuraminds.ai
+```
+
+Base launch runbook:
+- `docs/runbooks/BASE_MAINNET_LAUNCH.md`
 
 ## Local End-to-End Launch Rehearsal
 
@@ -40,6 +61,7 @@ Generated artifacts:
 - `docs/reports/production-loop-report-strict.json`
 - `docs/reports/launch-go-no-go.json`
 - `docs/reports/launch-go-no-go.md`
+- `web/playwright-report/index.html` (when `--run-web-e2e` is enabled)
 
 ## Go / No-Go Rules
 

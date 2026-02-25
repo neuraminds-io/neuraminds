@@ -362,6 +362,7 @@ pub struct HealthChecks {
     pub database: ComponentHealth,
     pub redis: ComponentHealth,
     pub solana: ComponentHealth,
+    pub base: ComponentHealth,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -399,6 +400,14 @@ impl ComponentHealth {
     pub fn unhealthy(message: &str) -> Self {
         Self {
             status: HealthStatus::Unhealthy,
+            latency_ms: None,
+            message: Some(message.to_string()),
+        }
+    }
+
+    pub fn disabled(message: &str) -> Self {
+        Self {
+            status: HealthStatus::Healthy,
             latency_ms: None,
             message: Some(message.to_string()),
         }

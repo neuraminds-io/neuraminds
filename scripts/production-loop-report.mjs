@@ -192,6 +192,19 @@ function buildReport() {
       stdout: backendCheck.stdout.slice(-6000),
       stderr: backendCheck.stderr.slice(-6000),
     });
+
+    const forgeTests = runCommand('npm', ['run', 'evm:test'], strictTimeoutMs);
+    addGate(gates, {
+      id: 'evm_forge_tests',
+      required: true,
+      status: forgeTests.status === 0 ? 'pass' : 'fail',
+      details: forgeTests.status === 0
+        ? `ok (${forgeTests.durationMs}ms)`
+        : `failed (${forgeTests.durationMs}ms)${forgeTests.timedOut ? ', timed out' : ''}`,
+      command: forgeTests.command,
+      stdout: forgeTests.stdout.slice(-6000),
+      stderr: forgeTests.stderr.slice(-6000),
+    });
   } else {
     addGate(gates, {
       id: 'web_build',
@@ -201,6 +214,12 @@ function buildReport() {
     });
     addGate(gates, {
       id: 'backend_cargo_check',
+      required: false,
+      status: 'skip',
+      details: 'run with --strict',
+    });
+    addGate(gates, {
+      id: 'evm_forge_tests',
       required: false,
       status: 'skip',
       details: 'run with --strict',

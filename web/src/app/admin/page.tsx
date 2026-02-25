@@ -111,10 +111,10 @@ export default function AdminDashboard() {
     return (
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-bg-secondary rounded w-48" />
+          <div className="h-8 bg-bg-secondary  w-48" />
           <div className="grid grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-bg-secondary rounded" />
+              <div key={i} className="h-32 bg-bg-secondary " />
             ))}
           </div>
         </div>
@@ -171,7 +171,7 @@ export default function AdminDashboard() {
               {pendingMarkets.map((market) => (
                 <div
                   key={market.id}
-                  className="flex items-center justify-between p-4 rounded-lg bg-bg-secondary"
+                  className="flex items-center justify-between p-4  bg-bg-secondary"
                 >
                   <div className="flex-1">
                     <p className="font-medium text-text-primary">{market.question}</p>

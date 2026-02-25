@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -40,18 +40,18 @@ export function TransactionHistory() {
   const [offset, setOffset] = useState(0);
   const limit = 10;
 
-  const fetchTransactions = async (reset = false) => {
+  const fetchTransactions = useCallback(async (currentOffset: number, reset = false) => {
     try {
       setLoading(true);
-      const currentOffset = reset ? 0 : offset;
-      const response = await api.getTransactions({ limit, offset: currentOffset });
+      const offsetValue = reset ? 0 : currentOffset;
+      const response = await api.getTransactions({ limit, offset: offsetValue });
 
       if (reset) {
         setTransactions(response.data);
         setOffset(limit);
       } else {
         setTransactions((prev) => [...prev, ...response.data]);
-        setOffset((prev) => prev + limit);
+        setOffset(offsetValue + limit);
       }
 
       setHasMore(response.hasMore);
@@ -60,11 +60,11 @@ export function TransactionHistory() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [limit]);
 
   useEffect(() => {
-    fetchTransactions(true);
-  }, []);
+    void fetchTransactions(0, true);
+  }, [fetchTransactions]);
 
   if (loading && transactions.length === 0) {
     return (
@@ -93,12 +93,12 @@ export function TransactionHistory() {
           return (
             <div
               key={tx.id}
-              className="flex items-center justify-between p-3 rounded-lg bg-bg-secondary hover:bg-bg-tertiary transition-colors"
+              className="flex items-center justify-between p-3  bg-bg-secondary hover:bg-bg-tertiary transition-colors"
             >
               <div className="flex items-center gap-3">
                 <div
                   className={cn(
-                    'w-8 h-8 rounded-full flex items-center justify-center text-sm',
+                    'w-8 h-8  flex items-center justify-center text-sm',
                     isIncoming ? 'bg-bid/10 text-bid' : 'bg-ask/10 text-ask'
                   )}
                 >
@@ -150,7 +150,7 @@ export function TransactionHistory() {
         <Button
           variant="secondary"
           className="w-full"
-          onClick={() => fetchTransactions()}
+          onClick={() => fetchTransactions(offset)}
           loading={loading}
         >
           Load More

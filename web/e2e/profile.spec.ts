@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const TEST_WALLET = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+const TEST_WALLET = '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
 
 test.describe('Profile Page', () => {
   test.beforeEach(async ({ page }) => {
@@ -12,7 +12,7 @@ test.describe('Profile Page', () => {
   });
 
   test('has correct page title with truncated address', async ({ page }) => {
-    await expect(page).toHaveTitle(/7xKXtg.*AsU.*polybit/i);
+    await expect(page).toHaveTitle(/0x71C7.*976F.*neuraminds/i);
   });
 
   test('displays container with proper layout', async ({ page }) => {

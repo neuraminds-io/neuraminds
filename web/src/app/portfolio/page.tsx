@@ -17,7 +17,7 @@ export default function PortfolioPage() {
     return (
       <PageShell>
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-          <div className="w-16 h-16 bg-bg-secondary rounded-full flex items-center justify-center mb-4">
+          <div className="w-16 h-16 bg-bg-secondary  flex items-center justify-center mb-4">
             <WalletIcon className="w-8 h-8 text-text-secondary" />
           </div>
           <h2 className="text-xl font-semibold mb-2">Connect Your Wallet</h2>

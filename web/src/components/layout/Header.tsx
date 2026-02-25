@@ -6,6 +6,8 @@ import { usePathname } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { CHAIN_MODE } from '@/lib/constants';
+import { useBaseWallet } from '@/hooks/useBaseWallet';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { cn } from '@/lib/utils';
 
@@ -18,32 +20,49 @@ const navLinks = [
 function ConnectWalletButton() {
   const { setVisible } = useWalletModal();
   const { connected, publicKey, disconnect } = useWallet();
+  const baseWallet = useBaseWallet();
+  const isBaseMode = CHAIN_MODE === 'base';
 
   const handleClick = () => {
+    if (isBaseMode) {
+      if (baseWallet.isConnected) {
+        baseWallet.disconnect();
+      } else {
+        baseWallet.connect().catch((error) => {
+          console.error('Base wallet connect failed:', error);
+        });
+      }
+      return;
+    }
+
     if (connected) {
       disconnect();
-    } else {
-      setVisible(true);
+      return;
     }
+
+    setVisible(true);
   };
 
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 4)}...${address.slice(-4)}`;
   };
 
+  const connectedAddress = isBaseMode ? baseWallet.address : publicKey?.toBase58();
+  const isConnected = isBaseMode ? baseWallet.isConnected : connected;
+
   return (
     <button
       onClick={handleClick}
       className={cn(
-        'h-9 px-5 rounded-full text-sm font-medium',
+        'h-9 px-5  text-sm font-medium',
         'bg-gradient-to-r from-accent to-[#ff8b5f]',
         'text-white',
         'hover:opacity-90 hover:shadow-lg hover:shadow-accent/25',
         'transition-all cursor-pointer'
       )}
     >
-      {connected && publicKey
-        ? truncateAddress(publicKey.toBase58())
+      {isConnected && connectedAddress
+        ? truncateAddress(connectedAddress)
         : 'Connect Wallet'}
     </button>
   );
@@ -58,7 +77,7 @@ export function Header() {
         <div className="relative flex items-center justify-between h-14">
           {/* Logo + Nav */}
           <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2 group">
+            <Link href="/" className="flex items-center group">
               <Image
                 src="/neuraminds.svg"
                 alt="neuraminds"
@@ -66,9 +85,6 @@ export function Header() {
                 height={28}
                 className="w-7 h-7"
               />
-              <span className="font-semibold text-lg text-text-primary">
-                neuraminds
-              </span>
             </Link>
 
             <nav className="hidden md:flex items-center gap-1">
@@ -79,7 +95,7 @@ export function Header() {
                     key={href}
                     href={href}
                     className={cn(
-                      'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                      'px-3 py-1.5  text-sm font-medium transition-colors',
                       isActive
                         ? 'text-text-primary bg-bg-secondary'
                         : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'
@@ -100,7 +116,7 @@ export function Header() {
                 type="text"
                 placeholder="Search markets or profiles..."
                 className={cn(
-                  'w-full h-9 pl-9 pr-4 rounded-lg text-sm',
+                  'w-full h-9 pl-9 pr-4  text-sm',
                   'bg-bg-secondary border border-border',
                   'text-text-primary placeholder:text-text-muted',
                   'focus:outline-none focus:border-border-hover focus:ring-1 focus:ring-accent/20',

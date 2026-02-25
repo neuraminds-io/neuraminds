@@ -412,7 +412,7 @@ export function ApiDocumentation() {
                 key={group.name}
                 onClick={() => setActiveGroup(group.name)}
                 className={cn(
-                  'w-full text-left px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer',
+                  'w-full text-left px-3 py-2  text-sm transition-colors cursor-pointer',
                   activeGroup === group.name
                     ? 'bg-accent text-white'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-secondary'
@@ -431,7 +431,7 @@ export function ApiDocumentation() {
             <select
               value={activeGroup}
               onChange={(e) => setActiveGroup(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-bg-secondary border border-border text-text-primary"
+              className="w-full px-3 py-2  bg-bg-secondary border border-border text-text-primary"
             >
               {API_DOCS.map((group) => (
                 <option key={group.name} value={group.name}>
@@ -463,7 +463,7 @@ export function ApiDocumentation() {
                           <div className="flex items-center gap-3">
                             <span
                               className={cn(
-                                'px-2 py-0.5 rounded text-xs font-mono font-medium',
+                                'px-2 py-0.5  text-xs font-mono font-medium',
                                 METHOD_COLORS[endpoint.method]
                               )}
                             >
@@ -512,7 +512,7 @@ export function ApiDocumentation() {
                               <h4 className="text-sm font-medium text-text-primary mb-2">
                                 Parameters
                               </h4>
-                              <div className="bg-bg-tertiary rounded-lg overflow-hidden">
+                              <div className="bg-bg-tertiary  overflow-hidden">
                                 <table className="w-full text-sm">
                                   <thead>
                                     <tr className="border-b border-border">
@@ -548,7 +548,7 @@ export function ApiDocumentation() {
                               <h4 className="text-sm font-medium text-text-primary mb-2">
                                 Request Body
                               </h4>
-                              <pre className="bg-bg-tertiary rounded-lg p-4 overflow-x-auto text-sm text-text-primary font-mono">
+                              <pre className="bg-bg-tertiary  p-4 overflow-x-auto text-sm text-text-primary font-mono">
                                 {endpoint.body.example}
                               </pre>
                             </div>
@@ -559,7 +559,7 @@ export function ApiDocumentation() {
                               <h4 className="text-sm font-medium text-text-primary mb-2">
                                 Response
                               </h4>
-                              <pre className="bg-bg-tertiary rounded-lg p-4 overflow-x-auto text-sm text-text-primary font-mono">
+                              <pre className="bg-bg-tertiary  p-4 overflow-x-auto text-sm text-text-primary font-mono">
                                 {endpoint.response.example}
                               </pre>
                             </div>

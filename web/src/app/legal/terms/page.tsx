@@ -55,7 +55,7 @@ export default function TermsOfServicePage() {
           </h2>
           <p>
             neuraminds provides a decentralized prediction market platform built on the
-            Solana blockchain. Users can:
+            Base blockchain. Users can:
           </p>
           <ul className="list-disc pl-6 space-y-2 mt-2">
             <li>Create prediction markets on future events</li>
@@ -115,13 +115,13 @@ export default function TermsOfServicePage() {
             8. Fees
           </h2>
           <p>
-            The Platform charges fees on market creation and trading. Current fee
-            structure:
+            The Platform charges fees on market creation, trading, and settlement actions.
+            Applicable fees are shown in the product before confirmation.
           </p>
           <ul className="list-disc pl-6 space-y-2 mt-2">
-            <li>Market creation: 0.5 SOL</li>
-            <li>Trading fee: 1% of trade value</li>
-            <li>Withdrawal fee: 0.1% (minimum 0.1 USDC)</li>
+            <li>Market creation fee (quoted at order time)</li>
+            <li>Trading fee (quoted at execution time)</li>
+            <li>Withdrawal or settlement fee when applicable</li>
           </ul>
           <p className="mt-2">Fees are subject to change with notice.</p>
         </section>

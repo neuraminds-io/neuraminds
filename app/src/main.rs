@@ -1,9 +1,9 @@
 use actix_cors::Cors;
-use actix_web::{web, App, HttpServer, middleware as actix_middleware, http::header};
 use actix_governor::{Governor, GovernorConfigBuilder};
-use std::sync::atomic::{AtomicBool, Ordering};
+use actix_web::{http::header, middleware as actix_middleware, web, App, HttpServer};
 use dotenv::dotenv;
 use log::{info, warn};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 mod api;
@@ -14,7 +14,10 @@ mod services;
 
 use api::JwtService;
 use config::AppConfig;
-use services::{DatabaseService, SolanaService, OrderBookService, RedisService, MetricsService, WebSocketHub, ReconciliationService, ReconciliationConfig};
+use services::{
+    DatabaseService, MetricsService, OrderBookService, ReconciliationConfig, ReconciliationService,
+    RedisService, SolanaService, WebSocketHub,
+};
 
 pub struct AppState {
     pub config: AppConfig,
@@ -32,7 +35,9 @@ pub struct AppState {
 /// Graceful shutdown handler
 async fn graceful_shutdown(state: Arc<AppState>) {
     // Wait for shutdown signal
-    tokio::signal::ctrl_c().await.expect("Failed to install CTRL+C handler");
+    tokio::signal::ctrl_c()
+        .await
+        .expect("Failed to install CTRL+C handler");
     info!("Shutdown signal received, initiating graceful shutdown...");
 
     // Set shutdown flag
@@ -81,7 +86,10 @@ async fn main() -> std::io::Result<()> {
             }
         }
         Err(e) => {
-            warn!("Failed to restore order book (table may not exist yet): {}", e);
+            warn!(
+                "Failed to restore order book (table may not exist yet): {}",
+                e
+            );
         }
     }
 
@@ -146,13 +154,21 @@ async fn main() -> std::io::Result<()> {
             Cors::default()
                 .allow_any_origin()
                 .allowed_methods(vec!["GET", "POST", "DELETE", "OPTIONS"])
-                .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT, header::CONTENT_TYPE])
+                .allowed_headers(vec![
+                    header::AUTHORIZATION,
+                    header::ACCEPT,
+                    header::CONTENT_TYPE,
+                ])
                 .max_age(3600)
         } else {
             // Production: Only allow specific origins
             let mut cors = Cors::default()
                 .allowed_methods(vec!["GET", "POST", "DELETE", "OPTIONS"])
-                .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT, header::CONTENT_TYPE])
+                .allowed_headers(vec![
+                    header::AUTHORIZATION,
+                    header::ACCEPT,
+                    header::CONTENT_TYPE,
+                ])
                 .max_age(3600);
 
             for origin in &config_clone.cors_origins {
@@ -168,7 +184,9 @@ async fn main() -> std::io::Result<()> {
             // SECURITY: Add rate limiting
             .wrap(Governor::new(&governor_conf))
             // SECURITY: Geo-blocking (only in production)
-            .wrap(crate::middleware::GeoBlock::new(!config_clone.is_development))
+            .wrap(crate::middleware::GeoBlock::new(
+                !config_clone.is_development,
+            ))
             .wrap(cors)
             // SECURITY: Add security headers
             .wrap(
@@ -177,7 +195,10 @@ async fn main() -> std::io::Result<()> {
                     .add(("X-Frame-Options", "DENY"))
                     .add(("X-XSS-Protection", "1; mode=block"))
                     .add(("Referrer-Policy", "strict-origin-when-cross-origin"))
-                    .add(("Permissions-Policy", "geolocation=(), microphone=(), camera=()"))
+                    .add((
+                        "Permissions-Policy",
+                        "geolocation=(), microphone=(), camera=()",
+                    )),
             )
             .wrap(actix_middleware::Compress::default())
             // Structured access log (replaces default Logger)
@@ -188,10 +209,16 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::JsonConfig::default().limit(4096))
             // Health check
             .route("/health", web::get().to(api::health::health_check))
-            .route("/health/detailed", web::get().to(api::health::health_detailed))
+            .route(
+                "/health/detailed",
+                web::get().to(api::health::health_detailed),
+            )
             // Metrics endpoints
             .route("/metrics", web::get().to(api::health::get_metrics))
-            .route("/metrics/prometheus", web::get().to(api::health::get_metrics_prometheus))
+            .route(
+                "/metrics/prometheus",
+                web::get().to(api::health::get_metrics_prometheus),
+            )
             // WebSocket endpoint
             .route("/ws", web::get().to(api::ws_handler))
             // API v1 routes
@@ -203,8 +230,14 @@ async fn main() -> std::io::Result<()> {
                             .route("", web::get().to(api::markets::list_markets))
                             .route("", web::post().to(api::markets::create_market))
                             .route("/{market_id}", web::get().to(api::markets::get_market))
-                            .route("/{market_id}/orderbook", web::get().to(api::markets::get_orderbook))
-                            .route("/{market_id}/trades", web::get().to(api::markets::get_trades))
+                            .route(
+                                "/{market_id}/orderbook",
+                                web::get().to(api::markets::get_orderbook),
+                            )
+                            .route(
+                                "/{market_id}/trades",
+                                web::get().to(api::markets::get_trades),
+                            ),
                     )
                     // Orders
                     .service(
@@ -212,39 +245,63 @@ async fn main() -> std::io::Result<()> {
                             .route("", web::get().to(api::orders::list_orders))
                             .route("", web::post().to(api::orders::place_order))
                             .route("/{order_id}", web::get().to(api::orders::get_order))
-                            .route("/{order_id}", web::delete().to(api::orders::cancel_order))
+                            .route("/{order_id}", web::delete().to(api::orders::cancel_order)),
                     )
                     // Positions
                     .service(
                         web::scope("/positions")
                             .route("", web::get().to(api::positions::list_positions))
                             .route("/{market_id}", web::get().to(api::positions::get_position))
-                            .route("/{market_id}/claim", web::post().to(api::positions::claim_winnings))
+                            .route(
+                                "/{market_id}/claim",
+                                web::post().to(api::positions::claim_winnings),
+                            ),
                     )
                     // User
                     .service(
                         web::scope("/user")
                             .route("/profile", web::get().to(api::user::get_profile))
-                            .route("/transactions", web::get().to(api::user::get_transactions))
+                            .route("/transactions", web::get().to(api::user::get_transactions)),
                     )
                     // Wallet
                     .service(
                         web::scope("/wallet")
                             .route("/balance", web::get().to(api::wallet::get_balance))
-                            .route("/deposit/address", web::get().to(api::wallet::get_deposit_address))
+                            .route(
+                                "/deposit/address",
+                                web::get().to(api::wallet::get_deposit_address),
+                            )
                             .route("/deposit", web::post().to(api::wallet::deposit))
-                            .route("/withdraw", web::post().to(api::wallet::withdraw))
+                            .route("/withdraw", web::post().to(api::wallet::withdraw)),
                     )
                     // Webhooks (no auth, signature verified)
-                    .route("/webhooks/blindfold", web::post().to(api::wallet::blindfold_webhook))
+                    .route(
+                        "/webhooks/blindfold",
+                        web::post().to(api::wallet::blindfold_webhook),
+                    )
                     // Authentication
                     .service(
                         web::scope("/auth")
                             .route("/nonce", web::get().to(api::auth::get_nonce))
                             .route("/login", web::post().to(api::auth::login))
+                            .route("/siwe/nonce", web::get().to(api::auth::get_siwe_nonce))
+                            .route("/siwe/login", web::post().to(api::auth::siwe_login))
                             .route("/refresh", web::post().to(api::auth::refresh_token))
-                            .route("/logout", web::post().to(api::auth::logout))
+                            .route("/logout", web::post().to(api::auth::logout)),
                     )
+                    .service(
+                        web::scope("/evm")
+                            .route("/markets", web::get().to(api::evm::get_base_markets))
+                            .route(
+                                "/markets/{market_id}/orderbook",
+                                web::get().to(api::evm::get_base_orderbook),
+                            )
+                            .route(
+                                "/markets/{market_id}/trades",
+                                web::get().to(api::evm::get_base_trades),
+                            )
+                            .route("/token/state", web::get().to(api::evm::get_neura_token_state)),
+                    ),
             )
     })
     .bind(&bind_addr)?

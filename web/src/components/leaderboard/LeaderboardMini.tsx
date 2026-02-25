@@ -66,12 +66,12 @@ export function LeaderboardMini({ title = 'Top Traders', limit = 5 }: Leaderboar
               <Link
                 key={entry.wallet}
                 href={`/profile/${entry.wallet}`}
-                className="flex items-center justify-between py-1.5 hover:bg-bg-secondary rounded-lg px-2 -mx-2 transition-colors duration-fast cursor-pointer"
+                className="flex items-center justify-between py-1.5 hover:bg-bg-secondary  px-2 -mx-2 transition-colors duration-fast cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <span
                     className={cn(
-                      'w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium',
+                      'w-6 h-6  flex items-center justify-center text-xs font-medium',
                       entry.rank === 1 && 'bg-yellow-500/20 text-yellow-500',
                       entry.rank === 2 && 'bg-gray-400/20 text-gray-400',
                       entry.rank === 3 && 'bg-amber-700/20 text-amber-700',

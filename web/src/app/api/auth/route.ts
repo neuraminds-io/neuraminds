@@ -119,21 +119,22 @@ function requireMutatingRequestGuards(request: NextRequest): NextResponse | null
   return validateBodySize(request);
 }
 
+type LoginFlow = 'solana' | 'siwe';
+const DEFAULT_LOGIN_FLOW: LoginFlow =
+  process.env.NEXT_PUBLIC_CHAIN_MODE === 'base' ? 'siwe' : 'solana';
+
 function parseLoginRequestBody(
   bodyText: string
-): { wallet: string; signature: string; message: string } | null {
+): { wallet: string; signature: string; message: string; flow: LoginFlow } | null {
   try {
     const parsed = JSON.parse(bodyText) as {
       wallet?: unknown;
       signature?: unknown;
       message?: unknown;
+      flow?: unknown;
     };
 
-    if (
-      typeof parsed.wallet !== 'string' ||
-      typeof parsed.signature !== 'string' ||
-      typeof parsed.message !== 'string'
-    ) {
+    if (typeof parsed.wallet !== 'string' || typeof parsed.signature !== 'string' || typeof parsed.message !== 'string') {
       return null;
     }
 
@@ -145,10 +146,16 @@ function parseLoginRequestBody(
       return null;
     }
 
+    const flow: LoginFlow =
+      parsed.flow === 'siwe' || parsed.flow === 'solana'
+        ? parsed.flow
+        : DEFAULT_LOGIN_FLOW;
+
     return {
       wallet: parsed.wallet.trim(),
       signature: parsed.signature.trim(),
       message: parsed.message,
+      flow,
     };
   } catch {
     return null;
@@ -202,18 +209,24 @@ export async function POST(request: NextRequest) {
       return jsonError(400, 'Invalid request body');
     }
 
-    const { wallet, signature, message } = body;
+    const { wallet, signature, message, flow } = body;
 
     if (!wallet || !signature || !message) {
       return jsonError(400, 'Missing required fields');
     }
 
-    const res = await fetch(`${API_BASE}/auth/login`, {
+    const target = flow === 'siwe' ? `${API_BASE}/auth/siwe/login` : `${API_BASE}/auth/login`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (flow === 'solana') {
+      headers.Authorization = `Bearer ${wallet}:${signature}:${message}`;
+    }
+
+    const res = await fetch(target, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${wallet}:${signature}:${message}`,
-      },
+      headers,
+      body: JSON.stringify({ wallet, signature, message }),
     });
 
     if (!res.ok) {

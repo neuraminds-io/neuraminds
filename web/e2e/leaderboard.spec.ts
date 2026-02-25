@@ -10,7 +10,7 @@ test.describe('Leaderboard Page', () => {
   });
 
   test('has correct page title in metadata', async ({ page }) => {
-    await expect(page).toHaveTitle(/leaderboard.*polybit/i);
+    await expect(page).toHaveTitle(/leaderboard.*neuraminds/i);
   });
 
   test('displays container with proper layout', async ({ page }) => {

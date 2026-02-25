@@ -6,7 +6,7 @@ function Skeleton({
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("animate-pulse rounded-md bg-bg-secondary", className)}
+      className={cn("animate-pulse  bg-bg-secondary", className)}
       {...props}
     />
   )
@@ -14,7 +14,7 @@ function Skeleton({
 
 function MarketCardSkeleton() {
   return (
-    <div className="bg-bg-primary border border-[var(--color-border)] rounded-lg p-4">
+    <div className="bg-bg-primary border border-[var(--color-border)]  p-4">
       <Skeleton className="h-5 w-3/4 mb-3" />
       <Skeleton className="h-4 w-1/2 mb-4" />
       <div className="flex justify-between items-center">
@@ -51,7 +51,7 @@ function OrderBookSkeleton() {
 
 function PositionCardSkeleton() {
   return (
-    <div className="bg-bg-primary border border-[var(--color-border)] rounded-lg p-4">
+    <div className="bg-bg-primary border border-[var(--color-border)]  p-4">
       <div className="flex justify-between items-start mb-3">
         <Skeleton className="h-5 w-2/3" />
         <Skeleton className="h-5 w-16" />
@@ -66,7 +66,7 @@ function PositionCardSkeleton() {
 
 function StatCardSkeleton() {
   return (
-    <div className="bg-bg-primary border border-[var(--color-border)] rounded-lg p-4">
+    <div className="bg-bg-primary border border-[var(--color-border)]  p-4">
       <Skeleton className="h-4 w-20 mb-2" />
       <Skeleton className="h-8 w-28" />
     </div>

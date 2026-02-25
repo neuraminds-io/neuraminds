@@ -118,7 +118,7 @@ export function NotificationItem({ notification, onClick }: NotificationItemProp
       {/* Icon */}
       <div
         className={cn(
-          'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center',
+          'flex-shrink-0 w-8 h-8  flex items-center justify-center',
           NOTIFICATION_COLORS[notification.type]
         )}
       >
@@ -141,7 +141,7 @@ export function NotificationItem({ notification, onClick }: NotificationItemProp
           {formatTime(notification.createdAt)}
         </span>
         {!notification.read && (
-          <span className="w-2 h-2 rounded-full bg-accent" />
+          <span className="w-2 h-2  bg-accent" />
         )}
       </div>
     </div>

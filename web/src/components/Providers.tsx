@@ -11,15 +11,32 @@ import {
   SolflareWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ToastProvider } from '@/components/ui';
-import { ThemeProvider } from '@/components/ThemeProvider';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { RPC_ENDPOINT } from '@/lib/programs';
+import { WagmiProvider, createConfig, http } from 'wagmi';
+import { base, baseSepolia } from 'wagmi/chains';
+import { injected } from '@wagmi/core';
 
-// Allow env override for localnet testing
-const getEndpoint = () => process.env.NEXT_PUBLIC_RPC_ENDPOINT || RPC_ENDPOINT;
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ThemeProvider } from '@/components/ThemeProvider';
+import { ToastProvider } from '@/components/ui';
+import {
+  BASE_CHAIN_ID,
+  BASE_RPC_ENDPOINT,
+  SOLANA_RPC_ENDPOINT,
+} from '@/lib/constants';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
+
+const getSolanaEndpoint = () => process.env.NEXT_PUBLIC_RPC_ENDPOINT || SOLANA_RPC_ENDPOINT;
+
+const wagmiConfig = createConfig({
+  chains: [base, baseSepolia],
+  connectors: [injected()],
+  transports: {
+    [base.id]: http(BASE_CHAIN_ID === base.id ? BASE_RPC_ENDPOINT : undefined),
+    [baseSepolia.id]: http(BASE_CHAIN_ID === baseSepolia.id ? BASE_RPC_ENDPOINT : undefined),
+  },
+  ssr: true,
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,13 +64,15 @@ export const Providers: FC<ProvidersProps> = ({ children }) => {
     <ErrorBoundary>
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
-          <ConnectionProvider endpoint={getEndpoint()}>
-            <WalletProvider wallets={wallets} autoConnect>
-              <WalletModalProvider>
-                <ToastProvider>{children}</ToastProvider>
-              </WalletModalProvider>
-            </WalletProvider>
-          </ConnectionProvider>
+          <WagmiProvider config={wagmiConfig}>
+            <ConnectionProvider endpoint={getSolanaEndpoint()}>
+              <WalletProvider wallets={wallets} autoConnect>
+                <WalletModalProvider>
+                  <ToastProvider>{children}</ToastProvider>
+                </WalletModalProvider>
+              </WalletProvider>
+            </ConnectionProvider>
+          </WagmiProvider>
         </QueryClientProvider>
       </ThemeProvider>
     </ErrorBoundary>

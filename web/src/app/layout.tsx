@@ -5,7 +5,7 @@ import { AnimatedBackground } from '@/components/ui';
 
 export const metadata: Metadata = {
   title: 'neuraminds | autonomous prediction markets',
-  description: 'Autonomous market infrastructure with private execution on Solana.',
+  description: 'Autonomous market infrastructure with Base-native execution.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -34,7 +34,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/neuraminds.svg" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
-      <body className="font-sans antialiased">
+      <body className="font-mono antialiased">
         <AnimatedBackground />
         <Providers>{children}</Providers>
       </body>

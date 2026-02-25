@@ -16,7 +16,7 @@ export function PriceBar({ yesPrice, noPrice, className }: PriceBarProps) {
         <span className="text-bid">Yes {yesPercent}%</span>
         <span className="text-ask">No {noPercent}%</span>
       </div>
-      <div className="h-2 bg-bg-secondary rounded-full overflow-hidden flex">
+      <div className="h-2 bg-bg-secondary  overflow-hidden flex">
         <div
           className="bg-bid h-full transition-all"
           style={{ width: `${yesPercent}%` }}

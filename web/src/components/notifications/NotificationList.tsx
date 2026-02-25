@@ -17,7 +17,7 @@ export function NotificationList({ onClose }: NotificationListProps) {
 
   return (
     <div
-      className="bg-bg-secondary border border-border rounded-lg shadow-xl overflow-hidden"
+      className="bg-bg-secondary border border-border  shadow-xl overflow-hidden"
       role="menu"
       aria-label="Notifications list"
     >

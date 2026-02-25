@@ -48,21 +48,21 @@ function truncateAddress(address: string): string {
 function RankBadge({ rank }: { rank: number }) {
   if (rank === 1) {
     return (
-      <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center">
+      <div className="w-8 h-8  bg-yellow-500/20 flex items-center justify-center">
         <span className="text-yellow-500 font-bold">1</span>
       </div>
     );
   }
   if (rank === 2) {
     return (
-      <div className="w-8 h-8 rounded-full bg-gray-400/20 flex items-center justify-center">
+      <div className="w-8 h-8  bg-gray-400/20 flex items-center justify-center">
         <span className="text-gray-400 font-bold">2</span>
       </div>
     );
   }
   if (rank === 3) {
     return (
-      <div className="w-8 h-8 rounded-full bg-amber-700/20 flex items-center justify-center">
+      <div className="w-8 h-8  bg-amber-700/20 flex items-center justify-center">
         <span className="text-amber-700 font-bold">3</span>
       </div>
     );
@@ -152,14 +152,14 @@ export function LeaderboardTable({
 
             <div className="flex flex-wrap gap-2">
               {/* Period selector */}
-              <div className="flex gap-1 p-1 bg-bg-tertiary rounded-lg">
+              <div className="flex gap-1 p-1 bg-bg-tertiary ">
                 {PERIODS.map((p) => (
                   <button
                     key={p.id}
                     type="button"
                     onClick={() => setPeriod(p.id)}
                     className={cn(
-                      'px-3 py-1 text-sm rounded-md transition-colors duration-fast cursor-pointer',
+                      'px-3 py-1 text-sm  transition-colors duration-fast cursor-pointer',
                       period === p.id
                         ? 'bg-accent text-white'
                         : 'text-text-secondary hover:text-text-primary'
@@ -171,14 +171,14 @@ export function LeaderboardTable({
               </div>
 
               {/* Metric selector */}
-              <div className="flex gap-1 p-1 bg-bg-tertiary rounded-lg">
+              <div className="flex gap-1 p-1 bg-bg-tertiary ">
                 {METRICS.map((m) => (
                   <button
                     key={m.id}
                     type="button"
                     onClick={() => setMetric(m.id)}
                     className={cn(
-                      'px-3 py-1 text-sm rounded-md transition-colors duration-fast cursor-pointer',
+                      'px-3 py-1 text-sm  transition-colors duration-fast cursor-pointer',
                       metric === m.id
                         ? 'bg-accent text-white'
                         : 'text-text-secondary hover:text-text-primary'
@@ -251,7 +251,7 @@ function LeaderboardRow({ entry, formatValue, metric, compact }: LeaderboardRowP
     <Link
       href={`/profile/${entry.wallet}`}
       className={cn(
-        'grid items-center py-2 hover:bg-bg-secondary rounded-lg transition-colors duration-fast cursor-pointer',
+        'grid items-center py-2 hover:bg-bg-secondary  transition-colors duration-fast cursor-pointer',
         compact ? 'grid-cols-3' : 'grid-cols-4'
       )}
     >

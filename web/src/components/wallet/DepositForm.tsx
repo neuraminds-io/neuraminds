@@ -8,32 +8,48 @@ import { Input } from '@/components/ui/Input';
 import type { DepositAddress, DepositSource } from '@/types';
 import { cn } from '@/lib/utils';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { CHAIN_MODE } from '@/lib/constants';
+import { useBaseWallet } from '@/hooks/useBaseWallet';
 import { JupiterSwap } from './JupiterSwap';
 
 interface DepositFormProps {
   onSuccess?: () => void;
 }
 
-const DEPOSIT_METHODS: { id: DepositSource; label: string; description: string }[] = [
-  {
-    id: 'wallet',
-    label: 'Crypto Wallet',
-    description: 'Transfer USDC from your Solana wallet',
-  },
-  {
-    id: 'blindfold',
-    label: 'Card Payment',
-    description: 'Pay with credit/debit card via Blindfold',
-  },
-  {
-    id: 'jupiter',
-    label: 'Swap Tokens',
-    description: 'Swap any token to USDC via Jupiter',
-  },
-];
+function getDepositMethods(
+  isBaseMode: boolean
+): { id: DepositSource; label: string; description: string }[] {
+  const methods: { id: DepositSource; label: string; description: string }[] = [
+    {
+      id: 'wallet',
+      label: 'Crypto Wallet',
+      description: isBaseMode
+        ? 'Transfer USDC from your Base wallet'
+        : 'Transfer USDC from your Solana wallet',
+    },
+    {
+      id: 'blindfold',
+      label: 'Card Payment',
+      description: 'Pay with credit/debit card via Blindfold',
+    },
+  ];
+
+  if (!isBaseMode) {
+    methods.push({
+      id: 'jupiter',
+      label: 'Swap Tokens',
+      description: 'Swap any token to USDC via Jupiter',
+    });
+  }
+
+  return methods;
+}
 
 export function DepositForm({ onSuccess }: DepositFormProps) {
   const { publicKey } = useWallet();
+  const baseWallet = useBaseWallet();
+  const isBaseMode = CHAIN_MODE === 'base';
+  const depositMethods = getDepositMethods(isBaseMode);
   const [method, setMethod] = useState<DepositSource>('wallet');
   const [amount, setAmount] = useState('');
   const [depositAddress, setDepositAddress] = useState<DepositAddress | null>(null);
@@ -67,7 +83,9 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
       const amountLamports = Math.floor(parseFloat(amount) * 1_000_000);
 
       if (method === 'blindfold') {
-        if (!publicKey) {
+        const walletAddress = isBaseMode ? baseWallet.address : publicKey?.toBase58();
+
+        if (!walletAddress) {
           setError('Please connect your wallet first');
           return;
         }
@@ -75,7 +93,7 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
         // Create Blindfold payment session
         const session = await createPaymentSession({
           amount: amountLamports,
-          walletAddress: publicKey.toBase58(),
+          walletAddress,
           callbackUrl: `${window.location.origin}/api/webhooks/blindfold`,
           successUrl: `${window.location.origin}/wallet?deposit=success`,
           cancelUrl: `${window.location.origin}/wallet?deposit=cancelled`,
@@ -111,13 +129,18 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
   return (
     <div className="space-y-6">
       {/* Method Selection */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {DEPOSIT_METHODS.map((m) => (
+      <div
+        className={cn(
+          'grid grid-cols-1 gap-3',
+          depositMethods.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'
+        )}
+      >
+        {depositMethods.map((m) => (
           <button
             key={m.id}
             onClick={() => setMethod(m.id)}
             className={cn(
-              'p-4 rounded-lg border text-left transition-all duration-fast cursor-pointer',
+              'p-4  border text-left transition-all duration-fast cursor-pointer',
               method === m.id
                 ? 'border-accent bg-accent-muted'
                 : 'border-border hover:border-border-hover'
@@ -167,12 +190,12 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
 
       {/* Deposit Address (for wallet deposits) */}
       {method === 'wallet' && depositAddress && (
-        <div className="space-y-2 p-4 rounded-lg bg-bg-secondary">
+        <div className="space-y-2 p-4  bg-bg-secondary">
           <p className="text-sm font-medium text-text-secondary">
             Deposit Address
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 text-sm text-text-primary bg-bg-tertiary px-3 py-2 rounded font-mono break-all">
+            <code className="flex-1 text-sm text-text-primary bg-bg-tertiary px-3 py-2  font-mono break-all">
               {depositAddress.address}
             </code>
             <Button
@@ -184,7 +207,7 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
             </Button>
           </div>
           <p className="text-xs text-text-secondary mt-2">
-            Send USDC on Solana to this address. Minimum: $1 USDC
+            Send USDC on {isBaseMode ? 'Base' : 'Solana'} to this address. Minimum: $1 USDC
           </p>
         </div>
       )}
@@ -204,13 +227,13 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
 
       {/* Error/Success Messages */}
       {error && (
-        <div className="p-3 rounded-lg bg-ask/10 border border-ask/20">
+        <div className="p-3  bg-ask/10 border border-ask/20">
           <p className="text-sm text-ask">{error}</p>
         </div>
       )}
 
       {success && (
-        <div className="p-3 rounded-lg bg-bid/10 border border-bid/20">
+        <div className="p-3  bg-bid/10 border border-bid/20">
           <p className="text-sm text-bid">{success}</p>
         </div>
       )}

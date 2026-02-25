@@ -141,12 +141,12 @@ export function ProfileActivity({ wallet }: ProfileActivityProps) {
               <Link
                 key={activity.id}
                 href={`/markets/${activity.marketId}`}
-                className="flex items-start gap-3 p-3 rounded-lg hover:bg-bg-secondary transition-colors duration-fast cursor-pointer"
+                className="flex items-start gap-3 p-3  hover:bg-bg-secondary transition-colors duration-fast cursor-pointer"
               >
                 {/* Icon */}
                 <div
                   className={cn(
-                    'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center',
+                    'flex-shrink-0 w-8 h-8  flex items-center justify-center',
                     activity.type === 'trade' && 'bg-accent/10 text-accent',
                     activity.type === 'position_opened' && 'bg-bid/10 text-bid',
                     activity.type === 'position_closed' && 'bg-accent/10 text-accent',
@@ -165,7 +165,7 @@ export function ProfileActivity({ wallet }: ProfileActivityProps) {
                     {activity.outcome && (
                       <span
                         className={cn(
-                          'text-xs px-1.5 py-0.5 rounded',
+                          'text-xs px-1.5 py-0.5 ',
                           activity.outcome === 'yes'
                             ? 'bg-bid/10 text-bid'
                             : 'bg-ask/10 text-ask'

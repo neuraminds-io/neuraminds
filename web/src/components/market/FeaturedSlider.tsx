@@ -19,7 +19,7 @@ function FeaturedCard({ market }: { market: Market }) {
     <Link href={`/markets/${market.id}`} className="block group flex-shrink-0 w-[320px] md:w-[380px]">
       <div
         className={cn(
-          'h-full rounded-xl overflow-hidden',
+          'h-full  overflow-hidden',
           'bg-gradient-to-br from-accent/5 via-bg-primary to-no/5',
           'border border-border hover:border-border-hover',
           'p-4',
@@ -28,7 +28,7 @@ function FeaturedCard({ market }: { market: Market }) {
       >
         {/* Category tag */}
         <div className="flex items-center gap-2 mb-3">
-          <span className="px-2 py-0.5 rounded text-xs font-medium bg-accent/10 text-accent capitalize">
+          <span className="px-2 py-0.5  text-xs font-medium bg-accent/10 text-accent capitalize">
             {market.category}
           </span>
         </div>
@@ -47,7 +47,7 @@ function FeaturedCard({ market }: { market: Market }) {
               e.stopPropagation();
             }}
             className={cn(
-              'flex-1 py-2 px-3 rounded-lg font-medium text-sm',
+              'flex-1 py-2 px-3  font-medium text-sm',
               'bg-yes-muted border border-yes-border text-yes',
               'hover:bg-yes hover:text-white hover:border-yes',
               'transition-all duration-fast cursor-pointer',
@@ -64,7 +64,7 @@ function FeaturedCard({ market }: { market: Market }) {
               e.stopPropagation();
             }}
             className={cn(
-              'flex-1 py-2 px-3 rounded-lg font-medium text-sm',
+              'flex-1 py-2 px-3  font-medium text-sm',
               'bg-no-muted border border-no-border text-no',
               'hover:bg-no hover:text-white hover:border-no',
               'transition-all duration-fast cursor-pointer',
@@ -107,7 +107,7 @@ export function FeaturedSlider({ markets, title }: FeaturedSliderProps) {
         )}
         <div className="flex gap-4 overflow-hidden">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="flex-shrink-0 w-[320px] md:w-[380px] h-[160px] rounded-xl bg-bg-secondary animate-pulse" />
+            <div key={i} className="flex-shrink-0 w-[320px] md:w-[380px] h-[160px]  bg-bg-secondary animate-pulse" />
           ))}
         </div>
       </div>
@@ -124,7 +124,7 @@ export function FeaturedSlider({ markets, title }: FeaturedSliderProps) {
             <button
               onClick={() => scroll('left')}
               className={cn(
-                'p-1.5 rounded-lg',
+                'p-1.5 ',
                 'bg-bg-secondary hover:bg-bg-tertiary',
                 'text-text-secondary hover:text-text-primary',
                 'transition-colors cursor-pointer'
@@ -135,7 +135,7 @@ export function FeaturedSlider({ markets, title }: FeaturedSliderProps) {
             <button
               onClick={() => scroll('right')}
               className={cn(
-                'p-1.5 rounded-lg',
+                'p-1.5 ',
                 'bg-bg-secondary hover:bg-bg-tertiary',
                 'text-text-secondary hover:text-text-primary',
                 'transition-colors cursor-pointer'

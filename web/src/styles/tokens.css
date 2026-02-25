@@ -172,31 +172,31 @@
   --font-semibold: 600;
   --font-bold: 700;
 
-  --font-sans: 'Space Grotesk', 'Inter', 'Segoe UI', system-ui, sans-serif;
-  --font-display: 'Space Grotesk', 'Inter', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
+  --font-sans: 'Anonymous Pro', 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
+  --font-display: 'Anonymous Pro', 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
+  --font-mono: 'Anonymous Pro', 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
 
   /* ========================================
      BORDER RADIUS
      ======================================== */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --radius-full: 9999px;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-full: 0;
 
   /* ========================================
      SHADOWS
      ======================================== */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.09);
-  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.12);
-  --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.15);
+  --shadow-xs: 1px 1px 0 rgba(0, 0, 0, 0.18);
+  --shadow-sm: 2px 2px 0 rgba(0, 0, 0, 0.22);
+  --shadow-md: 3px 3px 0 rgba(0, 0, 0, 0.26);
+  --shadow-lg: 4px 4px 0 rgba(0, 0, 0, 0.3);
+  --shadow-xl: 6px 6px 0 rgba(0, 0, 0, 0.34);
 
-  --shadow-glow: 0 0 20px rgba(255, 90, 31, 0.18);
-  --shadow-glow-success: 0 0 20px rgba(255, 90, 31, 0.18);
-  --shadow-glow-danger: 0 0 20px rgba(28, 25, 23, 0.12);
+  --shadow-glow: var(--shadow-md);
+  --shadow-glow-success: var(--shadow-md);
+  --shadow-glow-danger: var(--shadow-md);
 
   /* ========================================
      ANIMATION
@@ -224,9 +224,9 @@
   /* ========================================
      GLASS
      ======================================== */
-  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-bg: rgba(255, 255, 255, 0.94);
   --glass-border: rgba(0, 0, 0, 0.1);
-  --backdrop-blur: blur(10px);
+  --backdrop-blur: none;
 }
 
 /* ========================================
@@ -298,16 +298,16 @@
   --color-highlight: #ffb08b;
   --color-highlight-muted: rgba(255, 176, 139, 0.2);
 
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.32);
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.34);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.42);
-  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.45);
-  --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.52);
+  --shadow-xs: 1px 1px 0 rgba(0, 0, 0, 0.4);
+  --shadow-sm: 2px 2px 0 rgba(0, 0, 0, 0.45);
+  --shadow-md: 3px 3px 0 rgba(0, 0, 0, 0.5);
+  --shadow-lg: 4px 4px 0 rgba(0, 0, 0, 0.56);
+  --shadow-xl: 6px 6px 0 rgba(0, 0, 0, 0.62);
 
-  --shadow-glow: 0 0 20px rgba(255, 107, 56, 0.3);
-  --shadow-glow-success: 0 0 20px rgba(255, 107, 56, 0.3);
-  --shadow-glow-danger: 0 0 20px rgba(214, 211, 209, 0.18);
+  --shadow-glow: var(--shadow-md);
+  --shadow-glow-success: var(--shadow-md);
+  --shadow-glow-danger: var(--shadow-md);
 
-  --glass-bg: rgba(17, 17, 17, 0.78);
+  --glass-bg: rgba(17, 17, 17, 0.92);
   --glass-border: rgba(255, 255, 255, 0.1);
 }

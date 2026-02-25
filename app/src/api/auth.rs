@@ -1,18 +1,27 @@
-use actix_web::{HttpRequest, HttpResponse, web};
+use crate::api::{
+    check_auth_rate_limit,
+    jwt::{TokenPair, UserRole},
+    ApiError,
+};
+use crate::AppState;
+use actix_web::{web, HttpRequest, HttpResponse};
+use http::uri::Authority;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::str::FromStr;
+use sha3::{Digest, Keccak256};
+use siwe::VerificationOpts;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
-use crate::AppState;
-use crate::api::{ApiError, jwt::{UserRole, TokenPair}, check_auth_rate_limit};
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+use time::OffsetDateTime;
 
 /// Message expiration time in seconds (5 minutes)
 const MESSAGE_EXPIRATION_SECS: u64 = 300;
 
 /// Maximum age for nonce cleanup (10 minutes)
 const NONCE_CLEANUP_AGE_SECS: u64 = 600;
+const EVM_ADDRESS_LEN: usize = 42;
 
 /// Represents an authenticated user
 #[derive(Debug, Clone)]
@@ -36,7 +45,7 @@ impl AuthMessage {
         let parts: Vec<&str> = message.split(':').collect();
         if parts.len() != 4 {
             return Err(ApiError::unauthorized(
-                "Invalid message format. Expected: polyguard:{wallet}:{timestamp}:{nonce}"
+                "Invalid message format. Expected: polyguard:{wallet}:{timestamp}:{nonce}",
             ));
         }
 
@@ -44,7 +53,8 @@ impl AuthMessage {
             return Err(ApiError::unauthorized("Invalid message prefix"));
         }
 
-        let timestamp = parts[2].parse::<u64>()
+        let timestamp = parts[2]
+            .parse::<u64>()
             .map_err(|_| ApiError::unauthorized("Invalid timestamp in message"))?;
 
         Ok(Self {
@@ -57,7 +67,10 @@ impl AuthMessage {
     /// Reconstruct the original message for verification
     #[allow(dead_code)]
     fn to_string(&self) -> String {
-        format!("polyguard:{}:{}:{}", self.wallet, self.timestamp, self.nonce)
+        format!(
+            "polyguard:{}:{}:{}",
+            self.wallet, self.timestamp, self.nonce
+        )
     }
 }
 
@@ -73,6 +86,13 @@ pub async fn extract_authenticated_user(
     req: &HttpRequest,
     state: &web::Data<Arc<AppState>>,
 ) -> Result<AuthenticatedUser, ApiError> {
+    if state.config.evm_enabled {
+        return Err(ApiError::bad_request(
+            "EVM_AUTH_NOT_READY",
+            "EVM auth requires SIWE and is not implemented yet",
+        ));
+    }
+
     let auth_header = req
         .headers()
         .get("Authorization")
@@ -81,7 +101,9 @@ pub async fn extract_authenticated_user(
 
     // Check for Bearer prefix
     if !auth_header.starts_with("Bearer ") {
-        return Err(ApiError::unauthorized("Invalid Authorization header format"));
+        return Err(ApiError::unauthorized(
+            "Invalid Authorization header format",
+        ));
     }
 
     let token = &auth_header[7..]; // Skip "Bearer "
@@ -91,7 +113,7 @@ pub async fn extract_authenticated_user(
     let parts: Vec<&str> = token.splitn(3, ':').collect();
     if parts.len() != 3 {
         return Err(ApiError::unauthorized(
-            "Invalid token format. Expected: wallet_pubkey:signature:message"
+            "Invalid token format. Expected: wallet_pubkey:signature:message",
         ));
     }
 
@@ -122,7 +144,9 @@ pub async fn extract_authenticated_user(
 
     // Allow some clock skew (5 seconds into future)
     if auth_message.timestamp > current_time + 5 {
-        return Err(ApiError::unauthorized("Authentication message timestamp in future"));
+        return Err(ApiError::unauthorized(
+            "Authentication message timestamp in future",
+        ));
     }
 
     // Check nonce for replay protection (using Redis)
@@ -146,7 +170,7 @@ fn validate_solana_address(address: &str) -> Result<(), ApiError> {
     if address.len() < 32 || address.len() > 44 {
         return Err(ApiError::bad_request(
             "INVALID_WALLET",
-            "Invalid wallet address length"
+            "Invalid wallet address length",
         ));
     }
 
@@ -155,7 +179,7 @@ fn validate_solana_address(address: &str) -> Result<(), ApiError> {
     if !address.chars().all(|c| BASE58_CHARS.contains(c)) {
         return Err(ApiError::bad_request(
             "INVALID_WALLET",
-            "Invalid wallet address format"
+            "Invalid wallet address format",
         ));
     }
 
@@ -164,6 +188,84 @@ fn validate_solana_address(address: &str) -> Result<(), ApiError> {
         .map_err(|_| ApiError::bad_request("INVALID_WALLET", "Invalid Solana public key"))?;
 
     Ok(())
+}
+
+fn validate_evm_address(address: &str) -> Result<(), ApiError> {
+    if address.len() != EVM_ADDRESS_LEN || !address.starts_with("0x") {
+        return Err(ApiError::bad_request(
+            "INVALID_WALLET",
+            "Invalid EVM wallet address format",
+        ));
+    }
+
+    if !address[2..].chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(ApiError::bad_request(
+            "INVALID_WALLET",
+            "Invalid EVM wallet address format",
+        ));
+    }
+
+    if !is_eip55_checksum(address) {
+        return Err(ApiError::bad_request(
+            "INVALID_WALLET",
+            "EVM wallet address must use EIP-55 checksum casing",
+        ));
+    }
+
+    Ok(())
+}
+
+fn normalize_evm_address(address: &str) -> String {
+    address.to_ascii_lowercase()
+}
+
+fn is_eip55_checksum(address: &str) -> bool {
+    if address.len() != EVM_ADDRESS_LEN || !address.starts_with("0x") {
+        return false;
+    }
+
+    let hex_part = &address[2..];
+    let lower = hex_part.to_ascii_lowercase();
+
+    // All-lowercase and all-uppercase addresses bypass checksum in some clients.
+    // Reject them here so user input always carries checksum protection.
+    if hex_part == lower || hex_part == lower.to_ascii_uppercase() {
+        return false;
+    }
+
+    let mut hasher = Keccak256::new();
+    hasher.update(lower.as_bytes());
+    let hash = hasher.finalize();
+
+    for (idx, ch) in hex_part.chars().enumerate() {
+        if ch.is_ascii_digit() {
+            continue;
+        }
+
+        let hash_byte = hash[idx / 2];
+        let nibble = if idx % 2 == 0 {
+            hash_byte >> 4
+        } else {
+            hash_byte & 0x0f
+        };
+
+        if nibble >= 8 && !ch.is_ascii_uppercase() {
+            return false;
+        }
+
+        if nibble < 8 && !ch.is_ascii_lowercase() {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn decode_hex_signature(signature: &str) -> Result<Vec<u8>, ApiError> {
+    let sig = signature.strip_prefix("0x").unwrap_or(signature);
+
+    hex::decode(sig)
+        .map_err(|_| ApiError::bad_request("INVALID_SIGNATURE", "Signature must be valid hex"))
 }
 
 /// Verifies an Ed25519 signature from a Solana wallet
@@ -213,7 +315,8 @@ async fn check_and_record_nonce_redis(
     nonce: &str,
 ) -> Result<(), ApiError> {
     // Nonce TTL: 10 minutes (matches NONCE_CLEANUP_AGE_SECS)
-    let was_new = redis.check_and_record_nonce(nonce, NONCE_CLEANUP_AGE_SECS)
+    let was_new = redis
+        .check_and_record_nonce(nonce, NONCE_CLEANUP_AGE_SECS)
         .await
         .map_err(|e| {
             log::error!("Redis nonce check failed: {}", e);
@@ -222,7 +325,32 @@ async fn check_and_record_nonce_redis(
 
     if !was_new {
         log::warn!("Replay attack detected: nonce {} already used", nonce);
-        return Err(ApiError::unauthorized("Nonce already used (possible replay attack)"));
+        return Err(ApiError::unauthorized(
+            "Nonce already used (possible replay attack)",
+        ));
+    }
+
+    Ok(())
+}
+
+async fn check_and_record_siwe_nonce_redis(
+    redis: &crate::services::RedisService,
+    nonce: &str,
+) -> Result<(), ApiError> {
+    let siwe_nonce = format!("siwe:{}", nonce);
+    let was_new = redis
+        .check_and_record_nonce(&siwe_nonce, NONCE_CLEANUP_AGE_SECS)
+        .await
+        .map_err(|e| {
+            log::error!("Redis SIWE nonce check failed: {}", e);
+            ApiError::internal("Nonce verification failed")
+        })?;
+
+    if !was_new {
+        log::warn!("Replay attack detected: SIWE nonce {} already used", nonce);
+        return Err(ApiError::unauthorized(
+            "Nonce already used (possible replay attack)",
+        ));
     }
 
     Ok(())
@@ -291,6 +419,17 @@ pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
+/// Request for SIWE login endpoint
+#[derive(Deserialize)]
+pub struct SiweLoginRequest {
+    /// The wallet address (0x-prefixed EVM address)
+    pub wallet: String,
+    /// Full EIP-4361 SIWE message string
+    pub message: String,
+    /// Hex-encoded signature (65-byte EIP-191 signature)
+    pub signature: String,
+}
+
 /// GET /v1/auth/nonce
 /// Returns a unique nonce for the client to include in their signed message
 pub async fn get_nonce() -> Result<HttpResponse, ApiError> {
@@ -298,9 +437,16 @@ pub async fn get_nonce() -> Result<HttpResponse, ApiError> {
     let expires_at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| ApiError::internal("System time error"))?
-        .as_secs() + MESSAGE_EXPIRATION_SECS;
+        .as_secs()
+        + MESSAGE_EXPIRATION_SECS;
 
     Ok(HttpResponse::Ok().json(NonceResponse { nonce, expires_at }))
+}
+
+/// GET /v1/auth/siwe/nonce
+/// Returns a unique nonce for SIWE authentication
+pub async fn get_siwe_nonce() -> Result<HttpResponse, ApiError> {
+    get_nonce().await
 }
 
 /// POST /v1/auth/login
@@ -310,6 +456,13 @@ pub async fn login(
     state: web::Data<Arc<AppState>>,
     body: web::Json<LoginRequest>,
 ) -> Result<HttpResponse, ApiError> {
+    if state.config.evm_enabled {
+        return Err(ApiError::bad_request(
+            "EVM_AUTH_NOT_READY",
+            "EVM auth requires SIWE and is not implemented yet",
+        ));
+    }
+
     // Rate limit: 10 login attempts per minute per IP
     check_auth_rate_limit(&http_req, &state.redis).await?;
 
@@ -337,7 +490,9 @@ pub async fn login(
     }
 
     if auth_message.timestamp > current_time + 5 {
-        return Err(ApiError::unauthorized("Authentication message timestamp in future"));
+        return Err(ApiError::unauthorized(
+            "Authentication message timestamp in future",
+        ));
     }
 
     // Check nonce for replay protection (using Redis for distributed storage)
@@ -356,6 +511,81 @@ pub async fn login(
     let refresh_token = state.jwt.generate_refresh_token(&req.wallet, role)?;
 
     log::info!("User logged in: {} with role {:?}", req.wallet, role);
+
+    Ok(HttpResponse::Ok().json(TokenPair::new(access_token, refresh_token)))
+}
+
+/// POST /v1/auth/siwe/login
+/// Authenticates a user with EIP-4361 (SIWE) and returns JWT tokens
+pub async fn siwe_login(
+    http_req: HttpRequest,
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<SiweLoginRequest>,
+) -> Result<HttpResponse, ApiError> {
+    if !state.config.evm_enabled {
+        return Err(ApiError::bad_request(
+            "EVM_DISABLED",
+            "EVM auth is disabled",
+        ));
+    }
+
+    check_auth_rate_limit(&http_req, &state.redis).await?;
+
+    let req = body.into_inner();
+    validate_evm_address(&req.wallet)?;
+    let wallet = normalize_evm_address(&req.wallet);
+
+    let message: siwe::Message = req.message.parse().map_err(|e| {
+        ApiError::bad_request(
+            "INVALID_SIWE_MESSAGE",
+            &format!("Invalid SIWE message: {}", e),
+        )
+    })?;
+
+    let message_address = format!("0x{}", hex::encode(message.address));
+    if wallet != message_address {
+        return Err(ApiError::unauthorized(
+            "Wallet address mismatch in SIWE message",
+        ));
+    }
+
+    if message.chain_id != state.config.base_chain_id {
+        return Err(ApiError::bad_request(
+            "INVALID_CHAIN_ID",
+            "SIWE message chain ID does not match configured Base chain",
+        ));
+    }
+
+    if message.domain.to_string() != state.config.siwe_domain {
+        return Err(ApiError::unauthorized("SIWE domain mismatch"));
+    }
+
+    check_and_record_siwe_nonce_redis(&state.redis, &message.nonce).await?;
+
+    let signature = decode_hex_signature(&req.signature)?;
+    let expected_domain: Authority = state
+        .config
+        .siwe_domain
+        .parse()
+        .map_err(|_| ApiError::internal("Invalid SIWE domain configuration"))?;
+
+    let opts = VerificationOpts {
+        domain: Some(expected_domain),
+        nonce: Some(message.nonce.clone()),
+        timestamp: Some(OffsetDateTime::now_utc()),
+        ..Default::default()
+    };
+
+    message
+        .verify(&signature, &opts)
+        .await
+        .map_err(|e| ApiError::unauthorized(&format!("SIWE verification failed: {}", e)))?;
+
+    let role = determine_user_role(&wallet, &state).await;
+    let access_token = state.jwt.generate_access_token(&wallet, role)?;
+    let refresh_token = state.jwt.generate_refresh_token(&wallet, role)?;
+
+    log::info!("SIWE user logged in: {} with role {:?}", wallet, role);
 
     Ok(HttpResponse::Ok().json(TokenPair::new(access_token, refresh_token)))
 }
@@ -471,7 +701,9 @@ pub fn extract_jwt_user(
         .ok_or_else(|| ApiError::unauthorized("Missing Authorization header"))?;
 
     if !auth_header.starts_with("Bearer ") {
-        return Err(ApiError::unauthorized("Invalid Authorization header format"));
+        return Err(ApiError::unauthorized(
+            "Invalid Authorization header format",
+        ));
     }
 
     let token = &auth_header[7..];
@@ -514,7 +746,10 @@ mod tests {
         let msg = "polyguard:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU:1705680000:abc123";
         let parsed = AuthMessage::parse(msg).unwrap();
 
-        assert_eq!(parsed.wallet, "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+        assert_eq!(
+            parsed.wallet,
+            "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+        );
         assert_eq!(parsed.timestamp, 1705680000);
         assert_eq!(parsed.nonce, "abc123");
     }
@@ -548,6 +783,27 @@ mod tests {
         // 'O' and 'l' are not valid base58 characters
         let invalid = "OzMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
         assert!(validate_solana_address(invalid).is_err());
+    }
+
+    #[test]
+    fn test_validate_evm_address_valid() {
+        let valid = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
+        assert!(validate_evm_address(valid).is_ok());
+    }
+
+    #[test]
+    fn test_validate_evm_address_invalid() {
+        assert!(validate_evm_address("0x123").is_err());
+        assert!(validate_evm_address("71C7656EC7ab88b098defB751B7401B5f6d8976F").is_err());
+        assert!(validate_evm_address("0xZZC7656EC7ab88b098defB751B7401B5f6d8976F").is_err());
+        assert!(validate_evm_address("0x71c7656ec7ab88b098defb751b7401b5f6d8976f").is_err());
+    }
+
+    #[test]
+    fn test_decode_hex_signature() {
+        let sig = format!("0x{}", "11".repeat(65));
+        let decoded = decode_hex_signature(&sig).unwrap();
+        assert_eq!(decoded.len(), 65);
     }
 
     // Note: Nonce replay protection tests moved to integration tests
@@ -604,7 +860,11 @@ mod tests {
             "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
         ];
         for addr in addresses {
-            assert!(validate_solana_address(addr).is_ok(), "Address {} should be valid", addr);
+            assert!(
+                validate_solana_address(addr).is_ok(),
+                "Address {} should be valid",
+                addr
+            );
         }
     }
 
@@ -613,7 +873,9 @@ mod tests {
         // Too short
         assert!(validate_solana_address("1234567890123456789012345678901").is_err());
         // Too long
-        assert!(validate_solana_address("12345678901234567890123456789012345678901234567890").is_err());
+        assert!(
+            validate_solana_address("12345678901234567890123456789012345678901234567890").is_err()
+        );
     }
 
     #[test]

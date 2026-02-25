@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
@@ -74,7 +74,7 @@ function PriceChart({ timeframes }: { timeframes: { label: string; percent: numb
       <div className="absolute top-0 left-0 flex flex-wrap gap-x-4 gap-y-1 text-sm">
         {timeframes.map((tf, i) => (
           <div key={i} className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tf.color }} />
+            <span className="w-2 h-2 " style={{ backgroundColor: tf.color }} />
             <span className="text-text-secondary">{tf.label}</span>
             <span className="font-semibold text-text-primary">{tf.percent}%</span>
           </div>
@@ -161,17 +161,17 @@ function BannerCard({ market }: { market: Market }) {
   const timeframes = generateTimeframes(market);
 
   return (
-    <div className="relative bg-bg-primary/80 backdrop-blur-sm rounded-2xl p-6 lg:p-8 overflow-hidden min-h-[420px] border border-border/50">
+    <div className="relative bg-bg-primary/80   p-6 lg:p-8 overflow-hidden min-h-[420px] border border-border/50">
       {/* Gradient shadow background */}
       <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-transparent to-[#ff8b5f]/12 pointer-events-none" />
-      <div className="absolute -top-24 -right-24 w-64 h-64 bg-accent/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-[#ff8b5f]/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-24 -right-24 w-64 h-64 bg-accent/20   pointer-events-none" />
+      <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-[#ff8b5f]/15   pointer-events-none" />
       <div className="relative flex flex-col lg:flex-row gap-8 h-full">
         {/* Left side - Market info */}
         <div className="lg:w-[420px] flex flex-col">
           {/* Image + Title */}
           <div className="flex gap-4 mb-8">
-            <div className="w-[72px] h-[72px] rounded-lg bg-gradient-to-br from-sky-400 to-emerald-400 flex-shrink-0 overflow-hidden relative">
+            <div className="w-[72px] h-[72px]  bg-gradient-to-br from-sky-400 to-emerald-400 flex-shrink-0 overflow-hidden relative">
               {market.imageUrl ? (
                 <Image
                   src={market.imageUrl}
@@ -208,7 +208,7 @@ function BannerCard({ market }: { market: Market }) {
                     <button
                       onClick={(e) => e.preventDefault()}
                       className={cn(
-                        'px-4 py-1.5 rounded-l-md text-sm font-medium',
+                        'px-4 py-1.5  text-sm font-medium',
                         'bg-transparent border border-yes text-yes',
                         'hover:bg-yes hover:text-white',
                         'transition-all cursor-pointer'
@@ -219,7 +219,7 @@ function BannerCard({ market }: { market: Market }) {
                     <button
                       onClick={(e) => e.preventDefault()}
                       className={cn(
-                        'px-4 py-1.5 rounded-r-md text-sm font-medium',
+                        'px-4 py-1.5  text-sm font-medium',
                         'bg-transparent border border-l-0 border-no text-no',
                         'hover:bg-no hover:text-white',
                         'transition-all cursor-pointer'
@@ -246,7 +246,7 @@ function BannerCard({ market }: { market: Market }) {
               </span>
               <button
                 onClick={(e) => e.preventDefault()}
-                className="w-6 h-6 rounded-full border border-border flex items-center justify-center text-text-muted hover:text-text-primary hover:border-border-hover transition-colors cursor-pointer"
+                className="w-6 h-6  border border-border flex items-center justify-center text-text-muted hover:text-text-primary hover:border-border-hover transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -268,39 +268,39 @@ function BannerCard({ market }: { market: Market }) {
 export function FeaturedBanner({ markets }: FeaturedBannerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const goToPrev = () => {
+  const goToPrev = useCallback(() => {
     setCurrentIndex((prev) => (prev === 0 ? markets.length - 1 : prev - 1));
-  };
+  }, [markets.length]);
 
-  const goToNext = () => {
+  const goToNext = useCallback(() => {
     setCurrentIndex((prev) => (prev === markets.length - 1 ? 0 : prev + 1));
-  };
+  }, [markets.length]);
 
   // Auto-advance every 8 seconds
   useEffect(() => {
     if (markets.length <= 1) return;
     const timer = setInterval(goToNext, 8000);
     return () => clearInterval(timer);
-  }, [markets.length]);
+  }, [goToNext, markets.length]);
 
   if (!markets || markets.length === 0) {
     return (
-      <div className="bg-bg-primary rounded-2xl p-6 lg:p-8 animate-pulse">
+      <div className="bg-bg-primary  p-6 lg:p-8 animate-pulse">
         <div className="flex gap-8">
           <div className="lg:w-[420px]">
             <div className="flex gap-4 mb-8">
-              <div className="w-[72px] h-[72px] rounded-lg bg-bg-secondary" />
+              <div className="w-[72px] h-[72px]  bg-bg-secondary" />
               <div className="flex-1 space-y-2">
-                <div className="h-7 bg-bg-secondary rounded w-full" />
-                <div className="h-7 bg-bg-secondary rounded w-3/4" />
+                <div className="h-7 bg-bg-secondary  w-full" />
+                <div className="h-7 bg-bg-secondary  w-3/4" />
               </div>
             </div>
             <div className="space-y-4">
-              <div className="h-10 bg-bg-secondary rounded" />
-              <div className="h-10 bg-bg-secondary rounded" />
+              <div className="h-10 bg-bg-secondary " />
+              <div className="h-10 bg-bg-secondary " />
             </div>
           </div>
-          <div className="hidden lg:block flex-1 h-[260px] bg-bg-secondary rounded-xl" />
+          <div className="hidden lg:block flex-1 h-[260px] bg-bg-secondary " />
         </div>
       </div>
     );
@@ -339,7 +339,7 @@ export function FeaturedBanner({ markets }: FeaturedBannerProps) {
                 key={index}
                 onClick={() => setCurrentIndex(index)}
                 className={cn(
-                  'w-2 h-2 rounded-full transition-all cursor-pointer',
+                  'w-2 h-2  transition-all cursor-pointer',
                   index === currentIndex
                     ? 'bg-text-primary'
                     : 'bg-border hover:bg-text-muted'

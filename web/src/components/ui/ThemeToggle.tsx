@@ -16,7 +16,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
     return (
       <div
         className={cn(
-          'relative flex items-center justify-center w-10 h-10 rounded-lg',
+          'relative flex items-center justify-center w-10 h-10 ',
           'bg-bg-secondary border border-border',
           className
         )}
@@ -28,7 +28,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
     <button
       onClick={toggleTheme}
       className={cn(
-        'relative flex items-center justify-center w-10 h-10 rounded-lg cursor-pointer',
+        'relative flex items-center justify-center w-10 h-10  cursor-pointer',
         'bg-bg-secondary border border-border hover:border-border-hover',
         'transition-all duration-fast',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',

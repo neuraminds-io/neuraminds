@@ -90,7 +90,7 @@ export function PriceChart({
 
   // Generate area fill path
   const areaPath = useMemo(() => {
-    if (filteredData.length === 0) return '';
+    if (!linePath) return '';
     return `${linePath} L100,${chartHeight} L0,${chartHeight} Z`;
   }, [linePath, chartHeight]);
 
@@ -107,7 +107,7 @@ export function PriceChart({
               type="button"
               onClick={() => setTimeRange(range.id)}
               className={cn(
-                'px-3 py-1 text-sm rounded-md transition-colors duration-fast cursor-pointer',
+                'px-3 py-1 text-sm  transition-colors duration-fast cursor-pointer',
                 timeRange === range.id
                   ? 'bg-accent text-white'
                   : 'text-text-secondary hover:text-text-primary hover:bg-bg-secondary'
@@ -134,7 +134,7 @@ export function PriceChart({
       {/* Hover Info */}
       {hoveredPoint && (
         <div className="absolute top-8 left-0 right-0 flex justify-center pointer-events-none z-10">
-          <div className="px-3 py-1.5 rounded-lg bg-bg-tertiary border border-border shadow-lg">
+          <div className="px-3 py-1.5  bg-bg-tertiary border border-border shadow-lg">
             <span className="text-sm text-text-primary font-medium">
               {hoveredPoint.price.toFixed(1)}%
             </span>

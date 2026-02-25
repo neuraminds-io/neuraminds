@@ -35,7 +35,7 @@ export function MarketCard({ market }: MarketCardProps) {
     <Link href={`/markets/${market.id}`} className="block group">
       <div
         className={cn(
-          'bg-bg-primary/80 backdrop-blur-sm rounded-xl border border-border/50 p-4',
+          'bg-bg-primary/80   border border-border/50 p-4',
           'hover:border-border-hover hover:shadow-sm',
           'transition-all duration-fast cursor-pointer',
           'flex flex-col h-full'
@@ -43,7 +43,7 @@ export function MarketCard({ market }: MarketCardProps) {
       >
         {/* Header: Image + Question */}
         <div className="flex items-start gap-3 mb-4">
-          <div className="w-12 h-12 rounded-lg bg-bg-secondary flex-shrink-0 overflow-hidden relative">
+          <div className="w-12 h-12  bg-bg-secondary flex-shrink-0 overflow-hidden relative">
             {market.imageUrl ? (
               <Image
                 src={market.imageUrl}
@@ -76,7 +76,7 @@ export function MarketCard({ market }: MarketCardProps) {
                 </span>
                 <div
                   className={cn(
-                    'flex items-center rounded-full border overflow-hidden',
+                    'flex items-center  border overflow-hidden',
                     'border-border'
                   )}
                   onClick={(e) => {
@@ -120,7 +120,7 @@ export function MarketCard({ market }: MarketCardProps) {
               e.preventDefault();
               e.stopPropagation();
             }}
-            className="w-6 h-6 rounded-full border border-border flex items-center justify-center text-text-muted hover:text-text-primary hover:border-border-hover transition-colors cursor-pointer"
+            className="w-6 h-6  border border-border flex items-center justify-center text-text-muted hover:text-text-primary hover:border-border-hover transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
