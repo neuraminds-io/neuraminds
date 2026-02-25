@@ -1,0 +1,50 @@
+{
+  "generatedAt": "2026-02-25T08:52:24.530Z",
+  "mode": "fast",
+  "summary": {
+    "total": 6,
+    "passed": 4,
+    "failed": 0,
+    "skipped": 2,
+    "requiredFailed": 0,
+    "ready": true
+  },
+  "gates": [
+    {
+      "id": "legacy_brand_refs_zero",
+      "required": true,
+      "status": "pass",
+      "details": "legacyBrandRefs=0"
+    },
+    {
+      "id": "legacy_palette_refs_zero",
+      "required": true,
+      "status": "pass",
+      "details": "legacyPaletteRefs=0"
+    },
+    {
+      "id": "auth_route_hardening_enabled",
+      "required": true,
+      "status": "pass",
+      "details": "origin + rate-limit + body-size guards present"
+    },
+    {
+      "id": "backend_auth_rate_limit_present",
+      "required": true,
+      "status": "pass",
+      "details": "backend auth rate-limit helpers present"
+    },
+    {
+      "id": "web_build",
+      "required": false,
+      "status": "skip",
+      "details": "run with --strict"
+    },
+    {
+      "id": "backend_cargo_check",
+      "required": false,
+      "status": "skip",
+      "details": "run with --strict"
+    }
+  ]
+}

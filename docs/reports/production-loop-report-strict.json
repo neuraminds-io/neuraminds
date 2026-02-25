@@ -1,0 +1,56 @@
+{
+  "generatedAt": "2026-02-25T08:52:02.724Z",
+  "mode": "strict",
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "requiredFailed": 0,
+    "ready": true
+  },
+  "gates": [
+    {
+      "id": "legacy_brand_refs_zero",
+      "required": true,
+      "status": "pass",
+      "details": "legacyBrandRefs=0"
+    },
+    {
+      "id": "legacy_palette_refs_zero",
+      "required": true,
+      "status": "pass",
+      "details": "legacyPaletteRefs=0"
+    },
+    {
+      "id": "auth_route_hardening_enabled",
+      "required": true,
+      "status": "pass",
+      "details": "origin + rate-limit + body-size guards present"
+    },
+    {
+      "id": "backend_auth_rate_limit_present",
+      "required": true,
+      "status": "pass",
+      "details": "backend auth rate-limit helpers present"
+    },
+    {
+      "id": "web_build",
+      "required": true,
+      "status": "pass",
+      "details": "ok (19250ms)",
+      "command": "npm -C web run build",
+      "stdout": "> neuraminds-web@0.1.0 build\n> next build\n\n  ▲ Next.js 14.2.28\n\n   Creating an optimized production build ...\n> [PWA] Compile server\n> [PWA] Compile server\n> [PWA] Compile client (static)\n> [PWA] Auto register service worker with: <redacted>/web/node_modules/next-pwa/register.js\n> [PWA] Service worker: <redacted>/web/public/sw.js\n> [PWA]   url: /sw.js\n> [PWA]   scope: /\n   Linting and checking validity of types ...\n\n./src/components/market/FeaturedBanner.tsx\n284:6  Warning: React Hook useEffect has a missing dependency: 'goToNext'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\n\n./src/components/market/PriceChart.tsx\n95:6  Warning: React Hook useMemo has a missing dependency: 'filteredData.length'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\n\n./src/components/order/OrderHistory.tsx\n47:6  Warning: React Hook useEffect has a missing dependency: 'fetchOrders'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\n\n./src/components/wallet/TransactionHistory.tsx\n67:6  Warning: React Hook useEffect has a missing dependency: 'fetchTransactions'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\n\ninfo  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/basic-features/eslint#disabling-rules\n   Collecting page data ...\n   Generating static pages (0/19) ...\n   Generating static pages (4/19) \r\n   Generating static pages (9/19) \r\n   Generating static pages (14/19) \r\n ✓ Generating static pages (19/19)\n   Finalizing page optimization ...\n   Collecting build traces ...\n\nRoute (app)                              Size     First Load JS\n┌ ○ /                                    1.47 kB         263 kB\n├ ○ /_not-found                          875 B          88.3 kB\n├ ○ /admin                               3.96 kB        99.4 kB\n├ ○ /admin/security                      4.93 kB         100 kB\n├ ƒ /api/auth                            0 B                0 B\n├ ○ /docs/api                            4.67 kB         100 kB\n├ ○ /leaderboard                         4.98 kB         109 kB\n├ ○ /legal                               175 B          96.2 kB\n├ ○ /legal/disclaimer                    145 B          87.5 kB\n├ ○ /legal/privacy                       144 B          87.5 kB\n├ ○ /legal/terms                         144 B          87.5 kB\n├ ○ /markets                             1.45 kB         263 kB\n├ ƒ /markets/[id]                        901 B           265 kB\n├ ○ /markets/create                      354 B           152 kB\n├ ○ /portfolio                           1.53 kB         257 kB\n├ ƒ /profile/[wallet]                    6.97 kB         116 kB\n├ ○ /settings                            3.77 kB         148 kB\n├ ○ /settings/notifications              7.36 kB         111 kB\n└ ○ /wallet                              8.4 kB          110 kB\n+ First Load JS shared by all            87.4 kB\n  ├ chunks/117-5801d42184b7404d.js       31.6 kB\n  ├ chunks/fd9d1056-8facd4125371a157.js  53.7 kB\n  └ other shared chunks (total)          2.15 kB\n\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand",
+      "stderr": "⚠ Compiled with warnings\n\n./node_modules/pino/lib/tools.js\nModule not found: Can't resolve 'pino-pretty' in '<redacted>/web/node_modules/pino/lib'\n\nImport trace for requested module:\n./node_modules/pino/lib/tools.js\n./node_modules/pino/pino.js\n./node_modules/@walletconnect/logger/dist/index.es.js\n./node_modules/@walletconnect/universal-provider/dist/index.es.js\n./node_modules/@walletconnect/solana-adapter/dist/core.js\n./node_modules/@walletconnect/solana-adapter/dist/adapter.js\n./node_modules/@solana/wallet-adapter-walletconnect/lib/esm/index.js\n./node_modules/@solana/wallet-adapter-wallets/lib/esm/index.js\n./src/components/Providers.tsx\n\n(node:37845) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:37850) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:37843) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:37846) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:37851) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:37848) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:37849) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:37847) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:37844) Warning: `--localstorage-file` was provided without a valid path\n(Use `node --trace-warnings ...` to show where the warning was created)"
+    },
+    {
+      "id": "backend_cargo_check",
+      "required": true,
+      "status": "pass",
+      "details": "ok (1620ms)",
+      "command": "cargo check --manifest-path app/Cargo.toml",
+      "stdout": "",
+      "stderr": "warning: fields `currency` and `status` are never read\n   --> app/src/api/wallet.rs:300:9\n    |\n296 | pub struct BlindpayWebhook {\n    |            --------------- fields in this struct\n...\n300 |     pub currency: String,\n    |         ^^^^^^^^\n301 |     pub wallet_address: String,\n302 |     pub status: String,\n    |         ^^^^^^\n    |\n    = note: `BlindpayWebhook` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: `polyguard-backend` (bin \"polyguard-api\") generated 1 warning\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.46s"
+    }
+  ]
+}

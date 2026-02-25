@@ -16,7 +16,8 @@ The system had useful security and deployment foundations, but launch readiness 
 - [ ] Add synthetic monitoring checks against production and staging from external probes.
 - [ ] Add alert routing ownership matrix (pager, fallback, escalation windows).
 - [ ] Add capacity/load-test baseline for p95/p99 at target QPS.
-- [ ] Resolve local strict-gate `web_build` timeout and confirm clean strict pass in CI.
+- [x] Resolve local strict-gate `web_build` timeout.
+- [ ] Confirm clean strict pass in CI.
 
 ## Low Priority (P3 - Technical Debt)
 - [ ] Consolidate legacy compatibility keys once migration window ends.

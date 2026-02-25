@@ -33,7 +33,7 @@ Ship a deterministic, auditable production launch process with hard go/no-go gat
 - [x] Generate and inspect reports.
 - [x] Generate machine-readable launch go/no-go summary report.
 - [x] Close `backend_cargo_check` timeout blocker (strict now passes cargo check).
-- [ ] Close remaining blocker for launch (`web_build` strict timeout in this local environment).
+- [x] Close remaining blocker for launch (`web_build` strict gate now passes locally).
 
 ## Success Criteria
 - `launch-config-report.json` and `production-loop-report.json` both generated.

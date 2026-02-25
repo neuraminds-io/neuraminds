@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -8,6 +9,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
+const HOME = os.homedir();
 
 const strictMode = process.argv.includes('--strict');
 const reportDir = path.join(ROOT, 'docs', 'reports');
@@ -17,6 +19,25 @@ const modeReportPath = path.join(
   `production-loop-report-${strictMode ? 'strict' : 'fast'}.json`
 );
 const strictTimeoutMs = Number(process.env.PRODUCTION_GATE_TIMEOUT_MS || 8 * 60_000);
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function sanitizeLogText(text) {
+  if (!text) {
+    return '';
+  }
+
+  const redactTargets = [...new Set([ROOT, HOME])].filter(Boolean).sort((a, b) => b.length - a.length);
+  let sanitized = text;
+
+  for (const target of redactTargets) {
+    sanitized = sanitized.replace(new RegExp(escapeRegExp(target), 'g'), '<redacted>');
+  }
+
+  return sanitized;
+}
 
 function readText(relPath) {
   const absPath = path.join(ROOT, relPath);
@@ -63,8 +84,8 @@ function runCommand(command, args, timeoutMs) {
     status: typeof result.status === 'number' ? result.status : 1,
     durationMs,
     timedOut,
-    stdout: (result.stdout || '').trim(),
-    stderr: (result.stderr || '').trim(),
+    stdout: sanitizeLogText((result.stdout || '').trim()),
+    stderr: sanitizeLogText((result.stderr || '').trim()),
   };
 }
 
