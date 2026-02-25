@@ -34,6 +34,10 @@ k6 run --vus 100 --duration 10m tests/load/k6-config.js
 
 # Against specific environment
 API_URL=https://api.staging.polyguard.cc k6 run tests/load/k6-config.js
+
+# Public baseline test (target QPS + p95/p99)
+API_URL=https://api.neuraminds.ai TARGET_QPS=80 DURATION=10m \
+  k6 run tests/load/public-baseline.js
 ```
 
 ## Test Scenarios
@@ -77,6 +81,7 @@ Simulates sudden traffic spikes (e.g., market event).
 Results are written to:
 - Console: Real-time metrics
 - `tests/load/summary.json`: Detailed results
+- `tests/load/public-baseline-summary.json`: Public baseline scenario results
 
 ## CI Integration
 

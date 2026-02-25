@@ -13,11 +13,11 @@ The system had useful security and deployment foundations, but launch readiness 
 - [x] CDN allowlist still on prior brand domain | Broken images/assets risk after cutover | Updated to `*.neuraminds.ai`.
 
 ## Medium Priority (P2 - Fix Soon After Launch)
-- [ ] Add synthetic monitoring checks against production and staging from external probes.
-- [ ] Add alert routing ownership matrix (pager, fallback, escalation windows).
-- [ ] Add capacity/load-test baseline for p95/p99 at target QPS.
+- [x] Add synthetic monitoring checks against production and staging from external probes (`scripts/synthetic-monitor.mjs`, `.github/workflows/synthetic-monitoring.yml`, `docs/SYNTHETIC_MONITORING.md`).
+- [x] Add alert routing ownership matrix (pager, fallback, escalation windows) (`docs/ALERT_ROUTING_MATRIX.md`).
+- [x] Add capacity/load-test baseline for p95/p99 at target QPS (`tests/load/public-baseline.js`, `scripts/load-baseline-report.mjs`, `docs/LOAD_BASELINE.md`).
 - [x] Resolve local strict-gate `web_build` timeout.
-- [ ] Confirm clean strict pass in CI.
+- [ ] Confirm clean strict pass in CI (run `22389612505` remained queued on February 25, 2026; runner availability still unresolved).
 
 ## Low Priority (P3 - Technical Debt)
 - [ ] Consolidate legacy compatibility keys once migration window ends.
@@ -31,7 +31,7 @@ The system had useful security and deployment foundations, but launch readiness 
 ## Observability Assessment
 - Health and metrics endpoints exist.
 - Launch readiness now writes machine-readable reports for traceability.
-- Further post-launch synthetic checks are still recommended.
+- Synthetic production/staging probes, routing ownership, and load baseline targets are now defined in-repo.
 
 ## Action Plan Executed
 1. Added launch config validator with production constraints and report output.
@@ -40,3 +40,6 @@ The system had useful security and deployment foundations, but launch readiness 
 4. Added dedicated CI workflow to enforce launch gates.
 5. Added launch command center + launch plan docs.
 6. Added automatic launch go/no-go report generation (`docs/reports/launch-go-no-go.{json,md}`).
+7. Added synthetic monitor runner + scheduled workflow + operational guide.
+8. Added alert routing ownership matrix with escalation windows and response targets.
+9. Added public load baseline scenario and report generator for p95/p99 + target QPS gating.

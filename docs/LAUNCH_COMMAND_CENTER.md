@@ -21,6 +21,12 @@ Optional local timeout override for strict checks:
 PRODUCTION_GATE_TIMEOUT_MS=60000 npm run launch:readiness:strict
 ```
 
+Synthetic probe (external endpoint verification):
+
+```bash
+npm run synthetic:check -- --env production --api-url https://api.neuraminds.ai --web-url https://app.neuraminds.ai
+```
+
 ## Local End-to-End Launch Rehearsal
 
 ```bash
@@ -43,6 +49,8 @@ Go only if all conditions are true:
 3. `launch-go-no-go.json` has `"go": true`.
 4. CI workflow `Launch Readiness` is green on latest commit.
 5. Deployment target environment secrets are present and rotated (see `docs/LAUNCH_ENV_CHECKLIST.md`).
+6. Synthetic monitor reports are green for production and staging.
+7. Load baseline report meets target QPS/p95/p99 thresholds.
 
 No-Go if any of:
 1. Required gate fails.

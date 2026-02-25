@@ -12,6 +12,8 @@
     "launch:readiness:strict": "bash scripts/launch-readiness.sh --strict --mode=production --allow-missing-secrets",
     "launch:summary": "node scripts/generate-launch-summary.mjs",
     "launch:e2e": "npm run launch:readiness && npm run production:gates",
+    "synthetic:check": "node scripts/synthetic-monitor.mjs",
+    "load:baseline:report": "node scripts/load-baseline-report.mjs",
     "production:gates": "node scripts/production-loop-report.mjs",
     "production:gates:strict": "node scripts/production-loop-report.mjs --strict"
   },
