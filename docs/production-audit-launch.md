@@ -17,7 +17,7 @@ The system had useful security and deployment foundations, but launch readiness 
 - [x] Add alert routing ownership matrix (pager, fallback, escalation windows) (`docs/ALERT_ROUTING_MATRIX.md`).
 - [x] Add capacity/load-test baseline for p95/p99 at target QPS (`tests/load/public-baseline.js`, `scripts/load-baseline-report.mjs`, `docs/LOAD_BASELINE.md`).
 - [x] Resolve local strict-gate `web_build` timeout.
-- [ ] Confirm clean strict pass in CI (run `22389612505` remained queued on February 25, 2026; runner availability still unresolved).
+- [ ] Confirm clean strict pass in CI (blocked: push runs `22389590023` and `22389930963` ended `startup_failure`, and rerun `22389612505` remained queued on February 25, 2026).
 
 ## Low Priority (P3 - Technical Debt)
 - [ ] Consolidate legacy compatibility keys once migration window ends.
