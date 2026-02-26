@@ -53,7 +53,8 @@ Scope: `docs/BASE_MIGRATION_BOARD.md` end-to-end execution pass.
 - `npm run build` in `sdk/agent`: passing.
 - `npm run base:web:e2e:sepolia -- --web-url http://127.0.0.1:3010 --api-url http://127.0.0.1:3010`: passing (3/3).
 
-## Remaining Work
+## Staging Closeout
 
-- Execute smoke gate against live Render staging URL after latest deploy completes.
-- Validate rollback playbook in live staging and attach deploy/rollback evidence.
+- Live staging deploy: `dep-d6g5bc6mcj7s73b5a1rg` on `neuraminds-web-base-staging-v4`.
+- Frontend smoke gate (live staging): passing (3/3). Evidence: `docs/reports/base-sepolia-web-smoke-2026-02-26.json`.
+- Rollback playbook validation: passing (pause/unpause controls across all three Base programs). Evidence: `docs/reports/staging-rollback-validation-2026-02-26.json`.

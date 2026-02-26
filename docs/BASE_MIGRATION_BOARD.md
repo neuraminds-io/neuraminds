@@ -53,5 +53,5 @@ Latest execution report:
 ## Validation Gates
 - [x] EVM tests passing (`forge test`, 24 tests)
 - [x] Backend smoke test script for Base Sepolia (`scripts/base-sepolia-smoke.mjs`)
-- [ ] Frontend E2E smoke executed against live Base Sepolia staging (latest run failed: `/health` and `/v1/auth/siwe/nonce` returned 404 on staging web URL; see `docs/reports/base-sepolia-web-smoke-2026-02-26.json`)
-- [ ] Rollback playbook validated in staging (blocked pending staging deployment with funded signer roles)
+- [x] Frontend E2E smoke executed against live Base Sepolia staging (`docs/reports/base-sepolia-web-smoke-2026-02-26.json`)
+- [x] Rollback playbook validated in staging (`docs/reports/staging-rollback-validation-2026-02-26.json`)
