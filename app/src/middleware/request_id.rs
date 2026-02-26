@@ -77,10 +77,8 @@ where
 
             // Add request ID to response headers
             if let Ok(header_value) = HeaderValue::from_str(&request_id) {
-                res.headers_mut().insert(
-                    HeaderName::from_static(REQUEST_ID_HEADER),
-                    header_value,
-                );
+                res.headers_mut()
+                    .insert(HeaderName::from_static(REQUEST_ID_HEADER), header_value);
             }
 
             Ok(res)

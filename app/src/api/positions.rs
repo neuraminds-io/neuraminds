@@ -1,11 +1,11 @@
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use std::sync::Arc;
 
-use crate::models::{PositionListResponse, ClaimWinningsResponse, Outcome};
-use crate::AppState;
-use crate::require_auth;
-use super::ApiError;
 use super::rate_limit::check_claim_rate_limit;
+use super::ApiError;
+use crate::models::{ClaimWinningsResponse, Outcome, PositionListResponse};
+use crate::require_auth;
+use crate::AppState;
 
 fn ensure_legacy_position_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
     if !state.config.legacy_reads_enabled {
@@ -38,7 +38,8 @@ pub async fn list_positions(
     let user = require_auth!(&req, &state);
     let owner = &user.wallet_address;
 
-    let positions = state.db
+    let positions = state
+        .db
         .get_positions(owner)
         .await
         .map_err(ApiError::from)?;
@@ -60,7 +61,8 @@ pub async fn get_position(
 
     let market_id = path.into_inner();
 
-    let position = state.db
+    let position = state
+        .db
         .get_position(owner, &market_id)
         .await
         .map_err(ApiError::from)?;
@@ -89,7 +91,8 @@ pub async fn claim_winnings(
     let market_id = path.into_inner();
 
     // Get market to verify it's resolved
-    let market = state.db
+    let market = state
+        .db
         .get_market(&market_id)
         .await
         .map_err(ApiError::from)?
@@ -103,7 +106,8 @@ pub async fn claim_winnings(
     }
 
     // Get position - this will only return the authenticated user's position
-    let position = state.db
+    let position = state
+        .db
         .get_position(owner, &market_id)
         .await
         .map_err(ApiError::from)?
@@ -115,8 +119,7 @@ pub async fn claim_winnings(
     }
 
     // Safe: already verified resolved_outcome.is_some() above
-    let winning_outcome = market.resolved_outcome
-        .expect("checked is_some above");
+    let winning_outcome = market.resolved_outcome.expect("checked is_some above");
     let winning_tokens = match winning_outcome {
         Outcome::Yes => position.yes_balance,
         Outcome::No => position.no_balance,
@@ -137,7 +140,10 @@ pub async fn claim_winnings(
     // SECURITY: Log claim for audit trail
     log::info!(
         "Claim processed: market={}, user={}, amount={}, outcome={:?}",
-        market_id, owner, claimed_amount, winning_outcome
+        market_id,
+        owner,
+        claimed_amount,
+        winning_outcome
     );
 
     Ok(HttpResponse::Ok().json(ClaimWinningsResponse {

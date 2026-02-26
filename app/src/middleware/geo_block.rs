@@ -53,7 +53,10 @@ pub struct GeoBlock {
 impl GeoBlock {
     pub fn new(enabled: bool) -> Self {
         if enabled {
-            info!("Geo-blocking enabled for {} countries", get_blocked_countries().len());
+            info!(
+                "Geo-blocking enabled for {} countries",
+                get_blocked_countries().len()
+            );
         } else {
             warn!("Geo-blocking DISABLED - not recommended for production");
         }
@@ -133,9 +136,9 @@ where
                     .insert_header((header::CONTENT_TYPE, "application/json"))
                     .body(r#"{"error":{"code":"REGION_BLOCKED","message":"This service is not available in your region"}}"#);
 
-                return Box::pin(async move {
-                    Ok(req.into_response(response).map_into_right_body())
-                });
+                return Box::pin(
+                    async move { Ok(req.into_response(response).map_into_right_body()) },
+                );
             }
         }
 

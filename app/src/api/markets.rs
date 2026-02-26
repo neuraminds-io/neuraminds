@@ -2,16 +2,15 @@ use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use chrono::Utc;
 use std::sync::Arc;
 
-use crate::models::{
-    Market, MarketStatus, Outcome,
-    CreateMarketRequest, ListMarketsQuery, MarketListResponse,
-    OrderBookResponse, ListTradesQuery, TradeListResponse,
-};
-use crate::AppState;
-use super::ApiError;
 use super::auth::extract_jwt_user;
 use super::jwt::UserRole;
 use super::rate_limit::check_market_create_rate_limit;
+use super::ApiError;
+use crate::models::{
+    CreateMarketRequest, ListMarketsQuery, ListTradesQuery, Market, MarketListResponse,
+    MarketStatus, OrderBookResponse, Outcome, TradeListResponse,
+};
+use crate::AppState;
 
 fn ensure_legacy_market_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
     if !state.config.legacy_reads_enabled {
@@ -42,7 +41,8 @@ pub async fn list_markets(
     let limit = query.limit.unwrap_or(20).min(100);
     let offset = query.offset.unwrap_or(0);
 
-    let (markets, total) = state.db
+    let (markets, total) = state
+        .db
         .get_markets(status, query.category.as_deref(), limit, offset)
         .await
         .map_err(ApiError::from)?;
@@ -64,7 +64,8 @@ pub async fn get_market(
 
     let market_id = path.into_inner();
 
-    let market = state.db
+    let market = state
+        .db
         .get_market(&market_id)
         .await
         .map_err(ApiError::from)?;
@@ -93,7 +94,9 @@ pub async fn create_market(
 
     // Require Admin or Keeper role
     if !matches!(user.role, UserRole::Admin | UserRole::Keeper) {
-        return Err(ApiError::forbidden("Only admins and keepers can create markets"));
+        return Err(ApiError::forbidden(
+            "Only admins and keepers can create markets",
+        ));
     }
 
     // SECURITY: Per-user rate limit (1 market/hour)
@@ -101,10 +104,16 @@ pub async fn create_market(
 
     // Validate inputs
     if body.market_id.len() > 64 {
-        return Err(ApiError::bad_request("INVALID_MARKET_ID", "Market ID too long"));
+        return Err(ApiError::bad_request(
+            "INVALID_MARKET_ID",
+            "Market ID too long",
+        ));
     }
     if body.question.len() > 256 {
-        return Err(ApiError::bad_request("INVALID_QUESTION", "Question too long"));
+        return Err(ApiError::bad_request(
+            "INVALID_QUESTION",
+            "Question too long",
+        ));
     }
     if body.fee_bps > 1000 {
         return Err(ApiError::bad_request("INVALID_FEE", "Fee must be <= 10%"));
@@ -145,7 +154,11 @@ pub async fn create_market(
     // let tx_sig = state.solana.create_market(&body).await?;
 
     // Save to database
-    state.db.create_market(&market).await.map_err(ApiError::from)?;
+    state
+        .db
+        .create_market(&market)
+        .await
+        .map_err(ApiError::from)?;
 
     Ok(HttpResponse::Created().json(market))
 }
@@ -209,7 +222,8 @@ pub async fn get_trades(
     });
     let limit = query.limit.unwrap_or(50).min(100);
 
-    let trades = state.db
+    let trades = state
+        .db
         .get_trades(&market_id, outcome, limit, query.before.as_deref())
         .await
         .map_err(ApiError::from)?;

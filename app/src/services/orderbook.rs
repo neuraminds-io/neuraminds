@@ -1,10 +1,10 @@
-use std::collections::{BTreeMap, HashMap};
-use std::sync::RwLock;
 use chrono::Utc;
 use log::info;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::RwLock;
 
-use crate::models::{Order, OrderSide, Outcome, OrderBookLevel, MatchedTrade};
 use super::database::OrderBookEntry;
+use crate::models::{MatchedTrade, Order, OrderBookLevel, OrderSide, Outcome};
 
 /// In-memory order book for fast matching
 /// In production, this would be backed by Redis for persistence and horizontal scaling
@@ -107,13 +107,15 @@ impl OrderBookService {
         if entry.remaining > 0 {
             match order.side {
                 OrderSide::Buy => {
-                    outcome_book.bids
+                    outcome_book
+                        .bids
                         .entry(order.price_bps)
                         .or_insert_with(Vec::new)
                         .push(entry);
                 }
                 OrderSide::Sell => {
-                    outcome_book.asks
+                    outcome_book
+                        .asks
                         .entry(order.price_bps)
                         .or_insert_with(Vec::new)
                         .push(entry);
@@ -138,7 +140,8 @@ impl OrderBookService {
             OrderSide::Buy => {
                 // Match against asks (sellers)
                 // Get asks at or below our buy price
-                let matching_prices: Vec<u16> = book.asks
+                let matching_prices: Vec<u16> = book
+                    .asks
                     .range(..=order.price_bps)
                     .map(|(p, _)| *p)
                     .collect();
@@ -159,7 +162,7 @@ impl OrderBookService {
                                 buy_order_id: order.on_chain_id,
                                 sell_order_id: ask.on_chain_id,
                                 market_id: String::new(), // Would be set by caller
-                                outcome: Outcome::Yes, // Would be set by caller
+                                outcome: Outcome::Yes,    // Would be set by caller
                                 fill_price_bps: fill_price,
                                 fill_quantity: fill_qty,
                                 buyer: order.owner.clone(),
@@ -186,7 +189,8 @@ impl OrderBookService {
             OrderSide::Sell => {
                 // Match against bids (buyers)
                 // Get bids at or above our sell price
-                let matching_prices: Vec<u16> = book.bids
+                let matching_prices: Vec<u16> = book
+                    .bids
                     .range(order.price_bps..)
                     .map(|(p, _)| *p)
                     .rev() // Start with highest bid
@@ -396,8 +400,14 @@ mod tests {
     fn test_add_order_no_match() {
         let book = OrderBookService::new();
         let order = make_order(
-            "order1", 1, "market1", "buyer1",
-            OrderSide::Buy, Outcome::Yes, 5000, 100
+            "order1",
+            1,
+            "market1",
+            "buyer1",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            100,
         );
 
         let matches = book.add_order(&order);
@@ -416,15 +426,27 @@ mod tests {
 
         // Add sell order at 50 cents
         let sell = make_order(
-            "sell1", 1, "market1", "seller1",
-            OrderSide::Sell, Outcome::Yes, 5000, 100
+            "sell1",
+            1,
+            "market1",
+            "seller1",
+            OrderSide::Sell,
+            Outcome::Yes,
+            5000,
+            100,
         );
         book.add_order(&sell);
 
         // Add buy order at 50 cents
         let buy = make_order(
-            "buy1", 2, "market1", "buyer1",
-            OrderSide::Buy, Outcome::Yes, 5000, 100
+            "buy1",
+            2,
+            "market1",
+            "buyer1",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            100,
         );
         let matches = book.add_order(&buy);
 
@@ -441,15 +463,27 @@ mod tests {
 
         // Add sell order for 50 units
         let sell = make_order(
-            "sell1", 1, "market1", "seller1",
-            OrderSide::Sell, Outcome::Yes, 5000, 50
+            "sell1",
+            1,
+            "market1",
+            "seller1",
+            OrderSide::Sell,
+            Outcome::Yes,
+            5000,
+            50,
         );
         book.add_order(&sell);
 
         // Add buy order for 100 units
         let buy = make_order(
-            "buy1", 2, "market1", "buyer1",
-            OrderSide::Buy, Outcome::Yes, 5000, 100
+            "buy1",
+            2,
+            "market1",
+            "buyer1",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            100,
         );
         let matches = book.add_order(&buy);
 
@@ -473,22 +507,40 @@ mod tests {
 
         // Add sell at 60 cents
         let sell1 = make_order(
-            "sell1", 1, "market1", "seller1",
-            OrderSide::Sell, Outcome::Yes, 6000, 50
+            "sell1",
+            1,
+            "market1",
+            "seller1",
+            OrderSide::Sell,
+            Outcome::Yes,
+            6000,
+            50,
         );
         book.add_order(&sell1);
 
         // Add sell at 50 cents (better price)
         let sell2 = make_order(
-            "sell2", 2, "market1", "seller2",
-            OrderSide::Sell, Outcome::Yes, 5000, 50
+            "sell2",
+            2,
+            "market1",
+            "seller2",
+            OrderSide::Sell,
+            Outcome::Yes,
+            5000,
+            50,
         );
         book.add_order(&sell2);
 
         // Buy at 60 cents should match cheaper sell first
         let buy = make_order(
-            "buy1", 3, "market1", "buyer1",
-            OrderSide::Buy, Outcome::Yes, 6000, 100
+            "buy1",
+            3,
+            "market1",
+            "buyer1",
+            OrderSide::Buy,
+            Outcome::Yes,
+            6000,
+            100,
         );
         let matches = book.add_order(&buy);
 
@@ -508,15 +560,27 @@ mod tests {
 
         // Add sell at 60 cents
         let sell = make_order(
-            "sell1", 1, "market1", "seller1",
-            OrderSide::Sell, Outcome::Yes, 6000, 100
+            "sell1",
+            1,
+            "market1",
+            "seller1",
+            OrderSide::Sell,
+            Outcome::Yes,
+            6000,
+            100,
         );
         book.add_order(&sell);
 
         // Buy at 50 cents - should not match
         let buy = make_order(
-            "buy1", 2, "market1", "buyer1",
-            OrderSide::Buy, Outcome::Yes, 5000, 100
+            "buy1",
+            2,
+            "market1",
+            "buyer1",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            100,
         );
         let matches = book.add_order(&buy);
 
@@ -534,15 +598,27 @@ mod tests {
 
         // Add buy order at 50 cents
         let buy = make_order(
-            "buy1", 1, "market1", "buyer1",
-            OrderSide::Buy, Outcome::Yes, 5000, 100
+            "buy1",
+            1,
+            "market1",
+            "buyer1",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            100,
         );
         book.add_order(&buy);
 
         // Add sell order at 50 cents
         let sell = make_order(
-            "sell1", 2, "market1", "seller1",
-            OrderSide::Sell, Outcome::Yes, 5000, 100
+            "sell1",
+            2,
+            "market1",
+            "seller1",
+            OrderSide::Sell,
+            Outcome::Yes,
+            5000,
+            100,
         );
         let matches = book.add_order(&sell);
 
@@ -557,8 +633,14 @@ mod tests {
         let book = OrderBookService::new();
 
         let order = make_order(
-            "order1", 1, "market1", "buyer1",
-            OrderSide::Buy, Outcome::Yes, 5000, 100
+            "order1",
+            1,
+            "market1",
+            "buyer1",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            100,
         );
         book.add_order(&order);
 
@@ -581,8 +663,14 @@ mod tests {
         // Add bids at different prices
         for (id, price) in [(1, 4000), (2, 5000), (3, 4500)] {
             let buy = make_order(
-                &format!("buy{}", id), id, "market1", "buyer",
-                OrderSide::Buy, Outcome::Yes, price, 100
+                &format!("buy{}", id),
+                id,
+                "market1",
+                "buyer",
+                OrderSide::Buy,
+                Outcome::Yes,
+                price,
+                100,
             );
             book.add_order(&buy);
         }
@@ -590,8 +678,14 @@ mod tests {
         // Add asks at different prices
         for (id, price) in [(4, 6000), (5, 5500), (6, 7000)] {
             let sell = make_order(
-                &format!("sell{}", id), id, "market1", "seller",
-                OrderSide::Sell, Outcome::Yes, price, 100
+                &format!("sell{}", id),
+                id,
+                "market1",
+                "seller",
+                OrderSide::Sell,
+                Outcome::Yes,
+                price,
+                100,
             );
             book.add_order(&sell);
         }
@@ -610,15 +704,27 @@ mod tests {
 
         // Add YES buy
         let yes_buy = make_order(
-            "yes1", 1, "market1", "buyer1",
-            OrderSide::Buy, Outcome::Yes, 5000, 100
+            "yes1",
+            1,
+            "market1",
+            "buyer1",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            100,
         );
         book.add_order(&yes_buy);
 
         // Add NO buy
         let no_buy = make_order(
-            "no1", 2, "market1", "buyer1",
-            OrderSide::Buy, Outcome::No, 5000, 100
+            "no1",
+            2,
+            "market1",
+            "buyer1",
+            OrderSide::Buy,
+            Outcome::No,
+            5000,
+            100,
         );
         book.add_order(&no_buy);
 
@@ -636,21 +742,39 @@ mod tests {
 
         // Add two sells at same price
         let sell1 = make_order(
-            "sell1", 1, "market1", "seller1",
-            OrderSide::Sell, Outcome::Yes, 5000, 50
+            "sell1",
+            1,
+            "market1",
+            "seller1",
+            OrderSide::Sell,
+            Outcome::Yes,
+            5000,
+            50,
         );
         book.add_order(&sell1);
 
         let sell2 = make_order(
-            "sell2", 2, "market1", "seller2",
-            OrderSide::Sell, Outcome::Yes, 5000, 50
+            "sell2",
+            2,
+            "market1",
+            "seller2",
+            OrderSide::Sell,
+            Outcome::Yes,
+            5000,
+            50,
         );
         book.add_order(&sell2);
 
         // Buy 75 units - should fill first seller entirely, second partially
         let buy = make_order(
-            "buy1", 3, "market1", "buyer1",
-            OrderSide::Buy, Outcome::Yes, 5000, 75
+            "buy1",
+            3,
+            "market1",
+            "buyer1",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            75,
         );
         let matches = book.add_order(&buy);
 
@@ -680,9 +804,36 @@ mod tests {
     fn test_get_all_orders() {
         let book = OrderBookService::new();
 
-        let buy1 = make_order("buy1", 1, "market1", "buyer1", OrderSide::Buy, Outcome::Yes, 5000, 100);
-        let buy2 = make_order("buy2", 2, "market1", "buyer2", OrderSide::Buy, Outcome::No, 4000, 50);
-        let sell1 = make_order("sell1", 3, "market1", "seller1", OrderSide::Sell, Outcome::Yes, 6000, 75);
+        let buy1 = make_order(
+            "buy1",
+            1,
+            "market1",
+            "buyer1",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            100,
+        );
+        let buy2 = make_order(
+            "buy2",
+            2,
+            "market1",
+            "buyer2",
+            OrderSide::Buy,
+            Outcome::No,
+            4000,
+            50,
+        );
+        let sell1 = make_order(
+            "sell1",
+            3,
+            "market1",
+            "seller1",
+            OrderSide::Sell,
+            Outcome::Yes,
+            6000,
+            75,
+        );
 
         book.add_order(&buy1);
         book.add_order(&buy2);
@@ -741,8 +892,26 @@ mod tests {
     fn test_multiple_markets_isolated() {
         let book = OrderBookService::new();
 
-        let order1 = make_order("o1", 1, "market1", "owner", OrderSide::Buy, Outcome::Yes, 5000, 100);
-        let order2 = make_order("o2", 2, "market2", "owner", OrderSide::Buy, Outcome::Yes, 5000, 200);
+        let order1 = make_order(
+            "o1",
+            1,
+            "market1",
+            "owner",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            100,
+        );
+        let order2 = make_order(
+            "o2",
+            2,
+            "market2",
+            "owner",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            200,
+        );
 
         book.add_order(&order1);
         book.add_order(&order2);
@@ -761,10 +930,28 @@ mod tests {
         // Note: Self-trade prevention should be done at a higher level
         let book = OrderBookService::new();
 
-        let sell = make_order("sell1", 1, "market1", "same_owner", OrderSide::Sell, Outcome::Yes, 5000, 100);
+        let sell = make_order(
+            "sell1",
+            1,
+            "market1",
+            "same_owner",
+            OrderSide::Sell,
+            Outcome::Yes,
+            5000,
+            100,
+        );
         book.add_order(&sell);
 
-        let buy = make_order("buy1", 2, "market1", "same_owner", OrderSide::Buy, Outcome::Yes, 5000, 100);
+        let buy = make_order(
+            "buy1",
+            2,
+            "market1",
+            "same_owner",
+            OrderSide::Buy,
+            Outcome::Yes,
+            5000,
+            100,
+        );
         let matches = book.add_order(&buy);
 
         // At the orderbook level, self-trades are allowed
@@ -775,7 +962,12 @@ mod tests {
     fn test_remove_nonexistent_order() {
         let book = OrderBookService::new();
         // Should not panic
-        book.remove_order("nonexistent_market", Outcome::Yes, OrderSide::Buy, "nonexistent_order");
+        book.remove_order(
+            "nonexistent_market",
+            Outcome::Yes,
+            OrderSide::Buy,
+            "nonexistent_order",
+        );
     }
 
     #[test]
@@ -785,8 +977,14 @@ mod tests {
         // Add 15 buy orders at different prices
         for i in 0..15 {
             let order = make_order(
-                &format!("buy{}", i), i as u64, "market1", "buyer",
-                OrderSide::Buy, Outcome::Yes, 4000 + (i * 100) as u16, 10
+                &format!("buy{}", i),
+                i as u64,
+                "market1",
+                "buyer",
+                OrderSide::Buy,
+                Outcome::Yes,
+                4000 + (i * 100) as u16,
+                10,
             );
             book.add_order(&order);
         }
@@ -803,18 +1001,19 @@ impl OrderBookService {
         let mut books = self.write_books();
 
         for entry in entries {
-            let market_book = books
-                .entry(entry.market_id.clone())
-                .or_insert_with(|| MarketOrderBook {
-                    yes: OutcomeOrderBook {
-                        bids: BTreeMap::new(),
-                        asks: BTreeMap::new(),
-                    },
-                    no: OutcomeOrderBook {
-                        bids: BTreeMap::new(),
-                        asks: BTreeMap::new(),
-                    },
-                });
+            let market_book =
+                books
+                    .entry(entry.market_id.clone())
+                    .or_insert_with(|| MarketOrderBook {
+                        yes: OutcomeOrderBook {
+                            bids: BTreeMap::new(),
+                            asks: BTreeMap::new(),
+                        },
+                        no: OutcomeOrderBook {
+                            bids: BTreeMap::new(),
+                            asks: BTreeMap::new(),
+                        },
+                    });
 
             let outcome_book = match entry.outcome {
                 Outcome::Yes => &mut market_book.yes,
@@ -833,13 +1032,15 @@ impl OrderBookService {
 
             match entry.side {
                 OrderSide::Buy => {
-                    outcome_book.bids
+                    outcome_book
+                        .bids
                         .entry(entry.price_bps)
                         .or_insert_with(Vec::new)
                         .push(order_entry);
                 }
                 OrderSide::Sell => {
-                    outcome_book.asks
+                    outcome_book
+                        .asks
                         .entry(entry.price_bps)
                         .or_insert_with(Vec::new)
                         .push(order_entry);
@@ -847,16 +1048,21 @@ impl OrderBookService {
             }
         }
 
-        let total_orders: usize = books.values()
+        let total_orders: usize = books
+            .values()
             .map(|mb| {
-                mb.yes.bids.values().map(|v| v.len()).sum::<usize>() +
-                mb.yes.asks.values().map(|v| v.len()).sum::<usize>() +
-                mb.no.bids.values().map(|v| v.len()).sum::<usize>() +
-                mb.no.asks.values().map(|v| v.len()).sum::<usize>()
+                mb.yes.bids.values().map(|v| v.len()).sum::<usize>()
+                    + mb.yes.asks.values().map(|v| v.len()).sum::<usize>()
+                    + mb.no.bids.values().map(|v| v.len()).sum::<usize>()
+                    + mb.no.asks.values().map(|v| v.len()).sum::<usize>()
             })
             .sum();
 
-        info!("Order book restored: {} markets, {} orders", books.len(), total_orders);
+        info!(
+            "Order book restored: {} markets, {} orders",
+            books.len(),
+            total_orders
+        );
     }
 
     /// Get all open orders for a market (for persistence/sync)
@@ -867,22 +1073,46 @@ impl OrderBookService {
         if let Some(market_book) = books.get(market_id) {
             for (price, entries) in &market_book.yes.bids {
                 for e in entries {
-                    orders.push((e.order_id.clone(), Outcome::Yes, OrderSide::Buy, *price, e.remaining));
+                    orders.push((
+                        e.order_id.clone(),
+                        Outcome::Yes,
+                        OrderSide::Buy,
+                        *price,
+                        e.remaining,
+                    ));
                 }
             }
             for (price, entries) in &market_book.yes.asks {
                 for e in entries {
-                    orders.push((e.order_id.clone(), Outcome::Yes, OrderSide::Sell, *price, e.remaining));
+                    orders.push((
+                        e.order_id.clone(),
+                        Outcome::Yes,
+                        OrderSide::Sell,
+                        *price,
+                        e.remaining,
+                    ));
                 }
             }
             for (price, entries) in &market_book.no.bids {
                 for e in entries {
-                    orders.push((e.order_id.clone(), Outcome::No, OrderSide::Buy, *price, e.remaining));
+                    orders.push((
+                        e.order_id.clone(),
+                        Outcome::No,
+                        OrderSide::Buy,
+                        *price,
+                        e.remaining,
+                    ));
                 }
             }
             for (price, entries) in &market_book.no.asks {
                 for e in entries {
-                    orders.push((e.order_id.clone(), Outcome::No, OrderSide::Sell, *price, e.remaining));
+                    orders.push((
+                        e.order_id.clone(),
+                        Outcome::No,
+                        OrderSide::Sell,
+                        *price,
+                        e.remaining,
+                    ));
                 }
             }
         }

@@ -138,19 +138,43 @@ impl AppConfig {
             solana_enabled,
             evm_enabled,
             legacy_reads_enabled: env::var("LEGACY_READS_ENABLED")
-                .unwrap_or_else(|_| if evm_enabled { "false".to_string() } else { "true".to_string() })
+                .unwrap_or_else(|_| {
+                    if evm_enabled {
+                        "false".to_string()
+                    } else {
+                        "true".to_string()
+                    }
+                })
                 .to_lowercase()
                 == "true",
             legacy_writes_enabled: env::var("LEGACY_WRITES_ENABLED")
-                .unwrap_or_else(|_| if evm_enabled { "false".to_string() } else { "true".to_string() })
+                .unwrap_or_else(|_| {
+                    if evm_enabled {
+                        "false".to_string()
+                    } else {
+                        "true".to_string()
+                    }
+                })
                 .to_lowercase()
                 == "true",
             evm_reads_enabled: env::var("EVM_READS_ENABLED")
-                .unwrap_or_else(|_| if evm_enabled { "true".to_string() } else { "false".to_string() })
+                .unwrap_or_else(|_| {
+                    if evm_enabled {
+                        "true".to_string()
+                    } else {
+                        "false".to_string()
+                    }
+                })
                 .to_lowercase()
                 == "true",
             evm_writes_enabled: env::var("EVM_WRITES_ENABLED")
-                .unwrap_or_else(|_| if evm_enabled { "true".to_string() } else { "false".to_string() })
+                .unwrap_or_else(|_| {
+                    if evm_enabled {
+                        "true".to_string()
+                    } else {
+                        "false".to_string()
+                    }
+                })
                 .to_lowercase()
                 == "true",
             blindfold_webhook_secret: env::var("BLINDFOLD_WEBHOOK_SECRET").unwrap_or_else(|_| {

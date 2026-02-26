@@ -90,7 +90,11 @@ where
                     _ => log::Level::Info,
                 },
                 "request method={} path={} status={} latency_ms={:.2} request_id={}",
-                method, path, status, latency_ms, request_id
+                method,
+                path,
+                status,
+                latency_ms,
+                request_id
             );
 
             Ok(res)

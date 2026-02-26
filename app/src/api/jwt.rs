@@ -1,9 +1,9 @@
+use crate::api::ApiError;
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation, Algorithm};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::RwLock;
-use crate::api::ApiError;
 
 /// JWT token claims
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -198,7 +198,11 @@ impl JwtService {
         };
 
         // Generate unique token ID
-        let jti = format!("{:x}{:016x}", now.timestamp_nanos_opt().unwrap_or(0), rand::random::<u64>());
+        let jti = format!(
+            "{:x}{:016x}",
+            now.timestamp_nanos_opt().unwrap_or(0),
+            rand::random::<u64>()
+        );
 
         let claims = Claims {
             sub: wallet_address.to_string(),
@@ -222,19 +226,17 @@ impl JwtService {
         let mut header = Header::default();
         header.kid = Some(primary_kid);
 
-        encode(&header, &claims, &signing_key.encoding_key)
-            .map_err(|e| {
-                log::error!("Failed to generate JWT: {}", e);
-                ApiError::internal("Failed to generate authentication token")
-            })
+        encode(&header, &claims, &signing_key.encoding_key).map_err(|e| {
+            log::error!("Failed to generate JWT: {}", e);
+            ApiError::internal("Failed to generate authentication token")
+        })
     }
 
     /// Validate and decode a token
     pub fn validate_token(&self, token: &str) -> Result<Claims, ApiError> {
         // First, decode header to get kid
-        let header = jsonwebtoken::decode_header(token).map_err(|_| {
-            ApiError::unauthorized("Invalid token format")
-        })?;
+        let header = jsonwebtoken::decode_header(token)
+            .map_err(|_| ApiError::unauthorized("Invalid token format"))?;
 
         let keys = self.keys.read().unwrap();
 
@@ -247,9 +249,9 @@ impl JwtService {
         } else {
             // Legacy token without kid - try primary key
             let primary_kid = self.primary_kid.read().unwrap().clone();
-            keys.get(&primary_kid).map(|k| &k.decoding_key).ok_or_else(|| {
-                ApiError::unauthorized("No valid signing key")
-            })?
+            keys.get(&primary_kid)
+                .map(|k| &k.decoding_key)
+                .ok_or_else(|| ApiError::unauthorized("No valid signing key"))?
         };
 
         let mut validation = Validation::new(Algorithm::HS256);
@@ -277,7 +279,7 @@ impl JwtService {
                     jsonwebtoken::errors::ErrorKind::InvalidIssuer => {
                         ApiError::unauthorized("Invalid token issuer")
                     }
-                    _ => ApiError::unauthorized("Invalid token")
+                    _ => ApiError::unauthorized("Invalid token"),
                 }
             })
     }
@@ -332,7 +334,9 @@ mod tests {
         let service = test_jwt_service();
         let wallet = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 
-        let token = service.generate_access_token(wallet, UserRole::User).unwrap();
+        let token = service
+            .generate_access_token(wallet, UserRole::User)
+            .unwrap();
         let claims = service.validate_token(&token).unwrap();
 
         assert_eq!(claims.sub, wallet);
@@ -344,7 +348,9 @@ mod tests {
         let service = test_jwt_service();
         let wallet = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 
-        let token = service.generate_refresh_token(wallet, UserRole::Admin).unwrap();
+        let token = service
+            .generate_refresh_token(wallet, UserRole::Admin)
+            .unwrap();
         let claims = service.validate_token(&token).unwrap();
 
         assert_eq!(claims.sub, wallet);
@@ -364,7 +370,9 @@ mod tests {
         let service = test_jwt_service();
         let wallet = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 
-        let token = service.generate_access_token(wallet, UserRole::User).unwrap();
+        let token = service
+            .generate_access_token(wallet, UserRole::User)
+            .unwrap();
 
         // Tamper with the token
         let tampered = format!("{}x", token);
@@ -408,8 +416,12 @@ mod tests {
         let service = test_jwt_service();
         let wallet = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 
-        let token1 = service.generate_access_token(wallet, UserRole::User).unwrap();
-        let token2 = service.generate_access_token(wallet, UserRole::User).unwrap();
+        let token1 = service
+            .generate_access_token(wallet, UserRole::User)
+            .unwrap();
+        let token2 = service
+            .generate_access_token(wallet, UserRole::User)
+            .unwrap();
 
         let claims1 = service.validate_token(&token1).unwrap();
         let claims2 = service.validate_token(&token2).unwrap();
@@ -424,7 +436,9 @@ mod tests {
         let wallet = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 
         // Generate token with original key
-        let token1 = service.generate_access_token(wallet, UserRole::User).unwrap();
+        let token1 = service
+            .generate_access_token(wallet, UserRole::User)
+            .unwrap();
         let original_kid = service.primary_key_id();
 
         // Add new key and rotate
@@ -432,7 +446,9 @@ mod tests {
         service.set_primary_key(&new_kid).unwrap();
 
         // Generate token with new key
-        let token2 = service.generate_access_token(wallet, UserRole::User).unwrap();
+        let token2 = service
+            .generate_access_token(wallet, UserRole::User)
+            .unwrap();
 
         // Both tokens should validate (old key still present)
         assert!(service.validate_token(&token1).is_ok());

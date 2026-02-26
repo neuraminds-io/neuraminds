@@ -2,10 +2,10 @@
 //!
 //! Order book updates, trade notifications, position changes.
 
+use log::info;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::{broadcast, RwLock};
-use serde::{Deserialize, Serialize};
-use log::info;
 
 /// Message types sent to WebSocket clients
 #[derive(Debug, Clone, Serialize)]

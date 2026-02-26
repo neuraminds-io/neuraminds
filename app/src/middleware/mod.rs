@@ -1,9 +1,9 @@
-mod request_id;
 mod access_log;
 mod geo_block;
+mod request_id;
 
-pub use request_id::RequestIdMiddleware;
-#[allow(unused_imports)]
-pub use request_id::RequestId;
 pub use access_log::AccessLog;
 pub use geo_block::GeoBlock;
+#[allow(unused_imports)]
+pub use request_id::RequestId;
+pub use request_id::RequestIdMiddleware;

@@ -18,17 +18,17 @@
 //! - Authenticated users: 10 connections per minute per user
 //! - Unauthenticated: 5 connection attempts per minute per IP
 
-use actix_web::{web, HttpRequest, HttpResponse, Error};
+use actix::{Actor, ActorContext, AsyncContext, StreamHandler};
+use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
-use actix::{Actor, StreamHandler, AsyncContext, ActorContext};
+use log::{error, info, warn};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use log::{info, warn, error};
 
-use crate::AppState;
-use crate::services::websocket::SubscribeRequest;
 use super::jwt::UserRole;
 use super::rate_limit::{check_rate_limit_by_user, RateLimitTier};
+use crate::services::websocket::SubscribeRequest;
+use crate::AppState;
 
 /// WebSocket connection timeout
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
@@ -63,7 +63,10 @@ impl WsSession {
             id: rand::random(),
             hb: Instant::now(),
             state,
-            auth_state: WsAuthState::Authenticated { wallet, _role: role },
+            auth_state: WsAuthState::Authenticated {
+                wallet,
+                _role: role,
+            },
             subscribed_markets: Vec::new(),
         }
     }
@@ -135,7 +138,10 @@ impl WsSession {
         // Validate the token
         match self.state.jwt.validate_token(&auth_msg.token) {
             Ok(claims) => {
-                info!("WebSocket authenticated via message for user: {}", claims.sub);
+                info!(
+                    "WebSocket authenticated via message for user: {}",
+                    claims.sub
+                );
                 self.auth_state = WsAuthState::Authenticated {
                     wallet: claims.sub,
                     _role: claims.role,
@@ -176,7 +182,10 @@ impl WsSession {
                         if !self.subscribed_markets.contains(&market_id) {
                             self.subscribed_markets.push(market_id.clone());
                             let wallet = self.wallet().unwrap_or("unknown");
-                            info!("Client {} ({}) subscribed to market: {}", self.id, wallet, market_id);
+                            info!(
+                                "Client {} ({}) subscribed to market: {}",
+                                self.id, wallet, market_id
+                            );
 
                             // Send confirmation
                             let response = serde_json::json!({
@@ -192,7 +201,10 @@ impl WsSession {
                     if let Some(market_id) = req.market_id {
                         self.subscribed_markets.retain(|m| m != &market_id);
                         let wallet = self.wallet().unwrap_or("unknown");
-                        info!("Client {} ({}) unsubscribed from market: {}", self.id, wallet, market_id);
+                        info!(
+                            "Client {} ({}) unsubscribed from market: {}",
+                            self.id, wallet, market_id
+                        );
                     }
                 }
                 _ => {
@@ -280,22 +292,23 @@ pub async fn ws_handler(
             Ok(claims) => claims,
             Err(e) => {
                 warn!("WebSocket authentication failed: {:?}", e);
-                return Ok(HttpResponse::Unauthorized()
-                    .json(serde_json::json!({
-                        "error": "UNAUTHORIZED",
-                        "message": "Invalid or expired token"
-                    })));
+                return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+                    "error": "UNAUTHORIZED",
+                    "message": "Invalid or expired token"
+                })));
             }
         };
 
         // Rate limit WebSocket connections per user
-        if check_rate_limit_by_user(&claims.sub, &state.redis, RateLimitTier::Auth).await.is_err() {
+        if check_rate_limit_by_user(&claims.sub, &state.redis, RateLimitTier::Auth)
+            .await
+            .is_err()
+        {
             warn!("WebSocket rate limit exceeded for user: {}", claims.sub);
-            return Ok(HttpResponse::TooManyRequests()
-                .json(serde_json::json!({
-                    "error": "RATE_LIMITED",
-                    "message": "Too many connection attempts"
-                })));
+            return Ok(HttpResponse::TooManyRequests().json(serde_json::json!({
+                "error": "RATE_LIMITED",
+                "message": "Too many connection attempts"
+            })));
         }
 
         let session = WsSession::authenticated(state.get_ref().clone(), claims.sub, claims.role);
@@ -307,11 +320,10 @@ pub async fn ws_handler(
     let ip = extract_client_ip(&req);
     if check_rate_limit_by_ip(&ip, &state.redis).await.is_err() {
         warn!("WebSocket rate limit exceeded for IP: {}", ip);
-        return Ok(HttpResponse::TooManyRequests()
-            .json(serde_json::json!({
-                "error": "RATE_LIMITED",
-                "message": "Too many connection attempts"
-            })));
+        return Ok(HttpResponse::TooManyRequests().json(serde_json::json!({
+            "error": "RATE_LIMITED",
+            "message": "Too many connection attempts"
+        })));
     }
 
     let session = WsSession::pending_auth(state.get_ref().clone());
@@ -344,10 +356,7 @@ fn extract_client_ip(req: &HttpRequest) -> String {
 }
 
 /// Rate limit by IP for unauthenticated WebSocket connections
-async fn check_rate_limit_by_ip(
-    ip: &str,
-    redis: &crate::services::RedisService,
-) -> Result<(), ()> {
+async fn check_rate_limit_by_ip(ip: &str, redis: &crate::services::RedisService) -> Result<(), ()> {
     // 5 unauthenticated connection attempts per minute per IP
     let key = format!("ws_rate:ip:{}", ip);
     match redis.increment_with_ttl(&key, 60).await {

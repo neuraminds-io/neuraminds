@@ -12,8 +12,8 @@
 
 use actix_web::HttpRequest;
 
-use crate::services::RedisService;
 use super::ApiError;
+use crate::services::RedisService;
 
 /// Rate limit tiers for different endpoint types
 #[derive(Clone, Copy)]
@@ -47,7 +47,7 @@ impl RateLimitTier {
     pub fn window_secs(&self) -> u64 {
         match self {
             RateLimitTier::MarketCreate => 3600, // 1 hour
-            _ => 60, // 1 minute
+            _ => 60,                             // 1 minute
         }
     }
 
@@ -88,7 +88,11 @@ pub async fn check_rate_limit(
             if count > limit {
                 log::warn!(
                     "Rate limit exceeded for {} on {} (tier: {:?}, count: {}, limit: {})",
-                    client_ip, path, tier.key_prefix(), count, limit
+                    client_ip,
+                    path,
+                    tier.key_prefix(),
+                    count,
+                    limit
                 );
                 return Err(ApiError::rate_limited(window));
             }
@@ -117,7 +121,10 @@ pub async fn check_rate_limit_by_user(
             if count > limit {
                 log::warn!(
                     "Rate limit exceeded for user {} (tier: {:?}, count: {}, limit: {})",
-                    wallet, tier.key_prefix(), count, limit
+                    wallet,
+                    tier.key_prefix(),
+                    count,
+                    limit
                 );
                 return Err(ApiError::rate_limited(window));
             }
@@ -131,12 +138,18 @@ pub async fn check_rate_limit_by_user(
 }
 
 /// Helper to check auth-tier rate limit
-pub async fn check_auth_rate_limit(req: &HttpRequest, redis: &RedisService) -> Result<(), ApiError> {
+pub async fn check_auth_rate_limit(
+    req: &HttpRequest,
+    redis: &RedisService,
+) -> Result<(), ApiError> {
     check_rate_limit(req, redis, RateLimitTier::Auth).await
 }
 
 /// Helper to check write-tier rate limit
-pub async fn check_write_rate_limit(req: &HttpRequest, redis: &RedisService) -> Result<(), ApiError> {
+pub async fn check_write_rate_limit(
+    req: &HttpRequest,
+    redis: &RedisService,
+) -> Result<(), ApiError> {
     check_rate_limit(req, redis, RateLimitTier::Write).await
 }
 
@@ -146,7 +159,10 @@ pub async fn check_order_rate_limit(wallet: &str, redis: &RedisService) -> Resul
 }
 
 /// Helper to check market-creation rate limit (1/hour per user)
-pub async fn check_market_create_rate_limit(wallet: &str, redis: &RedisService) -> Result<(), ApiError> {
+pub async fn check_market_create_rate_limit(
+    wallet: &str,
+    redis: &RedisService,
+) -> Result<(), ApiError> {
     check_rate_limit_by_user(wallet, redis, RateLimitTier::MarketCreate).await
 }
 
@@ -203,6 +219,10 @@ mod tests {
         .iter()
         .map(|t| t.key_prefix())
         .collect();
-        assert_eq!(prefixes.len(), 6, "All rate limit tiers should have unique key prefixes");
+        assert_eq!(
+            prefixes.len(),
+            6,
+            "All rate limit tiers should have unique key prefixes"
+        );
     }
 }

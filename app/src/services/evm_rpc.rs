@@ -52,7 +52,9 @@ impl EvmRpcService {
     }
 
     pub async fn eth_block_number(&self) -> Result<u64> {
-        let value = self.rpc_value_call("eth_blockNumber", serde_json::json!([])).await?;
+        let value = self
+            .rpc_value_call("eth_blockNumber", serde_json::json!([]))
+            .await?;
         let raw = value
             .as_str()
             .ok_or_else(|| anyhow!("Invalid eth_blockNumber response"))?;

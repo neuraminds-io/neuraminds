@@ -1,18 +1,18 @@
-use anyhow::{Result, anyhow};
-use log::{info, warn, error, debug};
+use anyhow::{anyhow, Result};
+use log::{debug, error, info, warn};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     compute_budget::ComputeBudgetInstruction,
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
-    signature::{Keypair, Signature, read_keypair_file},
+    signature::{read_keypair_file, Keypair, Signature},
     signer::Signer,
     transaction::Transaction,
 };
 use solana_transaction_status::UiTransactionEncoding;
-use std::str::FromStr;
 use std::env;
+use std::str::FromStr;
 
 use crate::models::MatchedTrade;
 
@@ -29,10 +29,8 @@ impl SolanaService {
     pub fn new(rpc_url: &str, keeper_path: &str) -> Result<Self> {
         info!("Initializing Solana service...");
 
-        let rpc_client = RpcClient::new_with_commitment(
-            rpc_url.to_string(),
-            CommitmentConfig::confirmed(),
-        );
+        let rpc_client =
+            RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed());
 
         // Try to read keeper keypair, or generate a new one for development
         let keeper = match read_keypair_file(keeper_path) {
@@ -124,7 +122,9 @@ impl SolanaService {
         let compute_ix = ComputeBudgetInstruction::set_compute_unit_limit(300_000);
 
         // Get recent blockhash
-        let recent_blockhash = self.rpc_client.get_latest_blockhash()
+        let recent_blockhash = self
+            .rpc_client
+            .get_latest_blockhash()
             .map_err(|e| anyhow!("Failed to get blockhash: {}", e))?;
 
         // Create and sign transaction
@@ -136,7 +136,9 @@ impl SolanaService {
         );
 
         // Send and confirm transaction
-        let signature = self.rpc_client.send_and_confirm_transaction(&tx)
+        let signature = self
+            .rpc_client
+            .send_and_confirm_transaction(&tx)
             .map_err(|e| {
                 error!("Failed to settle trade: {}", e);
                 anyhow!("Transaction failed: {}", e)
@@ -164,18 +166,18 @@ impl SolanaService {
 
         // Build account metas in exact order expected by SettleTrade accounts struct
         let account_metas = vec![
-            AccountMeta::new_readonly(self.keeper.pubkey(), true),  // keeper (signer)
-            AccountMeta::new(accounts.config, false),               // config
-            AccountMeta::new_readonly(accounts.market, false),      // market
-            AccountMeta::new(accounts.buy_order, false),            // buy_order
-            AccountMeta::new(accounts.buyer_position, false),       // buyer_position
-            AccountMeta::new(accounts.sell_order, false),           // sell_order
-            AccountMeta::new(accounts.seller_position, false),      // seller_position
-            AccountMeta::new(accounts.escrow_vault, false),         // escrow_vault
-            AccountMeta::new(accounts.seller_collateral, false),    // seller_collateral
-            AccountMeta::new(accounts.buyer_collateral, false),     // buyer_collateral
+            AccountMeta::new_readonly(self.keeper.pubkey(), true), // keeper (signer)
+            AccountMeta::new(accounts.config, false),              // config
+            AccountMeta::new_readonly(accounts.market, false),     // market
+            AccountMeta::new(accounts.buy_order, false),           // buy_order
+            AccountMeta::new(accounts.buyer_position, false),      // buyer_position
+            AccountMeta::new(accounts.sell_order, false),          // sell_order
+            AccountMeta::new(accounts.seller_position, false),     // seller_position
+            AccountMeta::new(accounts.escrow_vault, false),        // escrow_vault
+            AccountMeta::new(accounts.seller_collateral, false),   // seller_collateral
+            AccountMeta::new(accounts.buyer_collateral, false),    // buyer_collateral
             AccountMeta::new_readonly(accounts.escrow_authority, false), // escrow_authority
-            AccountMeta::new_readonly(spl_token::id(), false),      // token_program
+            AccountMeta::new_readonly(spl_token::id(), false),     // token_program
         ];
 
         Ok(Instruction {
@@ -191,21 +193,24 @@ impl SolanaService {
         accounts: CancelOrderAccounts,
         order_id: u64,
     ) -> Result<Signature> {
-        info!("Cancelling order {} on market {}", order_id, accounts.market);
+        info!(
+            "Cancelling order {} on market {}",
+            order_id, accounts.market
+        );
 
         // Anchor instruction discriminator for "cancel_order"
         let data = vec![0x5f, 0xc0, 0x55, 0xd3, 0x47, 0x0c, 0x5f, 0x3e];
 
         // Build account metas
         let account_metas = vec![
-            AccountMeta::new(accounts.owner, true),                  // owner (signer)
-            AccountMeta::new_readonly(accounts.market, false),       // market
-            AccountMeta::new(accounts.order, false),                 // order
-            AccountMeta::new(accounts.position, false),              // position
-            AccountMeta::new(accounts.escrow_vault, false),          // escrow_vault
-            AccountMeta::new(accounts.user_collateral, false),       // user_collateral
+            AccountMeta::new(accounts.owner, true), // owner (signer)
+            AccountMeta::new_readonly(accounts.market, false), // market
+            AccountMeta::new(accounts.order, false), // order
+            AccountMeta::new(accounts.position, false), // position
+            AccountMeta::new(accounts.escrow_vault, false), // escrow_vault
+            AccountMeta::new(accounts.user_collateral, false), // user_collateral
             AccountMeta::new_readonly(accounts.escrow_authority, false), // escrow_authority
-            AccountMeta::new_readonly(spl_token::id(), false),       // token_program
+            AccountMeta::new_readonly(spl_token::id(), false), // token_program
         ];
 
         let ix = Instruction {
@@ -222,7 +227,9 @@ impl SolanaService {
             recent_blockhash,
         );
 
-        let signature = self.rpc_client.send_and_confirm_transaction(&tx)
+        let signature = self
+            .rpc_client
+            .send_and_confirm_transaction(&tx)
             .map_err(|e| anyhow!("Cancel order failed: {}", e))?;
 
         info!("Order cancelled successfully: {}", signature);
@@ -234,19 +241,22 @@ impl SolanaService {
         &self,
         accounts: ClaimWinningsAccounts,
     ) -> Result<(Signature, u64)> {
-        info!("Claiming winnings for {} on market {}", accounts.user, accounts.market);
+        info!(
+            "Claiming winnings for {} on market {}",
+            accounts.user, accounts.market
+        );
 
         // Anchor instruction discriminator for "claim_winnings"
         let data = vec![0xbd, 0x87, 0x45, 0xd4, 0x84, 0xab, 0xaa, 0x60];
 
         // Build account metas
         let account_metas = vec![
-            AccountMeta::new(accounts.user, true),                   // user (signer)
-            AccountMeta::new(accounts.market, false),                // market
-            AccountMeta::new(accounts.position, false),              // position
-            AccountMeta::new(accounts.vault, false),                 // vault
-            AccountMeta::new(accounts.user_collateral, false),       // user_collateral
-            AccountMeta::new_readonly(spl_token::id(), false),       // token_program
+            AccountMeta::new(accounts.user, true),      // user (signer)
+            AccountMeta::new(accounts.market, false),   // market
+            AccountMeta::new(accounts.position, false), // position
+            AccountMeta::new(accounts.vault, false),    // vault
+            AccountMeta::new(accounts.user_collateral, false), // user_collateral
+            AccountMeta::new_readonly(spl_token::id(), false), // token_program
         ];
 
         let _ix = Instruction {
@@ -262,7 +272,10 @@ impl SolanaService {
         // 2. Use a transaction relay service
         // 3. Have users submit claims directly to the blockchain
 
-        debug!("claim_winnings: User {} would claim from market {}", accounts.user, accounts.market);
+        debug!(
+            "claim_winnings: User {} would claim from market {}",
+            accounts.user, accounts.market
+        );
         warn!("claim_winnings requires user wallet signature - returning placeholder");
 
         // For now, return placeholder - full implementation needs wallet adapter integration
@@ -271,10 +284,7 @@ impl SolanaService {
     }
 
     /// Build an unsigned claim_winnings transaction for client signing
-    pub fn build_claim_winnings_tx(
-        &self,
-        accounts: &ClaimWinningsAccounts,
-    ) -> Result<Vec<u8>> {
+    pub fn build_claim_winnings_tx(&self, accounts: &ClaimWinningsAccounts) -> Result<Vec<u8>> {
         // Anchor instruction discriminator for "claim_winnings"
         let data = vec![0xbd, 0x87, 0x45, 0xd4, 0x84, 0xab, 0xaa, 0x60];
 
@@ -328,10 +338,7 @@ impl SolanaService {
 
     /// Derive market PDA
     pub fn derive_market_pda(&self, market_id: &str) -> (Pubkey, u8) {
-        Pubkey::find_program_address(
-            &[b"market", market_id.as_bytes()],
-            &self.market_program_id,
-        )
+        Pubkey::find_program_address(&[b"market", market_id.as_bytes()], &self.market_program_id)
     }
 
     /// Derive order PDA
@@ -368,24 +375,18 @@ impl SolanaService {
 
     /// Derive config PDA
     pub fn derive_config_pda(&self) -> (Pubkey, u8) {
-        Pubkey::find_program_address(
-            &[b"config"],
-            &self.orderbook_program_id,
-        )
+        Pubkey::find_program_address(&[b"config"], &self.orderbook_program_id)
     }
 
     /// Derive user vault PDA for USDC balance
     pub fn derive_user_vault_pda(&self, user: &Pubkey) -> (Pubkey, u8) {
-        Pubkey::find_program_address(
-            &[b"user_vault", user.as_ref()],
-            &self.orderbook_program_id,
-        )
+        Pubkey::find_program_address(&[b"user_vault", user.as_ref()], &self.orderbook_program_id)
     }
 
     /// Get user's USDC balance from their program vault
     pub async fn get_user_balance(&self, wallet_address: &str) -> Result<u64> {
-        let user = Pubkey::from_str(wallet_address)
-            .map_err(|_| anyhow!("Invalid wallet address"))?;
+        let user =
+            Pubkey::from_str(wallet_address).map_err(|_| anyhow!("Invalid wallet address"))?;
 
         let (vault_pda, _) = self.derive_user_vault_pda(&user);
 
@@ -413,7 +414,8 @@ impl SolanaService {
             .map_err(|_| anyhow!("Invalid transaction signature"))?;
 
         // Get transaction details
-        let tx = self.rpc_client
+        let tx = self
+            .rpc_client
             .get_transaction(&signature, UiTransactionEncoding::Json)
             .map_err(|e| anyhow!("Failed to fetch transaction: {}", e))?;
 
@@ -446,12 +448,14 @@ impl SolanaService {
         destination: &str,
         amount: u64,
     ) -> Result<String> {
-        let user = Pubkey::from_str(user_wallet)
-            .map_err(|_| anyhow!("Invalid user wallet"))?;
-        let dest = Pubkey::from_str(destination)
-            .map_err(|_| anyhow!("Invalid destination address"))?;
+        let user = Pubkey::from_str(user_wallet).map_err(|_| anyhow!("Invalid user wallet"))?;
+        let dest =
+            Pubkey::from_str(destination).map_err(|_| anyhow!("Invalid destination address"))?;
 
-        info!("Executing withdrawal: {} lamports from {} to {}", amount, user, dest);
+        info!(
+            "Executing withdrawal: {} lamports from {} to {}",
+            amount, user, dest
+        );
 
         // Build withdraw instruction
         // Anchor discriminator for "withdraw" instruction
@@ -491,7 +495,8 @@ impl SolanaService {
             recent_blockhash,
         );
 
-        let signature = self.rpc_client
+        let signature = self
+            .rpc_client
             .send_and_confirm_transaction(&tx)
             .map_err(|e| anyhow!("Withdrawal failed: {}", e))?;
 
@@ -501,8 +506,8 @@ impl SolanaService {
 
     /// Credit user balance (keeper-signed, for Blindfold deposits)
     pub async fn credit_user_balance(&self, wallet_address: &str, amount: u64) -> Result<String> {
-        let user = Pubkey::from_str(wallet_address)
-            .map_err(|_| anyhow!("Invalid wallet address"))?;
+        let user =
+            Pubkey::from_str(wallet_address).map_err(|_| anyhow!("Invalid wallet address"))?;
 
         info!("Crediting {} lamports to {}", amount, user);
 
@@ -519,10 +524,8 @@ impl SolanaService {
             .expect("hardcoded USDC mint is valid");
 
         // Derive program vault (source of funds for credits)
-        let (program_vault, _) = Pubkey::find_program_address(
-            &[b"vault"],
-            &self.orderbook_program_id,
-        );
+        let (program_vault, _) =
+            Pubkey::find_program_address(&[b"vault"], &self.orderbook_program_id);
 
         let account_metas = vec![
             AccountMeta::new_readonly(self.keeper.pubkey(), true), // keeper (signer)
@@ -550,7 +553,8 @@ impl SolanaService {
             recent_blockhash,
         );
 
-        let signature = self.rpc_client
+        let signature = self
+            .rpc_client
             .send_and_confirm_transaction(&tx)
             .map_err(|e| anyhow!("Credit balance failed: {}", e))?;
 

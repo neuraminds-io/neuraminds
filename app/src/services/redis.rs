@@ -32,7 +32,12 @@ impl RedisService {
     }
 
     /// Set a value in cache with optional TTL
-    pub async fn set<T: Serialize>(&self, key: &str, value: &T, ttl_seconds: Option<u64>) -> Result<()> {
+    pub async fn set<T: Serialize>(
+        &self,
+        key: &str,
+        value: &T,
+        ttl_seconds: Option<u64>,
+    ) -> Result<()> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
         let serialized = serde_json::to_string(value)?;
 
@@ -108,7 +113,8 @@ impl RedisService {
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
 
-        self.publish(&format!("market:{}", market_id), &message.to_string()).await
+        self.publish(&format!("market:{}", market_id), &message.to_string())
+            .await
     }
 
     /// Publish order book update
@@ -130,7 +136,11 @@ impl RedisService {
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
 
-        self.publish(&format!("orderbook:{}:{}", market_id, outcome), &message.to_string()).await
+        self.publish(
+            &format!("orderbook:{}:{}", market_id, outcome),
+            &message.to_string(),
+        )
+        .await
     }
 
     /// Publish trade execution
@@ -150,7 +160,8 @@ impl RedisService {
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
 
-        self.publish(&format!("trades:{}", market_id), &message.to_string()).await
+        self.publish(&format!("trades:{}", market_id), &message.to_string())
+            .await
     }
 
     // =========================================================================
@@ -203,7 +214,11 @@ impl RedisService {
     }
 
     /// Store user token generation in the token claims for validation
-    pub async fn set_user_token_generation(&self, wallet_address: &str, generation: i64) -> Result<()> {
+    pub async fn set_user_token_generation(
+        &self,
+        wallet_address: &str,
+        generation: i64,
+    ) -> Result<()> {
         let key = format!("user_token_gen:{}", wallet_address);
         let mut conn = self.client.get_multiplexed_async_connection().await?;
         // 30 days TTL for generation counter

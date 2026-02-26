@@ -3,10 +3,8 @@ use serde::Serialize;
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::services::{ComponentHealth, HealthChecks, HealthStatus, SystemHealth};
 use crate::AppState;
-use crate::services::{
-    SystemHealth, HealthStatus, ComponentHealth, HealthChecks,
-};
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -25,9 +23,7 @@ pub async fn health_check() -> impl Responder {
 }
 
 /// Detailed health check with component status
-pub async fn health_detailed(
-    state: web::Data<Arc<AppState>>,
-) -> impl Responder {
+pub async fn health_detailed(state: web::Data<Arc<AppState>>) -> impl Responder {
     let uptime = state.metrics.get_metrics().uptime_seconds;
 
     // Check database health
@@ -72,17 +68,13 @@ pub async fn health_detailed(
 }
 
 /// Get application metrics (JSON format)
-pub async fn get_metrics(
-    state: web::Data<Arc<AppState>>,
-) -> impl Responder {
+pub async fn get_metrics(state: web::Data<Arc<AppState>>) -> impl Responder {
     let metrics = state.metrics.get_metrics();
     HttpResponse::Ok().json(metrics)
 }
 
 /// Get application metrics (Prometheus format)
-pub async fn get_metrics_prometheus(
-    state: web::Data<Arc<AppState>>,
-) -> impl Responder {
+pub async fn get_metrics_prometheus(state: web::Data<Arc<AppState>>) -> impl Responder {
     let prometheus_output = state.metrics.export_prometheus();
     HttpResponse::Ok()
         .content_type("text/plain; version=0.0.4")
@@ -93,10 +85,7 @@ async fn check_database_health(state: &web::Data<Arc<AppState>>) -> ComponentHea
     let start = Instant::now();
 
     // Execute actual query to verify database connectivity
-    match sqlx::query("SELECT 1")
-        .execute(state.db.pool())
-        .await
-    {
+    match sqlx::query("SELECT 1").execute(state.db.pool()).await {
         Ok(_) => {
             let latency_ms = start.elapsed().as_millis() as u64;
             let stats = state.db.pool_stats();
@@ -224,7 +213,8 @@ fn determine_overall_status(
         return HealthStatus::Degraded;
     }
 
-    if evm_enabled && (base.status == HealthStatus::Degraded || base.status == HealthStatus::Unhealthy)
+    if evm_enabled
+        && (base.status == HealthStatus::Degraded || base.status == HealthStatus::Unhealthy)
     {
         return HealthStatus::Degraded;
     }

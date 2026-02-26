@@ -1,18 +1,20 @@
-use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use actix_web::http::header::HeaderMap;
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use chrono::Utc;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::models::{
-    Order, OrderSide, OrderStatus, Outcome,
-    PlaceOrderRequest, ListOrdersQuery, OrderListResponse,
-    PlaceOrderResponse, CancelOrderResponse,
-};
-use crate::AppState;
-use crate::require_auth;
-use super::{ApiError, validate_order_price, validate_order_quantity, validate_market_id, validate_uuid, validate_pagination};
 use super::rate_limit::check_order_rate_limit;
+use super::{
+    validate_market_id, validate_order_price, validate_order_quantity, validate_pagination,
+    validate_uuid, ApiError,
+};
+use crate::models::{
+    CancelOrderResponse, ListOrdersQuery, Order, OrderListResponse, OrderSide, OrderStatus,
+    Outcome, PlaceOrderRequest, PlaceOrderResponse,
+};
+use crate::require_auth;
+use crate::AppState;
 
 const IDEMPOTENCY_KEY_HEADER: &str = "idempotency-key";
 
@@ -71,7 +73,8 @@ pub async fn list_orders(
 
     let (limit, offset) = validate_pagination(query.limit, query.offset)?;
 
-    let (orders, total) = state.db
+    let (orders, total) = state
+        .db
         .get_orders(owner, query.market_id.as_deref(), status, limit, offset)
         .await
         .map_err(ApiError::from)?;
@@ -95,7 +98,8 @@ pub async fn get_order(
     // Validate order ID format
     validate_uuid(&order_id, "order_id")?;
 
-    let order = state.db
+    let order = state
+        .db
         .get_order(&order_id)
         .await
         .map_err(ApiError::from)?;
@@ -217,15 +221,19 @@ pub async fn place_order(
 
     // Persist to database order book
     if order.remaining_quantity > 0 {
-        state.db.add_orderbook_entry(
-            &order.id,
-            &order.market_id,
-            order.outcome,
-            order.side,
-            order.price_bps,
-            order.remaining_quantity,
-            &order.owner,
-        ).await.ok();
+        state
+            .db
+            .add_orderbook_entry(
+                &order.id,
+                &order.market_id,
+                order.outcome,
+                order.side,
+                order.price_bps,
+                order.remaining_quantity,
+                &order.owner,
+            )
+            .await
+            .ok();
     }
 
     // Process matches
@@ -252,7 +260,7 @@ pub async fn place_order(
                 &seller_pubkey,
                 matched_trade.buy_order_id,
                 matched_trade.sell_order_id,
-                buyer_pubkey, // buyer collateral ATA
+                buyer_pubkey,  // buyer collateral ATA
                 seller_pubkey, // seller collateral ATA
             );
 
@@ -271,7 +279,8 @@ pub async fn place_order(
             Outcome::Yes => "yes",
             Outcome::No => "no",
         };
-        state.redis
+        state
+            .redis
             .publish_trade(
                 &order.market_id,
                 outcome_str,
@@ -282,10 +291,14 @@ pub async fn place_order(
             .ok();
 
         // Update persistent order book for matched orders
-        state.db.update_orderbook_entry_quantity(
-            &matched_trade.buy_order_id.to_string(),
-            0, // Buyer order filled
-        ).await.ok();
+        state
+            .db
+            .update_orderbook_entry_quantity(
+                &matched_trade.buy_order_id.to_string(),
+                0, // Buyer order filled
+            )
+            .await
+            .ok();
     }
 
     // Calculate filled amount
@@ -307,7 +320,11 @@ pub async fn place_order(
     final_order.status = final_status;
 
     // Save to database
-    state.db.create_order(&final_order).await.map_err(ApiError::from)?;
+    state
+        .db
+        .create_order(&final_order)
+        .await
+        .map_err(ApiError::from)?;
 
     // Publish order book update
     let outcome_str = match body.outcome {
@@ -318,8 +335,15 @@ pub async fn place_order(
         OrderSide::Buy => "bid",
         OrderSide::Sell => "ask",
     };
-    state.redis
-        .publish_orderbook_update(&body.market_id, outcome_str, side_str, body.price, remaining)
+    state
+        .redis
+        .publish_orderbook_update(
+            &body.market_id,
+            outcome_str,
+            side_str,
+            body.price,
+            remaining,
+        )
         .await
         .ok();
 
@@ -342,7 +366,11 @@ pub async fn place_order(
     if let Some(ref key) = idempotency_key {
         let full_key = format!("{}:{}", owner, key);
         if let Ok(json) = serde_json::to_string(&response) {
-            state.redis.store_idempotency_key(&full_key, &json).await.ok();
+            state
+                .redis
+                .store_idempotency_key(&full_key, &json)
+                .await
+                .ok();
         }
         state.redis.release_idempotency_lock(&full_key).await.ok();
     }
@@ -364,7 +392,8 @@ pub async fn cancel_order(
     let order_id = path.into_inner();
 
     // Get the order
-    let order = state.db
+    let order = state
+        .db
         .get_order(&order_id)
         .await
         .map_err(ApiError::from)?
@@ -390,13 +419,16 @@ pub async fn cancel_order(
     }
 
     // Remove from order book
-    state.orderbook.remove_order(&order.market_id, order.outcome, order.side, &order_id);
+    state
+        .orderbook
+        .remove_order(&order.market_id, order.outcome, order.side, &order_id);
 
     // Remove from persistent order book
     state.db.remove_orderbook_entry(&order_id).await.ok();
 
     // Update database
-    state.db
+    state
+        .db
         .update_order_status(&order_id, OrderStatus::Cancelled, order.filled_quantity, 0)
         .await
         .map_err(ApiError::from)?;

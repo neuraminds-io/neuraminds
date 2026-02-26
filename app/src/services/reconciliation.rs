@@ -5,12 +5,9 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use log::{info, warn, error};
+use log::{error, info, warn};
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::{
-    commitment_config::CommitmentConfig,
-    pubkey::Pubkey,
-};
+use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,15 +19,34 @@ use crate::models::{MarketStatus, OrderStatus};
 #[derive(Debug, Clone)]
 pub enum DiscrepancyType {
     /// Market status differs between DB and chain
-    MarketStatus { db_status: MarketStatus, chain_status: u8 },
+    MarketStatus {
+        db_status: MarketStatus,
+        chain_status: u8,
+    },
     /// Market price mismatch
-    MarketPrice { db_yes: f64, db_no: f64, chain_yes: u64, chain_no: u64 },
+    MarketPrice {
+        db_yes: f64,
+        db_no: f64,
+        chain_yes: u64,
+        chain_no: u64,
+    },
     /// Order status mismatch
-    OrderStatus { db_status: OrderStatus, chain_status: u8 },
+    OrderStatus {
+        db_status: OrderStatus,
+        chain_status: u8,
+    },
     /// Order quantity mismatch
-    OrderQuantity { db_remaining: u64, chain_remaining: u64 },
+    OrderQuantity {
+        db_remaining: u64,
+        chain_remaining: u64,
+    },
     /// Position balance mismatch
-    PositionBalance { db_yes: u64, db_no: u64, chain_yes: u64, chain_no: u64 },
+    PositionBalance {
+        db_yes: u64,
+        db_no: u64,
+        chain_yes: u64,
+        chain_no: u64,
+    },
     /// Account not found on chain
     AccountMissing,
     /// Account exists on chain but not in DB
@@ -109,10 +125,8 @@ impl ReconciliationService {
         orderbook_program_id: Pubkey,
         config: ReconciliationConfig,
     ) -> Self {
-        let rpc_client = RpcClient::new_with_commitment(
-            rpc_url.to_string(),
-            CommitmentConfig::confirmed(),
-        );
+        let rpc_client =
+            RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed());
 
         Self {
             rpc_client,
@@ -250,7 +264,8 @@ impl ReconciliationService {
                                 Ok(_) => {
                                     let mut resolved = discrepancy.clone();
                                     resolved.resolved = true;
-                                    resolved.resolution_action = Some("Updated DB to match chain".to_string());
+                                    resolved.resolution_action =
+                                        Some("Updated DB to match chain".to_string());
                                     result.discrepancies_found.push(resolved);
                                     result.discrepancies_resolved += 1;
                                 }
@@ -331,11 +346,15 @@ impl ReconciliationService {
                         };
 
                         if self.config.auto_resolve {
-                            match self.resolve_order_status(&order_uuid, chain_status, chain_remaining).await {
+                            match self
+                                .resolve_order_status(&order_uuid, chain_status, chain_remaining)
+                                .await
+                            {
                                 Ok(_) => {
                                     let mut resolved = discrepancy.clone();
                                     resolved.resolved = true;
-                                    resolved.resolution_action = Some("Updated DB to match chain".to_string());
+                                    resolved.resolution_action =
+                                        Some("Updated DB to match chain".to_string());
                                     result.discrepancies_found.push(resolved);
                                     result.discrepancies_resolved += 1;
                                 }
@@ -364,11 +383,15 @@ impl ReconciliationService {
                         };
 
                         if self.config.auto_resolve {
-                            match self.resolve_order_quantity(&order_uuid, chain_remaining).await {
+                            match self
+                                .resolve_order_quantity(&order_uuid, chain_remaining)
+                                .await
+                            {
                                 Ok(_) => {
                                     let mut resolved = discrepancy.clone();
                                     resolved.resolved = true;
-                                    resolved.resolution_action = Some("Updated DB quantity to match chain".to_string());
+                                    resolved.resolution_action =
+                                        Some("Updated DB quantity to match chain".to_string());
                                     result.discrepancies_found.push(resolved);
                                     result.discrepancies_resolved += 1;
                                 }
@@ -386,7 +409,8 @@ impl ReconciliationService {
                     // Order not found on chain - might be closed/cancelled
                     // Mark as filled/cancelled in DB if auto_resolve
                     if self.config.auto_resolve {
-                        match self.resolve_order_status(&order_uuid, 2, 0).await { // 2 = Cancelled
+                        match self.resolve_order_status(&order_uuid, 2, 0).await {
+                            // 2 = Cancelled
                             Ok(_) => {
                                 result.discrepancies_found.push(Discrepancy {
                                     entity_type: "order".to_string(),
@@ -395,7 +419,9 @@ impl ReconciliationService {
                                     discrepancy_type: DiscrepancyType::AccountMissing,
                                     detected_at: Utc::now(),
                                     resolved: true,
-                                    resolution_action: Some("Marked as cancelled (account closed)".to_string()),
+                                    resolution_action: Some(
+                                        "Marked as cancelled (account closed)".to_string(),
+                                    ),
                                 });
                                 result.discrepancies_resolved += 1;
                             }
@@ -452,21 +478,14 @@ impl ReconciliationService {
             0
         };
 
-        let status = if data.len() > 116 {
-            data[116]
-        } else {
-            0
-        };
+        let status = if data.len() > 116 { data[116] } else { 0 };
 
         (status, remaining)
     }
 
     /// Derive market PDA
     fn derive_market_pda(&self, market_id: &str) -> Pubkey {
-        Pubkey::find_program_address(
-            &[b"market", market_id.as_bytes()],
-            &self.market_program_id,
-        ).0
+        Pubkey::find_program_address(&[b"market", market_id.as_bytes()], &self.market_program_id).0
     }
 
     /// Derive order PDA
@@ -474,7 +493,8 @@ impl ReconciliationService {
         Pubkey::find_program_address(
             &[b"order", market.as_ref(), &order_id.to_le_bytes()],
             &self.orderbook_program_id,
-        ).0
+        )
+        .0
     }
 
     /// Resolve market status discrepancy by updating DB
@@ -490,7 +510,12 @@ impl ReconciliationService {
     }
 
     /// Resolve order status discrepancy
-    async fn resolve_order_status(&self, order_id: &str, chain_status: u8, remaining: u64) -> Result<()> {
+    async fn resolve_order_status(
+        &self,
+        order_id: &str,
+        chain_status: u8,
+        remaining: u64,
+    ) -> Result<()> {
         let filled = if remaining == 0 && chain_status == 1 {
             // Filled
             sqlx::query("SELECT quantity FROM orders WHERE id = $1")
@@ -539,7 +564,10 @@ impl ReconciliationService {
         .execute(&self.pool)
         .await?;
 
-        info!("Resolved order {} remaining to {}", order_id, chain_remaining);
+        info!(
+            "Resolved order {} remaining to {}",
+            order_id, chain_remaining
+        );
         Ok(())
     }
 

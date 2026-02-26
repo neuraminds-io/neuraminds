@@ -1,14 +1,14 @@
 use anyhow::Result;
 use chrono::Utc;
-use sqlx::{postgres::PgPoolOptions, PgPool, Row, Postgres};
 use log::info;
-use std::time::Duration;
+use sqlx::{postgres::PgPoolOptions, PgPool, Postgres, Row};
 use std::env;
+use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::models::{
-    Market, MarketStatus, Outcome,
-    Order, OrderSide, OrderType, OrderStatus,
-    Position, Trade, Transaction as ModelTransaction, TransactionType,
+    Market, MarketStatus, Order, OrderSide, OrderStatus, OrderType, Outcome, Position, Trade,
+    Transaction as ModelTransaction, TransactionType,
 };
 
 /// Database connection pool configuration
@@ -53,19 +53,19 @@ impl PoolConfig {
                 env::var("DB_ACQUIRE_TIMEOUT_SECS")
                     .ok()
                     .and_then(|s| s.parse().ok())
-                    .unwrap_or(30)
+                    .unwrap_or(30),
             ),
             idle_timeout: Duration::from_secs(
                 env::var("DB_IDLE_TIMEOUT_SECS")
                     .ok()
                     .and_then(|s| s.parse().ok())
-                    .unwrap_or(600)
+                    .unwrap_or(600),
             ),
             max_lifetime: Duration::from_secs(
                 env::var("DB_MAX_LIFETIME_SECS")
                     .ok()
                     .and_then(|s| s.parse().ok())
-                    .unwrap_or(1800)
+                    .unwrap_or(1800),
             ),
         }
     }
@@ -101,7 +101,10 @@ impl DatabaseService {
 
         // Run migrations automatically
         info!("Running database migrations...");
-        sqlx::migrate!("../migrations")
+        let migrations_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../migrations");
+        sqlx::migrate::Migrator::new(migrations_path.as_path())
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to load migrations: {}", e))?
             .run(&pool)
             .await
             .map_err(|e| {
@@ -197,18 +200,27 @@ impl DatabaseService {
         let total: i64 = match (status, category) {
             (Some(s), Some(c)) => {
                 let q = "SELECT COUNT(*) as total FROM markets WHERE status = $1 AND category = $2";
-                sqlx::query_scalar(q).bind(s as i16).bind(c).fetch_one(&self.pool).await?
+                sqlx::query_scalar(q)
+                    .bind(s as i16)
+                    .bind(c)
+                    .fetch_one(&self.pool)
+                    .await?
             }
             (Some(s), None) => {
                 let q = "SELECT COUNT(*) as total FROM markets WHERE status = $1";
-                sqlx::query_scalar(q).bind(s as i16).fetch_one(&self.pool).await?
+                sqlx::query_scalar(q)
+                    .bind(s as i16)
+                    .fetch_one(&self.pool)
+                    .await?
             }
             (None, Some(c)) => {
                 let q = "SELECT COUNT(*) as total FROM markets WHERE category = $1";
                 sqlx::query_scalar(q).bind(c).fetch_one(&self.pool).await?
             }
             (None, None) => {
-                sqlx::query_scalar("SELECT COUNT(*) as total FROM markets").fetch_one(&self.pool).await?
+                sqlx::query_scalar("SELECT COUNT(*) as total FROM markets")
+                    .fetch_one(&self.pool)
+                    .await?
             }
         };
 
@@ -238,7 +250,10 @@ impl DatabaseService {
             no_mint: row.get("no_mint"),
             resolution_deadline: row.get("resolution_deadline"),
             trading_end: row.get("trading_end"),
-            resolved_outcome: row.try_get::<i16, _>("resolved_outcome").ok().map(|v| Outcome::from(v as u8)),
+            resolved_outcome: row
+                .try_get::<i16, _>("resolved_outcome")
+                .ok()
+                .map(|v| Outcome::from(v as u8)),
             created_at: row.get("created_at"),
             resolved_at: row.try_get("resolved_at").ok(),
         }
@@ -318,38 +333,79 @@ impl DatabaseService {
         let rows = match (market_id, status) {
             (Some(m), Some(s)) => {
                 let q = format!("SELECT * FROM orders {} AND market_id = $2 AND status = $3 ORDER BY created_at DESC LIMIT $4 OFFSET $5", base_where);
-                sqlx::query(&q).bind(owner).bind(m).bind(s as i16).bind(limit).bind(offset).fetch_all(&self.pool).await?
+                sqlx::query(&q)
+                    .bind(owner)
+                    .bind(m)
+                    .bind(s as i16)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&self.pool)
+                    .await?
             }
             (Some(m), None) => {
                 let q = format!("SELECT * FROM orders {} AND market_id = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4", base_where);
-                sqlx::query(&q).bind(owner).bind(m).bind(limit).bind(offset).fetch_all(&self.pool).await?
+                sqlx::query(&q)
+                    .bind(owner)
+                    .bind(m)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&self.pool)
+                    .await?
             }
             (None, Some(s)) => {
                 let q = format!("SELECT * FROM orders {} AND status = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4", base_where);
-                sqlx::query(&q).bind(owner).bind(s as i16).bind(limit).bind(offset).fetch_all(&self.pool).await?
+                sqlx::query(&q)
+                    .bind(owner)
+                    .bind(s as i16)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&self.pool)
+                    .await?
             }
             (None, None) => {
-                let q = format!("SELECT * FROM orders {} ORDER BY created_at DESC LIMIT $2 OFFSET $3", base_where);
-                sqlx::query(&q).bind(owner).bind(limit).bind(offset).fetch_all(&self.pool).await?
+                let q = format!(
+                    "SELECT * FROM orders {} ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+                    base_where
+                );
+                sqlx::query(&q)
+                    .bind(owner)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&self.pool)
+                    .await?
             }
         };
 
         let total: i64 = match (market_id, status) {
-            (Some(m), Some(s)) => {
-                sqlx::query_scalar("SELECT COUNT(*) FROM orders WHERE owner = $1 AND market_id = $2 AND status = $3")
-                    .bind(owner).bind(m).bind(s as i16).fetch_one(&self.pool).await?
-            }
+            (Some(m), Some(s)) => sqlx::query_scalar(
+                "SELECT COUNT(*) FROM orders WHERE owner = $1 AND market_id = $2 AND status = $3",
+            )
+            .bind(owner)
+            .bind(m)
+            .bind(s as i16)
+            .fetch_one(&self.pool)
+            .await?,
             (Some(m), None) => {
-                sqlx::query_scalar("SELECT COUNT(*) FROM orders WHERE owner = $1 AND market_id = $2")
-                    .bind(owner).bind(m).fetch_one(&self.pool).await?
+                sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM orders WHERE owner = $1 AND market_id = $2",
+                )
+                .bind(owner)
+                .bind(m)
+                .fetch_one(&self.pool)
+                .await?
             }
             (None, Some(s)) => {
                 sqlx::query_scalar("SELECT COUNT(*) FROM orders WHERE owner = $1 AND status = $2")
-                    .bind(owner).bind(s as i16).fetch_one(&self.pool).await?
+                    .bind(owner)
+                    .bind(s as i16)
+                    .fetch_one(&self.pool)
+                    .await?
             }
             (None, None) => {
                 sqlx::query_scalar("SELECT COUNT(*) FROM orders WHERE owner = $1")
-                    .bind(owner).fetch_one(&self.pool).await?
+                    .bind(owner)
+                    .fetch_one(&self.pool)
+                    .await?
             }
         };
 
@@ -468,10 +524,22 @@ impl DatabaseService {
             current_no_price: row.try_get("current_no_price").unwrap_or(0.5),
             unrealized_pnl: row.try_get("unrealized_pnl").unwrap_or(0.0),
             realized_pnl: row.try_get("realized_pnl").unwrap_or(0.0),
-            total_deposited: row.try_get::<i64, _>("total_deposited").map(|v| v as u64).unwrap_or(0),
-            total_withdrawn: row.try_get::<i64, _>("total_withdrawn").map(|v| v as u64).unwrap_or(0),
-            open_order_count: row.try_get::<i32, _>("open_order_count").map(|v| v as u32).unwrap_or(0),
-            total_trades: row.try_get::<i32, _>("total_trades").map(|v| v as u32).unwrap_or(0),
+            total_deposited: row
+                .try_get::<i64, _>("total_deposited")
+                .map(|v| v as u64)
+                .unwrap_or(0),
+            total_withdrawn: row
+                .try_get::<i64, _>("total_withdrawn")
+                .map(|v| v as u64)
+                .unwrap_or(0),
+            open_order_count: row
+                .try_get::<i32, _>("open_order_count")
+                .map(|v| v as u32)
+                .unwrap_or(0),
+            total_trades: row
+                .try_get::<i32, _>("total_trades")
+                .map(|v| v as u32)
+                .unwrap_or(0),
             created_at: row.get("created_at"),
         }
     }
@@ -608,7 +676,9 @@ impl DatabaseService {
             collateral_amount: row.get::<i64, _>("collateral_amount") as u64,
             buyer: row.get("buyer"),
             seller: row.get("seller"),
-            tx_signature: row.try_get("tx_signature").unwrap_or_else(|_| String::new()),
+            tx_signature: row
+                .try_get("tx_signature")
+                .unwrap_or_else(|_| String::new()),
             created_at: row.get("created_at"),
         }
     }
@@ -664,17 +734,25 @@ impl DatabaseService {
 
         let total: i64 = match tx_type {
             Some(t) => {
-                sqlx::query_scalar("SELECT COUNT(*) FROM transactions WHERE owner = $1 AND tx_type = $2")
-                    .bind(owner).bind(t as i16).fetch_one(&self.pool).await?
+                sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM transactions WHERE owner = $1 AND tx_type = $2",
+                )
+                .bind(owner)
+                .bind(t as i16)
+                .fetch_one(&self.pool)
+                .await?
             }
             None => {
                 sqlx::query_scalar("SELECT COUNT(*) FROM transactions WHERE owner = $1")
-                    .bind(owner).fetch_one(&self.pool).await?
+                    .bind(owner)
+                    .fetch_one(&self.pool)
+                    .await?
             }
         };
 
-        let transactions = rows.iter().map(|row| {
-            ModelTransaction {
+        let transactions = rows
+            .iter()
+            .map(|row| ModelTransaction {
                 id: row.get("id"),
                 owner: row.get("owner"),
                 market_id: row.try_get("market_id").ok(),
@@ -682,10 +760,12 @@ impl DatabaseService {
                 amount: row.get::<i64, _>("amount") as u64,
                 fee: row.try_get::<i64, _>("fee").map(|v| v as u64).unwrap_or(0),
                 tx_signature: row.try_get::<String, _>("tx_signature").ok(),
-                status: row.try_get("status").unwrap_or_else(|_| "pending".to_string()),
+                status: row
+                    .try_get("status")
+                    .unwrap_or_else(|_| "pending".to_string()),
                 created_at: row.get("created_at"),
-            }
-        }).collect();
+            })
+            .collect();
 
         Ok((transactions, total))
     }
@@ -763,8 +843,9 @@ impl DatabaseService {
         .fetch_all(&self.pool)
         .await?;
 
-        let entries = rows.iter().map(|row| {
-            OrderBookEntry {
+        let entries = rows
+            .iter()
+            .map(|row| OrderBookEntry {
                 order_id: row.get("id"),
                 on_chain_id: row.get::<i64, _>("order_id") as u64,
                 market_id: row.get("market_id"),
@@ -773,8 +854,8 @@ impl DatabaseService {
                 side: OrderSide::from(row.get::<i16, _>("side") as u8),
                 price_bps: row.get::<i16, _>("price_bps") as u16,
                 remaining_quantity: row.get::<i64, _>("remaining_quantity") as u64,
-            }
-        }).collect();
+            })
+            .collect();
 
         Ok(entries)
     }

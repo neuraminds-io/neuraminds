@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::models::TransactionType;
-use crate::AppState;
-use crate::require_auth;
 use super::ApiError;
+use crate::models::TransactionType;
+use crate::require_auth;
+use crate::AppState;
 
 fn ensure_legacy_wallet_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
     if !state.config.legacy_reads_enabled {
@@ -106,10 +106,7 @@ pub async fn get_balance(
     let wallet = &user.wallet_address;
 
     // Get on-chain balance from program
-    let on_chain_balance = state.solana
-        .get_user_balance(wallet)
-        .await
-        .unwrap_or(0);
+    let on_chain_balance = state.solana.get_user_balance(wallet).await.unwrap_or(0);
 
     // Get locked balance from open orders
     let locked_balance = get_locked_balance(&state, wallet).await?;
@@ -164,11 +161,17 @@ pub async fn deposit(
 
     // Validate amount
     if body.amount < 1_000_000 {
-        return Err(ApiError::bad_request("INVALID_AMOUNT", "Minimum deposit is 1 USDC"));
+        return Err(ApiError::bad_request(
+            "INVALID_AMOUNT",
+            "Minimum deposit is 1 USDC",
+        ));
     }
 
     if body.amount > 1_000_000_000_000 {
-        return Err(ApiError::bad_request("INVALID_AMOUNT", "Maximum deposit is 1M USDC"));
+        return Err(ApiError::bad_request(
+            "INVALID_AMOUNT",
+            "Maximum deposit is 1M USDC",
+        ));
     }
 
     let transaction_id = Uuid::new_v4().to_string();
@@ -176,17 +179,27 @@ pub async fn deposit(
     match body.source {
         DepositSource::Wallet => {
             // For direct wallet deposits, verify the transaction signature
-            let tx_sig = body.tx_signature.as_ref()
-                .ok_or_else(|| ApiError::bad_request("MISSING_FIELD", "tx_signature required for wallet deposits"))?;
+            let tx_sig = body.tx_signature.as_ref().ok_or_else(|| {
+                ApiError::bad_request("MISSING_FIELD", "tx_signature required for wallet deposits")
+            })?;
 
             // Verify transaction on-chain
-            let verified = state.solana
+            let verified = state
+                .solana
                 .verify_deposit_transaction(tx_sig, wallet, body.amount)
                 .await
-                .map_err(|e| ApiError::bad_request("VERIFICATION_FAILED", &format!("Transaction verification failed: {}", e)))?;
+                .map_err(|e| {
+                    ApiError::bad_request(
+                        "VERIFICATION_FAILED",
+                        &format!("Transaction verification failed: {}", e),
+                    )
+                })?;
 
             if !verified {
-                return Err(ApiError::bad_request("VERIFICATION_FAILED", "Transaction verification failed"));
+                return Err(ApiError::bad_request(
+                    "VERIFICATION_FAILED",
+                    "Transaction verification failed",
+                ));
             }
 
             // Record deposit
@@ -198,7 +211,8 @@ pub async fn deposit(
                 body.amount,
                 Some(tx_sig.clone()),
                 "confirmed",
-            ).await?;
+            )
+            .await?;
 
             Ok(HttpResponse::Ok().json(DepositResponse {
                 transaction_id,
@@ -217,7 +231,8 @@ pub async fn deposit(
                 body.amount,
                 None,
                 "pending",
-            ).await?;
+            )
+            .await?;
 
             Ok(HttpResponse::Ok().json(DepositResponse {
                 transaction_id,
@@ -236,12 +251,21 @@ pub async fn deposit(
                 TransactionType::Deposit,
                 body.amount,
                 body.tx_signature.clone(),
-                if body.tx_signature.is_some() { "confirmed" } else { "pending" },
-            ).await?;
+                if body.tx_signature.is_some() {
+                    "confirmed"
+                } else {
+                    "pending"
+                },
+            )
+            .await?;
 
             Ok(HttpResponse::Ok().json(DepositResponse {
                 transaction_id,
-                status: if body.tx_signature.is_some() { "confirmed".into() } else { "pending".into() },
+                status: if body.tx_signature.is_some() {
+                    "confirmed".into()
+                } else {
+                    "pending".into()
+                },
                 amount: body.amount,
                 deposit_address: None,
             }))
@@ -262,14 +286,14 @@ pub async fn withdraw(
 
     // Validate amount
     if body.amount < 1_000_000 {
-        return Err(ApiError::bad_request("INVALID_AMOUNT", "Minimum withdrawal is 1 USDC"));
+        return Err(ApiError::bad_request(
+            "INVALID_AMOUNT",
+            "Minimum withdrawal is 1 USDC",
+        ));
     }
 
     // Check balance
-    let balance = state.solana
-        .get_user_balance(wallet)
-        .await
-        .unwrap_or(0);
+    let balance = state.solana.get_user_balance(wallet).await.unwrap_or(0);
 
     let locked = get_locked_balance(&state, wallet).await?;
     let available = balance.saturating_sub(locked);
@@ -277,13 +301,19 @@ pub async fn withdraw(
     if body.amount > available {
         return Err(ApiError::bad_request(
             "INSUFFICIENT_BALANCE",
-            &format!("Insufficient balance. Available: {} USDC", available as f64 / 1_000_000.0),
+            &format!(
+                "Insufficient balance. Available: {} USDC",
+                available as f64 / 1_000_000.0
+            ),
         ));
     }
 
     // Validate destination address
     if !is_valid_solana_address(&body.destination) {
-        return Err(ApiError::bad_request("INVALID_ADDRESS", "Invalid destination address"));
+        return Err(ApiError::bad_request(
+            "INVALID_ADDRESS",
+            "Invalid destination address",
+        ));
     }
 
     // Calculate fee (0.1% with 0.1 USDC minimum)
@@ -293,7 +323,8 @@ pub async fn withdraw(
     let transaction_id = Uuid::new_v4().to_string();
 
     // Execute withdrawal on-chain
-    let tx_signature = state.solana
+    let tx_signature = state
+        .solana
         .execute_withdrawal(wallet, &body.destination, net_amount)
         .await
         .map_err(|e| ApiError::internal(&format!("Withdrawal failed: {}", e)))?;
@@ -307,7 +338,8 @@ pub async fn withdraw(
         body.amount,
         Some(tx_signature.clone()),
         "confirmed",
-    ).await?;
+    )
+    .await?;
 
     Ok(HttpResponse::Ok().json(WithdrawResponse {
         transaction_id,
@@ -355,10 +387,12 @@ pub async fn blindfold_webhook(
                 body.amount,
                 Some(body.payment_id.clone()),
                 "confirmed",
-            ).await?;
+            )
+            .await?;
 
             // Execute on-chain deposit
-            state.solana
+            state
+                .solana
                 .credit_user_balance(&body.wallet_address, body.amount)
                 .await
                 .map_err(|e| ApiError::internal(&format!("Failed to credit balance: {}", e)))?;
@@ -376,12 +410,20 @@ pub async fn blindfold_webhook(
 // Helper functions
 
 async fn get_locked_balance(state: &AppState, wallet: &str) -> Result<u64, ApiError> {
-    let (orders, _) = state.db
-        .get_orders(wallet, None, Some(crate::models::OrderStatus::Open), 1000, 0)
+    let (orders, _) = state
+        .db
+        .get_orders(
+            wallet,
+            None,
+            Some(crate::models::OrderStatus::Open),
+            1000,
+            0,
+        )
         .await
         .map_err(|e| ApiError::internal(&e.to_string()))?;
 
-    let locked: u64 = orders.iter()
+    let locked: u64 = orders
+        .iter()
         .map(|o| {
             // Calculate collateral locked per order
             let price = o.price_bps as u64;
@@ -394,17 +436,20 @@ async fn get_locked_balance(state: &AppState, wallet: &str) -> Result<u64, ApiEr
 }
 
 async fn get_pending_amounts(state: &AppState, wallet: &str) -> Result<(u64, u64), ApiError> {
-    let (txs, _) = state.db
+    let (txs, _) = state
+        .db
         .get_transactions(wallet, None, 100, 0)
         .await
         .map_err(|e| ApiError::internal(&e.to_string()))?;
 
-    let pending_deposits: u64 = txs.iter()
+    let pending_deposits: u64 = txs
+        .iter()
         .filter(|t| matches!(t.tx_type, TransactionType::Deposit) && t.status == "pending")
         .map(|t| t.amount)
         .sum();
 
-    let pending_withdrawals: u64 = txs.iter()
+    let pending_withdrawals: u64 = txs
+        .iter()
         .filter(|t| matches!(t.tx_type, TransactionType::Withdraw) && t.status == "pending")
         .map(|t| t.amount)
         .sum();
@@ -461,14 +506,17 @@ fn is_valid_solana_address(address: &str) -> bool {
     if address.len() < 32 || address.len() > 44 {
         return false;
     }
-    address.chars().all(|c| {
-        c.is_ascii_alphanumeric() && c != '0' && c != 'O' && c != 'I' && c != 'l'
-    })
+    address
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() && c != '0' && c != 'O' && c != 'I' && c != 'l')
 }
 
 fn compute_blindfold_signature(webhook: &BlindpayWebhook, secret: &str) -> String {
-    use sha2::{Sha256, Digest};
-    let payload = format!("{}{}{}{}", webhook.event, webhook.payment_id, webhook.amount, secret);
+    use sha2::{Digest, Sha256};
+    let payload = format!(
+        "{}{}{}{}",
+        webhook.event, webhook.payment_id, webhook.amount, secret
+    );
     let mut hasher = Sha256::new();
     hasher.update(payload.as_bytes());
     hex::encode(hasher.finalize())

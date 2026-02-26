@@ -2,13 +2,12 @@ use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use chrono::Utc;
 use std::sync::Arc;
 
-use crate::models::{
-    User, UserStats, UserSettings,
-    TransactionType, ListTransactionsQuery, TransactionListResponse,
-};
-use crate::AppState;
-use crate::require_auth;
 use super::ApiError;
+use crate::models::{
+    ListTransactionsQuery, TransactionListResponse, TransactionType, User, UserSettings, UserStats,
+};
+use crate::require_auth;
+use crate::AppState;
 
 /// Get user profile
 pub async fn get_profile(
@@ -64,10 +63,14 @@ pub async fn get_transactions(
     let limit = query.limit.unwrap_or(50).min(100);
     let offset = query.offset.unwrap_or(0);
 
-    let (transactions, total) = state.db
+    let (transactions, total) = state
+        .db
         .get_transactions(owner, tx_type, limit, offset)
         .await
         .map_err(ApiError::from)?;
 
-    Ok(HttpResponse::Ok().json(TransactionListResponse { transactions, total }))
+    Ok(HttpResponse::Ok().json(TransactionListResponse {
+        transactions,
+        total,
+    }))
 }

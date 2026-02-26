@@ -142,7 +142,9 @@ async fn main() -> std::io::Result<()> {
         let indexer = evm_indexer.clone();
 
         if market_core.is_empty() || order_book.is_empty() {
-            warn!("Skipping EVM indexer start: MARKET_CORE_ADDRESS or ORDER_BOOK_ADDRESS is missing");
+            warn!(
+                "Skipping EVM indexer start: MARKET_CORE_ADDRESS or ORDER_BOOK_ADDRESS is missing"
+            );
         } else {
             info!("Starting EVM log indexer background loop");
             tokio::spawn(async move {
@@ -156,7 +158,10 @@ async fn main() -> std::io::Result<()> {
                 ];
 
                 loop {
-                    if let Err(err) = indexer.sync(&market_core, &order_book, 25_000, &TOPICS).await {
+                    if let Err(err) = indexer
+                        .sync(&market_core, &order_book, 25_000, &TOPICS)
+                        .await
+                    {
                         warn!("EVM indexer sync failed: {}", err);
                     }
                     tokio::time::sleep(tokio::time::Duration::from_secs(20)).await;
@@ -337,7 +342,10 @@ async fn main() -> std::io::Result<()> {
                                 "/markets/{market_id}/trades",
                                 web::get().to(api::evm::get_base_trades),
                             )
-                            .route("/token/state", web::get().to(api::evm::get_neura_token_state)),
+                            .route(
+                                "/token/state",
+                                web::get().to(api::evm::get_neura_token_state),
+                            ),
                     ),
             )
     })

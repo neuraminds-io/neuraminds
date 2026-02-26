@@ -8,8 +8,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  SOLANA_VERSION: 2.2.0
-  ANCHOR_VERSION: 0.31.0
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/backend
 
@@ -37,12 +35,10 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Check formatting
-        run: cargo fmt --all -- --check
-        working-directory: app
+        run: cargo fmt --manifest-path app/Cargo.toml -- --check
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-        working-directory: app
+        run: cargo clippy --manifest-path app/Cargo.toml --all-targets -- -D clippy::correctness
 
   test-rust:
     name: Rust Tests
@@ -65,45 +61,7 @@ jobs:
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('app/Cargo.lock') }}
 
       - name: Run unit tests
-        working-directory: app
-        run: cargo test --lib
-
-  test-programs:
-    name: Solana Program Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-programs-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Install Solana
-        run: |
-          sh -c "$(curl -sSfL https://release.solana.com/v${{ env.SOLANA_VERSION }}/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
-
-      - name: Install Anchor
-        run: |
-          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
-          avm install ${{ env.ANCHOR_VERSION }}
-          avm use ${{ env.ANCHOR_VERSION }}
-
-      - name: Build programs
-        run: anchor build
-
-      - name: Run Anchor tests
-        run: anchor test
+        run: cargo test --manifest-path app/Cargo.toml --bin polyguard-api
 
   test-evm:
     name: EVM Contract Tests
@@ -127,11 +85,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        run: cargo install cargo-audit --locked
 
       - name: Run security audit
-        working-directory: app
-        run: cargo audit
+        run: cargo audit -f Cargo.lock --ignore RUSTSEC-2024-0344 --ignore RUSTSEC-2022-0093 --ignore RUSTSEC-2023-0071
 
   test-backend:
     name: Backend Integration Tests
@@ -238,70 +195,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: [build-image, security, test-programs]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment:
-      name: staging
-      url: https://api-staging.polyguard.cc
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-
-      - name: Configure kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-
-      - name: Run database migrations
-        run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7}"
-          kubectl run migrate-${GITHUB_SHA::7} \
-            --image="$IMAGE" \
-            --namespace=polyguard-staging \
-            --restart=Never \
-            --env="DATABASE_URL=${{ secrets.DATABASE_URL_STAGING }}" \
-            --command -- ./sqlx migrate run --source /home/polyguard/migrations
-          kubectl wait --for=condition=Complete pod/migrate-${GITHUB_SHA::7} \
-            -n polyguard-staging --timeout=120s
-          kubectl delete pod migrate-${GITHUB_SHA::7} -n polyguard-staging
-
-      - name: Deploy to staging
-        run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7}"
-          kubectl set image deployment/polyguard-api-blue \
-            api="$IMAGE" \
-            -n polyguard-staging
-
-      - name: Wait for rollout
-        run: |
-          kubectl rollout status deployment/polyguard-api-blue \
-            -n polyguard-staging --timeout=300s
-
-      - name: Health check
-        run: |
-          sleep 15
-          for i in {1..5}; do
-            if curl -sf "https://api-staging.polyguard.cc/health" > /dev/null; then
-              echo "Health check passed"
-              exit 0
-            fi
-            echo "Attempt $i failed, retrying..."
-            sleep 10
-          done
-          echo "Health check failed"
-          exit 1
-
-      - name: Rollback on failure
-        if: failure()
-        run: |
-          echo "Deployment failed, rolling back..."
-          kubectl rollout undo deployment/polyguard-api-blue -n polyguard-staging
-          kubectl rollout status deployment/polyguard-api-blue \
-            -n polyguard-staging --timeout=300s

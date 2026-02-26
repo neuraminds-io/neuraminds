@@ -231,11 +231,7 @@ pub async fn get_base_markets(
     let end = (offset + limit).min(total);
     let mut markets = Vec::new();
     for index in (offset + 1)..=end {
-        let calldata = format!(
-            "{}{}",
-            MARKET_CORE_MARKETS_SELECTOR,
-            encode_u256_hex(index)
-        );
+        let calldata = format!("{}{}", MARKET_CORE_MARKETS_SELECTOR, encode_u256_hex(index));
         let slot = state
             .evm_rpc
             .eth_call(market_core, &calldata)
@@ -266,9 +262,9 @@ pub async fn get_base_orderbook(
     }
 
     let market_id_raw = path.into_inner();
-    let market_id = market_id_raw
-        .parse::<u64>()
-        .map_err(|_| ApiError::bad_request("INVALID_MARKET_ID", "market_id must be a positive integer"))?;
+    let market_id = market_id_raw.parse::<u64>().map_err(|_| {
+        ApiError::bad_request("INVALID_MARKET_ID", "market_id must be a positive integer")
+    })?;
 
     let outcome = match query.outcome.as_deref().unwrap_or("yes") {
         "yes" => "yes",
@@ -664,8 +660,7 @@ fn parse_u64_hex(value: &str) -> Result<u64, ApiError> {
         return Err(ApiError::internal("RPC value out of range for u64"));
     }
 
-    u64::from_str_radix(normalized, 16)
-        .map_err(|_| ApiError::internal("Invalid RPC hex result"))
+    u64::from_str_radix(normalized, 16).map_err(|_| ApiError::internal("Invalid RPC hex result"))
 }
 
 fn parse_bool_word(word: &str) -> Result<bool, ApiError> {
@@ -823,7 +818,10 @@ mod tests {
             decoded.question_hash,
             "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         );
-        assert_eq!(decoded.resolver, "0x71c7656ec7ab88b098defb751b7401b5f6d8976f");
+        assert_eq!(
+            decoded.resolver,
+            "0x71c7656ec7ab88b098defb751b7401b5f6d8976f"
+        );
         assert_eq!(decoded.status, "resolved");
         assert_eq!(decoded.outcome.as_deref(), Some("yes"));
     }

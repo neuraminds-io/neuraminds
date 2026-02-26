@@ -3,10 +3,10 @@
 //! When LOG_FORMAT=json, outputs structured JSON lines.
 //! Otherwise, falls back to env_logger for development.
 
-use std::io::Write;
-use std::env;
 use chrono::Utc;
 use log::{Level, LevelFilter, Log, Metadata, Record};
+use std::env;
+use std::io::Write;
 
 /// Initialize the logger based on LOG_FORMAT env var.
 /// - "json" -> structured JSON output (for Loki/Promtail)
@@ -63,7 +63,10 @@ impl Log for JsonLogger {
         let _ = writeln!(
             std::io::stderr(),
             r#"{{"ts":"{}","level":"{}","target":"{}","msg":"{}"}}"#,
-            ts, level, escaped_target, escaped_msg
+            ts,
+            level,
+            escaped_target,
+            escaped_msg
         );
     }
 

@@ -8,7 +8,9 @@ use std::sync::RwLock;
 use std::time::Instant;
 
 /// Histogram bucket boundaries in milliseconds
-const LATENCY_BUCKETS: &[f64] = &[1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0];
+const LATENCY_BUCKETS: &[f64] = &[
+    1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0,
+];
 
 /// Thread-safe histogram for latency tracking
 pub struct Histogram {
@@ -32,7 +34,8 @@ impl Histogram {
         self.sum.fetch_add(value_bits, Ordering::Relaxed);
         self.count.fetch_add(1, Ordering::Relaxed);
 
-        let bucket_idx = LATENCY_BUCKETS.iter()
+        let bucket_idx = LATENCY_BUCKETS
+            .iter()
             .position(|&b| value_ms <= b)
             .unwrap_or(LATENCY_BUCKETS.len());
 
@@ -45,14 +48,17 @@ impl Histogram {
 
     /// Get histogram stats
     pub fn get_stats(&self) -> HistogramStats {
-        let buckets = self.buckets.read()
+        let buckets = self
+            .buckets
+            .read()
             .map(|b| b.clone())
             .unwrap_or_else(|_| vec![0; LATENCY_BUCKETS.len() + 1]);
         let sum_micros = self.sum.load(Ordering::Relaxed);
         let count = self.count.load(Ordering::Relaxed);
 
         HistogramStats {
-            buckets: LATENCY_BUCKETS.iter()
+            buckets: LATENCY_BUCKETS
+                .iter()
                 .zip(buckets.iter())
                 .map(|(&le, &count)| (le, count))
                 .collect(),
@@ -73,7 +79,10 @@ impl Histogram {
         for (le, count) in &stats.buckets {
             output.push_str(&format!("{}_bucket{{le=\"{}\"}} {}\n", name, le, count));
         }
-        output.push_str(&format!("{}_bucket{{le=\"+Inf\"}} {}\n", name, stats.inf_bucket));
+        output.push_str(&format!(
+            "{}_bucket{{le=\"+Inf\"}} {}\n",
+            name, stats.inf_bucket
+        ));
         output.push_str(&format!("{}_sum {}\n", name, stats.sum_ms));
         output.push_str(&format!("{}_count {}\n\n", name, stats.count));
 
@@ -254,50 +263,71 @@ impl MetricsService {
         // Uptime
         output.push_str("# HELP polyguard_uptime_seconds Seconds since service start\n");
         output.push_str("# TYPE polyguard_uptime_seconds gauge\n");
-        output.push_str(&format!("polyguard_uptime_seconds {}\n\n", metrics.uptime_seconds));
+        output.push_str(&format!(
+            "polyguard_uptime_seconds {}\n\n",
+            metrics.uptime_seconds
+        ));
 
         // Requests
         output.push_str("# HELP polyguard_requests_total Total HTTP requests\n");
         output.push_str("# TYPE polyguard_requests_total counter\n");
-        output.push_str(&format!("polyguard_requests_total{{status=\"success\"}} {}\n", metrics.requests.success));
-        output.push_str(&format!("polyguard_requests_total{{status=\"error\"}} {}\n\n", metrics.requests.error));
+        output.push_str(&format!(
+            "polyguard_requests_total{{status=\"success\"}} {}\n",
+            metrics.requests.success
+        ));
+        output.push_str(&format!(
+            "polyguard_requests_total{{status=\"error\"}} {}\n\n",
+            metrics.requests.error
+        ));
 
         // Orders
         output.push_str("# HELP polyguard_orders_total Total orders processed\n");
         output.push_str("# TYPE polyguard_orders_total counter\n");
-        output.push_str(&format!("polyguard_orders_total{{action=\"placed\"}} {}\n", metrics.orders.placed));
-        output.push_str(&format!("polyguard_orders_total{{action=\"cancelled\"}} {}\n\n", metrics.orders.cancelled));
+        output.push_str(&format!(
+            "polyguard_orders_total{{action=\"placed\"}} {}\n",
+            metrics.orders.placed
+        ));
+        output.push_str(&format!(
+            "polyguard_orders_total{{action=\"cancelled\"}} {}\n\n",
+            metrics.orders.cancelled
+        ));
 
         // Trades
         output.push_str("# HELP polyguard_trades_total Total trades executed\n");
         output.push_str("# TYPE polyguard_trades_total counter\n");
-        output.push_str(&format!("polyguard_trades_total {}\n\n", metrics.trades.executed));
+        output.push_str(&format!(
+            "polyguard_trades_total {}\n\n",
+            metrics.trades.executed
+        ));
 
         // Volume
         output.push_str("# HELP polyguard_volume_total Total trading volume in lamports\n");
         output.push_str("# TYPE polyguard_volume_total counter\n");
-        output.push_str(&format!("polyguard_volume_total {}\n\n", metrics.trades.total_volume));
+        output.push_str(&format!(
+            "polyguard_volume_total {}\n\n",
+            metrics.trades.total_volume
+        ));
 
         // Latency histograms
         output.push_str(&self.request_latency.export_prometheus(
             "polyguard_request_duration_ms",
-            "HTTP request duration in milliseconds"
+            "HTTP request duration in milliseconds",
         ));
         output.push_str(&self.order_latency.export_prometheus(
             "polyguard_order_duration_ms",
-            "Order processing duration in milliseconds"
+            "Order processing duration in milliseconds",
         ));
         output.push_str(&self.trade_latency.export_prometheus(
             "polyguard_trade_duration_ms",
-            "Trade execution duration in milliseconds"
+            "Trade execution duration in milliseconds",
         ));
         output.push_str(&self.solana_rpc_latency.export_prometheus(
             "polyguard_solana_rpc_duration_ms",
-            "Solana RPC call duration in milliseconds"
+            "Solana RPC call duration in milliseconds",
         ));
         output.push_str(&self.database_latency.export_prometheus(
             "polyguard_database_duration_ms",
-            "Database query duration in milliseconds"
+            "Database query duration in milliseconds",
         ));
 
         output
@@ -423,7 +453,9 @@ pub struct RequestTimer {
 #[allow(dead_code)]
 impl RequestTimer {
     pub fn start() -> Self {
-        Self { start: Instant::now() }
+        Self {
+            start: Instant::now(),
+        }
     }
 
     pub fn elapsed_ms(&self) -> u64 {
@@ -491,19 +523,51 @@ mod tests {
         let histogram = Histogram::new();
 
         // Add values to different buckets
-        histogram.observe(0.5);   // <= 1ms bucket
-        histogram.observe(3.0);   // <= 5ms bucket
-        histogram.observe(8.0);   // <= 10ms bucket
-        histogram.observe(20.0);  // <= 25ms bucket
+        histogram.observe(0.5); // <= 1ms bucket
+        histogram.observe(3.0); // <= 5ms bucket
+        histogram.observe(8.0); // <= 10ms bucket
+        histogram.observe(20.0); // <= 25ms bucket
 
         let stats = histogram.get_stats();
         assert_eq!(stats.count, 4);
 
         // Check cumulative buckets
-        assert!(stats.buckets.iter().find(|(le, _)| *le == 1.0).map(|(_, c)| *c).unwrap_or(0) >= 1);
-        assert!(stats.buckets.iter().find(|(le, _)| *le == 5.0).map(|(_, c)| *c).unwrap_or(0) >= 2);
-        assert!(stats.buckets.iter().find(|(le, _)| *le == 10.0).map(|(_, c)| *c).unwrap_or(0) >= 3);
-        assert!(stats.buckets.iter().find(|(le, _)| *le == 25.0).map(|(_, c)| *c).unwrap_or(0) >= 4);
+        assert!(
+            stats
+                .buckets
+                .iter()
+                .find(|(le, _)| *le == 1.0)
+                .map(|(_, c)| *c)
+                .unwrap_or(0)
+                >= 1
+        );
+        assert!(
+            stats
+                .buckets
+                .iter()
+                .find(|(le, _)| *le == 5.0)
+                .map(|(_, c)| *c)
+                .unwrap_or(0)
+                >= 2
+        );
+        assert!(
+            stats
+                .buckets
+                .iter()
+                .find(|(le, _)| *le == 10.0)
+                .map(|(_, c)| *c)
+                .unwrap_or(0)
+                >= 3
+        );
+        assert!(
+            stats
+                .buckets
+                .iter()
+                .find(|(le, _)| *le == 25.0)
+                .map(|(_, c)| *c)
+                .unwrap_or(0)
+                >= 4
+        );
     }
 
     #[test]
