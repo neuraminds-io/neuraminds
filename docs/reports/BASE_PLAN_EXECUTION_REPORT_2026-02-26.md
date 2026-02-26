@@ -55,6 +55,6 @@ Scope: `docs/BASE_MIGRATION_BOARD.md` end-to-end execution pass.
 
 ## Staging Closeout
 
-- Live staging deploy: `dep-d6g5bc6mcj7s73b5a1rg` on `neuraminds-web-base-staging-v4`.
+- Live staging deploy: `dep-d6g5n0lactks73d3uqs0` on `neuraminds-web-base-staging-v4`.
 - Frontend smoke gate (live staging): passing (3/3). Evidence: `docs/reports/base-sepolia-web-smoke-2026-02-26.json`.
 - Rollback playbook validation: passing (pause/unpause controls across all three Base programs). Evidence: `docs/reports/staging-rollback-validation-2026-02-26.json`.
