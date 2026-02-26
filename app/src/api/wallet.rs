@@ -9,6 +9,26 @@ use crate::AppState;
 use crate::require_auth;
 use super::ApiError;
 
+fn ensure_legacy_wallet_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.legacy_reads_enabled {
+        return Err(ApiError::bad_request(
+            "LEGACY_READ_PATH_DISABLED",
+            "Legacy wallet read path is disabled",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_legacy_wallet_write_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.legacy_writes_enabled {
+        return Err(ApiError::bad_request(
+            "LEGACY_WRITE_PATH_DISABLED",
+            "Legacy wallet write path is disabled",
+        ));
+    }
+    Ok(())
+}
+
 /// User wallet balance
 #[derive(Debug, Serialize)]
 pub struct WalletBalance {
@@ -80,6 +100,8 @@ pub async fn get_balance(
     req: HttpRequest,
     state: web::Data<Arc<AppState>>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_wallet_mode(&state)?;
+
     let user = require_auth!(&req, &state);
     let wallet = &user.wallet_address;
 
@@ -111,6 +133,8 @@ pub async fn get_deposit_address(
     req: HttpRequest,
     state: web::Data<Arc<AppState>>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_wallet_mode(&state)?;
+
     let user = require_auth!(&req, &state);
 
     // For Solana, the deposit address is the program vault PDA
@@ -133,6 +157,8 @@ pub async fn deposit(
     state: web::Data<Arc<AppState>>,
     body: web::Json<DepositRequest>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_wallet_write_mode(&state)?;
+
     let user = require_auth!(&req, &state);
     let wallet = &user.wallet_address;
 
@@ -229,6 +255,8 @@ pub async fn withdraw(
     state: web::Data<Arc<AppState>>,
     body: web::Json<WithdrawRequest>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_wallet_write_mode(&state)?;
+
     let user = require_auth!(&req, &state);
     let wallet = &user.wallet_address;
 
@@ -307,6 +335,8 @@ pub async fn blindfold_webhook(
     state: web::Data<Arc<AppState>>,
     body: web::Json<BlindpayWebhook>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_wallet_write_mode(&state)?;
+
     // Verify webhook signature
     let expected_sig = compute_blindfold_signature(&body, &state.config.blindfold_webhook_secret);
     if body.signature != expected_sig {

@@ -1,442 +1,313 @@
+import { Address, Hex, PublicClient, WalletClient, parseEventLogs } from 'viem';
+
+import { PositionTracker, RiskManager } from './risk';
+import { Strategy } from './strategy';
 import {
-  Connection,
-  PublicKey,
-  Keypair,
-  Transaction,
-  TransactionInstruction,
-  SendTransactionError,
-} from '@solana/web3.js';
-import { Program, AnchorProvider, BN } from '@coral-xyz/anchor';
-import {
-  TradingAgentAccount,
-  CreateAgentParams,
-  OrderParams,
-  TradeResult,
-  MarketData,
-  Signal,
   AgentMetrics,
   AgentStatus,
+  MarketData,
+  OrderParams,
+  Outcome,
+  TradeResult,
+  TradingAgentConfig,
 } from './types';
-import { Strategy } from './strategy';
-import { RiskManager, PositionTracker, Position } from './risk';
 
-// Retry configuration
-const DEFAULT_RETRY_CONFIG = {
-  maxRetries: 3,
-  baseDelayMs: 500,
-  maxDelayMs: 10000,
-};
+const MARKET_CORE_ABI = [
+  {
+    type: 'function',
+    name: 'createMarket',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'questionHash', type: 'bytes32' },
+      { name: 'closeTime', type: 'uint64' },
+      { name: 'resolver', type: 'address' },
+    ],
+    outputs: [{ name: 'marketId', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'markets',
+    stateMutability: 'view',
+    inputs: [{ name: 'marketId', type: 'uint256' }],
+    outputs: [
+      { name: 'questionHash', type: 'bytes32' },
+      { name: 'closeTime', type: 'uint64' },
+      { name: 'resolveTime', type: 'uint64' },
+      { name: 'resolver', type: 'address' },
+      { name: 'resolved', type: 'bool' },
+      { name: 'outcome', type: 'bool' },
+    ],
+  },
+] as const;
 
-// Transient errors that warrant retry
-const TRANSIENT_ERROR_PATTERNS = [
-  'blockhash not found',
-  'block height exceeded',
-  'timeout',
-  'socket hang up',
-  'ECONNREFUSED',
-  'ENOTFOUND',
-  'ETIMEDOUT',
-  'Network request failed',
-  '429', // Rate limited
-  '502', // Bad gateway
-  '503', // Service unavailable
-  '504', // Gateway timeout
-];
+const ORDER_BOOK_ABI = [
+  {
+    type: 'function',
+    name: 'placeOrder',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'marketId', type: 'uint256' },
+      { name: 'isYes', type: 'bool' },
+      { name: 'priceBps', type: 'uint128' },
+      { name: 'size', type: 'uint128' },
+      { name: 'expiry', type: 'uint64' },
+    ],
+    outputs: [{ name: 'orderId', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'cancelOrder',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'orderId', type: 'uint256' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'claim',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'marketId', type: 'uint256' }],
+    outputs: [{ name: 'payout', type: 'uint256' }],
+  },
+] as const;
 
-function isTransientError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return TRANSIENT_ERROR_PATTERNS.some(pattern =>
-    message.toLowerCase().includes(pattern.toLowerCase())
-  );
+const MARKET_CREATED_EVENT = [
+  {
+    type: 'event',
+    name: 'MarketCreated',
+    inputs: [
+      { indexed: true, name: 'marketId', type: 'uint256' },
+      { indexed: true, name: 'questionHash', type: 'bytes32' },
+      { indexed: false, name: 'closeTime', type: 'uint64' },
+      { indexed: false, name: 'resolver', type: 'address' },
+    ],
+  },
+] as const;
+
+const ORDER_PLACED_EVENT = [
+  {
+    type: 'event',
+    name: 'OrderPlaced',
+    inputs: [
+      { indexed: true, name: 'orderId', type: 'uint256' },
+      { indexed: true, name: 'maker', type: 'address' },
+      { indexed: true, name: 'marketId', type: 'uint256' },
+      { indexed: false, name: 'isYes', type: 'bool' },
+      { indexed: false, name: 'priceBps', type: 'uint128' },
+      { indexed: false, name: 'size', type: 'uint128' },
+      { indexed: false, name: 'expiry', type: 'uint64' },
+    ],
+  },
+] as const;
+
+export interface TradingAgentOptions {
+  publicClient: PublicClient;
+  walletClient: WalletClient;
+  marketCoreAddress: Address;
+  orderBookAddress: Address;
+  config: TradingAgentConfig;
 }
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  config = DEFAULT_RETRY_CONFIG,
-): Promise<T> {
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error;
-
-      if (attempt === config.maxRetries || !isTransientError(error)) {
-        throw error;
-      }
-
-      const delay = Math.min(
-        config.baseDelayMs * Math.pow(2, attempt),
-        config.maxDelayMs,
-      );
-      console.warn(
-        `Transient error (attempt ${attempt + 1}/${config.maxRetries + 1}), ` +
-        `retrying in ${delay}ms: ${error instanceof Error ? error.message : error}`
-      );
-      await sleep(delay);
-    }
-  }
-
-  throw lastError;
-}
-
-/**
- * Polyguard Trading Agent
- *
- * Manages automated trading on Polyguard prediction markets
- */
 export class TradingAgent {
   private strategy: Strategy | null = null;
-  private riskManager: RiskManager | null = null;
-  private positionTracker: PositionTracker = new PositionTracker();
-  private isRunning = false;
-  private pollInterval: NodeJS.Timeout | null = null;
+  private riskManager: RiskManager;
+  private positionTracker = new PositionTracker();
+  private status = AgentStatus.Paused;
+  private pollHandle: ReturnType<typeof setInterval> | null = null;
+  private tradesCount = 0n;
 
-  constructor(
-    private readonly connection: Connection,
-    private readonly programId: PublicKey,
-    private readonly agentPubkey: PublicKey,
-    private readonly delegateKeypair: Keypair,
-  ) {}
-
-  /**
-   * Load agent account from chain with retry
-   */
-  async loadAgent(): Promise<TradingAgentAccount> {
-    const accountInfo = await withRetry(
-      () => this.connection.getAccountInfo(this.agentPubkey),
-    );
-    if (!accountInfo) {
-      throw new Error('Agent account not found');
-    }
-
-    // Parse account data (simplified - would use anchor deserialization)
-    return this.deserializeAgent(accountInfo.data);
+  constructor(private readonly options: TradingAgentOptions) {
+    this.riskManager = new RiskManager(options.config);
   }
 
-  /**
-   * Set trading strategy
-   */
   setStrategy(strategy: Strategy): void {
     this.strategy = strategy;
   }
 
-  /**
-   * Start automated trading
-   */
-  async start(
-    markets: PublicKey[],
-    pollIntervalMs: number = 5000,
-  ): Promise<void> {
-    if (!this.strategy) {
-      throw new Error('No strategy set');
+  async createMarket(questionHash: Hex, closeTime: bigint, resolver: Address): Promise<{ marketId: bigint; txHash: Hex }> {
+    const account = this.requireAccount();
+    const txHash = await this.options.walletClient.writeContract({
+      account,
+      chain: this.options.walletClient.chain,
+      address: this.options.marketCoreAddress,
+      abi: MARKET_CORE_ABI,
+      functionName: 'createMarket',
+      args: [questionHash, closeTime, resolver],
+    });
+
+    const receipt = await this.options.publicClient.waitForTransactionReceipt({ hash: txHash });
+    const [event] = parseEventLogs({
+      abi: MARKET_CREATED_EVENT,
+      eventName: 'MarketCreated',
+      logs: receipt.logs,
+    });
+    if (!event?.args.marketId) {
+      throw new Error('MarketCreated event not found');
     }
 
-    const agentData = await this.loadAgent();
-    this.riskManager = new RiskManager(agentData);
-
-    if (agentData.status !== AgentStatus.Active) {
-      throw new Error('Agent is not active');
-    }
-
-    this.isRunning = true;
-
-    this.pollInterval = setInterval(async () => {
-      if (!this.isRunning) return;
-
-      for (const market of markets) {
-        try {
-          await this.processMarket(market);
-        } catch (error) {
-          console.error(`Error processing market ${market.toBase58()}:`, error);
-        }
-      }
-    }, pollIntervalMs);
-
-    console.log(`Agent started with strategy: ${this.strategy.name}`);
-  }
-
-  /**
-   * Stop automated trading
-   */
-  stop(): void {
-    this.isRunning = false;
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval);
-      this.pollInterval = null;
-    }
-    console.log('Agent stopped');
-  }
-
-  /**
-   * Process a single market
-   */
-  private async processMarket(market: PublicKey): Promise<void> {
-    if (!this.strategy || !this.riskManager) return;
-
-    // Fetch market data
-    const marketData = await this.fetchMarketData(market);
-
-    // Analyze with strategy
-    const signal = this.strategy.analyze(market, marketData);
-    if (!signal) return;
-
-    // Convert to order
-    const agentData = await this.loadAgent();
-    const order = this.strategy.toOrder(signal, agentData.availableBalance);
-    if (!order) return;
-
-    // Validate with risk manager
-    const validation = this.riskManager.validateTrade(order);
-    if (!validation.valid) {
-      console.log(`Trade rejected: ${validation.failedChecks.map(c => c.message).join(', ')}`);
-      return;
-    }
-
-    // Execute trade
-    const result = await this.executeTrade(market, order);
-    if (result.success) {
-      console.log(`Trade executed: ${result.txId}`);
-
-      // Track position
-      this.positionTracker.addPosition({
-        market,
-        outcome: order.outcome,
-        quantity: result.filledQuantity || order.quantity,
-        avgEntryPrice: result.avgPrice || order.price,
-        openedAt: Date.now(),
-      });
-    }
-  }
-
-  /**
-   * Fetch market data with retry
-   */
-  private async fetchMarketData(market: PublicKey): Promise<MarketData> {
-    const accountInfo = await withRetry(
-      () => this.connection.getAccountInfo(market),
-    );
-    if (!accountInfo) {
-      throw new Error('Market not found');
-    }
-
-    // Placeholder - would parse actual market data
     return {
-      market,
-      yesPrice: 5000,
-      noPrice: 5000,
-      volume24h: 0n,
-      liquidity: 0n,
-      lastUpdate: Date.now(),
+      marketId: event.args.marketId,
+      txHash,
     };
   }
 
-  /**
-   * Execute a trade with retry logic for transient errors
-   */
-  async executeTrade(market: PublicKey, order: OrderParams): Promise<TradeResult> {
+  async placeOrder(order: OrderParams): Promise<TradeResult> {
+    const validation = this.riskManager.validateTrade(order);
+    if (!validation.valid) {
+      return {
+        success: false,
+        error: validation.failedChecks.map((item) => item.message).join(', '),
+      };
+    }
+
+    const account = this.requireAccount();
     try {
-      const txId = await withRetry(async () => {
-        // Build fresh transaction (blockhash may have changed)
-        const tx = await this.buildPlaceOrderTx(market, order);
+      const txHash = await this.options.walletClient.writeContract({
+        account,
+        chain: this.options.walletClient.chain,
+        address: this.options.orderBookAddress,
+        abi: ORDER_BOOK_ABI,
+        functionName: 'placeOrder',
+        args: [
+          order.marketId,
+          order.outcome === Outcome.Yes,
+          BigInt(order.priceBps),
+          order.quantity,
+          BigInt(Math.floor(Date.now() / 1000) + (order.expirySeconds || 24 * 60 * 60)),
+        ],
+      });
 
-        // Sign and send
-        tx.sign(this.delegateKeypair);
-        const signature = await this.connection.sendTransaction(
-          tx,
-          [this.delegateKeypair],
-          { skipPreflight: false },
-        );
+      const receipt = await this.options.publicClient.waitForTransactionReceipt({ hash: txHash });
+      const [event] = parseEventLogs({
+        abi: ORDER_PLACED_EVENT,
+        eventName: 'OrderPlaced',
+        logs: receipt.logs,
+      });
 
-        // Confirm with retry
-        const confirmation = await withRetry(
-          () => this.connection.confirmTransaction(signature, 'confirmed'),
-          { maxRetries: 2, baseDelayMs: 1000, maxDelayMs: 5000 },
-        );
-
-        if (confirmation.value.err) {
-          throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
-        }
-
-        return signature;
+      this.tradesCount += 1n;
+      this.positionTracker.addPosition({
+        marketId: order.marketId,
+        outcome: order.outcome,
+        quantity: order.quantity,
+        avgEntryPriceBps: order.priceBps,
+        openedAt: Date.now(),
       });
 
       return {
         success: true,
-        txId,
-        filledQuantity: order.quantity,
-        avgPrice: order.price,
+        txHash,
+        orderId: event?.args.orderId,
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
 
-  /**
-   * Build place order transaction
-   */
-  private async buildPlaceOrderTx(
-    market: PublicKey,
-    order: OrderParams,
-  ): Promise<Transaction> {
-    // Simplified - would use actual program instruction
-    const ix = new TransactionInstruction({
-      keys: [
-        { pubkey: this.delegateKeypair.publicKey, isSigner: true, isWritable: true },
-        { pubkey: this.agentPubkey, isSigner: false, isWritable: true },
-        { pubkey: market, isSigner: false, isWritable: true },
-      ],
-      programId: this.programId,
-      data: Buffer.from([
-        0, // instruction index for agent_place_order
-        order.side,
-        order.outcome,
-        ...new BN(order.price).toArray('le', 8),
-        ...new BN(order.quantity.toString()).toArray('le', 8),
-        order.orderType,
-        ...new BN((order.clientOrderId || 0n).toString()).toArray('le', 8),
-      ]),
+  async cancelOrder(orderId: bigint): Promise<Hex> {
+    const account = this.requireAccount();
+    const txHash = await this.options.walletClient.writeContract({
+      account,
+      chain: this.options.walletClient.chain,
+      address: this.options.orderBookAddress,
+      abi: ORDER_BOOK_ABI,
+      functionName: 'cancelOrder',
+      args: [orderId],
+    });
+    await this.options.publicClient.waitForTransactionReceipt({ hash: txHash });
+    return txHash;
+  }
+
+  async claim(marketId: bigint): Promise<Hex> {
+    const account = this.requireAccount();
+    const txHash = await this.options.walletClient.writeContract({
+      account,
+      chain: this.options.walletClient.chain,
+      address: this.options.orderBookAddress,
+      abi: ORDER_BOOK_ABI,
+      functionName: 'claim',
+      args: [marketId],
+    });
+    await this.options.publicClient.waitForTransactionReceipt({ hash: txHash });
+    return txHash;
+  }
+
+  async fetchMarketData(marketId: bigint): Promise<MarketData> {
+    const [, , , , resolved, outcome] = await this.options.publicClient.readContract({
+      address: this.options.marketCoreAddress,
+      abi: MARKET_CORE_ABI,
+      functionName: 'markets',
+      args: [marketId],
     });
 
-    const tx = new Transaction().add(ix);
-    tx.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
-    tx.feePayer = this.delegateKeypair.publicKey;
-
-    return tx;
+    return {
+      marketId,
+      yesPriceBps: 5000,
+      noPriceBps: 5000,
+      matchedVolume: 0n,
+      lastUpdate: Date.now(),
+      resolved,
+      outcome: resolved ? (outcome ? Outcome.Yes : Outcome.No) : undefined,
+    };
   }
 
-  /**
-   * Get agent metrics
-   */
+  async start(markets: bigint[], pollIntervalMs = 5_000): Promise<void> {
+    if (!this.strategy) {
+      throw new Error('No strategy configured');
+    }
+    if (this.status === AgentStatus.Active) return;
+
+    this.status = AgentStatus.Active;
+    this.pollHandle = setInterval(async () => {
+      if (this.status !== AgentStatus.Active || !this.strategy) return;
+
+      for (const marketId of markets) {
+        try {
+          const marketData = await this.fetchMarketData(marketId);
+          const signal = this.strategy.analyze(marketData);
+          if (!signal) continue;
+
+          const order = this.strategy.toOrder(signal, this.options.config.availableBalance);
+          if (!order) continue;
+          await this.placeOrder(order);
+        } catch (error) {
+          console.error('agent loop error', marketId.toString(), error);
+        }
+      }
+    }, pollIntervalMs);
+  }
+
+  stop(): void {
+    this.status = AgentStatus.Stopped;
+    if (this.pollHandle) {
+      clearInterval(this.pollHandle);
+      this.pollHandle = null;
+    }
+  }
+
   async getMetrics(): Promise<AgentMetrics> {
-    const agentData = await this.loadAgent();
-
-    const winRate = agentData.tradesCount > 0n
-      ? Number(agentData.winCount) / Number(agentData.tradesCount)
-      : 0;
-
-    const avgPnl = agentData.tradesCount > 0n
-      ? agentData.totalPnl / agentData.tradesCount
+    const avgPnlPerTrade = this.tradesCount > 0n
+      ? this.options.config.totalPnl / this.tradesCount
       : 0n;
-
-    const maxDrawdownBps = agentData.highWaterMark > 0n
-      ? Number((agentData.currentDrawdown * 10000n) / agentData.highWaterMark)
-      : 0;
-
     return {
-      totalPnl: agentData.totalPnl,
-      winRate,
-      tradesCount: agentData.tradesCount,
-      avgPnlPerTrade: avgPnl,
-      maxDrawdown: maxDrawdownBps,
-      volumeTraded: agentData.volumeTraded,
+      totalPnl: this.options.config.totalPnl,
+      winRate: 0,
+      tradesCount: this.tradesCount,
+      avgPnlPerTrade,
+      maxDrawdownBps: this.options.config.riskParams.maxDrawdownBps,
     };
   }
 
-  /**
-   * Get open positions
-   */
-  getPositions(): Position[] {
-    return this.positionTracker.getAllPositions();
-  }
-
-  /**
-   * Deserialize agent account (simplified)
-   */
-  private deserializeAgent(data: Buffer): TradingAgentAccount {
-    // Simplified deserialization - would use anchor
-    // This is a placeholder that returns mock data
-    return {
-      owner: new PublicKey(data.slice(8, 40)),
-      delegate: new PublicKey(data.slice(40, 72)),
-      name: 'Agent',
-      bump: data[72],
-      status: data[73] as AgentStatus,
-      version: data[74],
-      maxPositionSize: BigInt(10000),
-      maxTotalExposure: BigInt(100000),
-      riskParams: {
-        maxDrawdownBps: 2000,
-        maxDailyLoss: BigInt(5000),
-        minEdgeBps: 100,
-        positionSizing: 0,
-        sizingParam: BigInt(1000),
-      },
-      totalDeposited: BigInt(100000),
-      availableBalance: BigInt(100000),
-      lockedBalance: BigInt(0),
-      totalPnl: BigInt(0),
-      highWaterMark: BigInt(100000),
-      currentDrawdown: BigInt(0),
-      dailyLoss: BigInt(0),
-      lastDay: BigInt(0),
-      activePositions: 0,
-      tradesCount: BigInt(0),
-      winCount: BigInt(0),
-      volumeTraded: BigInt(0),
-      createdAt: BigInt(Date.now()),
-      lastTradeAt: BigInt(0),
-      allowedMarketsCount: 0,
-      allowedMarkets: [],
-    };
+  private requireAccount(): Address {
+    const account = this.options.walletClient.account?.address;
+    if (!account) {
+      throw new Error('walletClient account is required');
+    }
+    return account;
   }
 }
 
-/**
- * Create a new trading agent account with retry logic
- */
-export async function createAgent(
-  connection: Connection,
-  programId: PublicKey,
-  owner: Keypair,
-  params: CreateAgentParams,
-): Promise<PublicKey> {
-  // Find PDA
-  const [agentPda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from('trading_agent'),
-      owner.publicKey.toBuffer(),
-      Buffer.from(params.name),
-    ],
-    programId,
-  );
-
-  await withRetry(async () => {
-    // Build fresh transaction
-    const ix = new TransactionInstruction({
-      keys: [
-        { pubkey: owner.publicKey, isSigner: true, isWritable: true },
-        { pubkey: agentPda, isSigner: false, isWritable: true },
-      ],
-      programId,
-      data: Buffer.from([1]), // create_agent instruction
-    });
-
-    const tx = new Transaction().add(ix);
-    tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-    tx.feePayer = owner.publicKey;
-    tx.sign(owner);
-
-    const signature = await connection.sendTransaction(tx, [owner]);
-
-    // Confirm the transaction
-    const confirmation = await withRetry(
-      () => connection.confirmTransaction(signature, 'confirmed'),
-      { maxRetries: 2, baseDelayMs: 1000, maxDelayMs: 5000 },
-    );
-
-    if (confirmation.value.err) {
-      throw new Error(`Create agent failed: ${JSON.stringify(confirmation.value.err)}`);
-    }
-  });
-
-  return agentPda;
+export function createAgent(options: TradingAgentOptions): TradingAgent {
+  return new TradingAgent(options);
 }

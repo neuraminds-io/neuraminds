@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-02-26T13:52:00Z",
+  "status": "failed",
+  "command": "npm run base:web:e2e:sepolia -- --web-url https://neuraminds-web-base-staging-v4.onrender.com --api-url https://neuraminds-web-base-staging-v4.onrender.com",
+  "summary": {
+    "passed": 1,
+    "failed": 2
+  },
+  "failures": [
+    {
+      "test": "api health and base components are healthy",
+      "endpoint": "/health",
+      "expectedStatus": 200,
+      "actualStatus": 404
+    },
+    {
+      "test": "siwe nonce and evm market endpoints respond",
+      "endpoint": "/v1/auth/siwe/nonce",
+      "expectedStatus": 200,
+      "actualStatus": 404
+    }
+  ],
+  "blocker": "Staging web URL is deployed, but staging API is not deployed/routed for this environment."
+}

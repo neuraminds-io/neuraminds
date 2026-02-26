@@ -29,6 +29,14 @@ pub struct AppConfig {
     pub solana_enabled: bool,
     /// Whether to submit transactions to Base (disable until EVM path is enabled)
     pub evm_enabled: bool,
+    /// Explicit read toggle for legacy (Solana-backed) API paths
+    pub legacy_reads_enabled: bool,
+    /// Explicit write toggle for legacy (Solana-backed) API paths
+    pub legacy_writes_enabled: bool,
+    /// Explicit read toggle for Base (EVM-backed) API paths
+    pub evm_reads_enabled: bool,
+    /// Explicit write toggle for Base (EVM-backed) API paths
+    pub evm_writes_enabled: bool,
     /// Blindfold Finance webhook secret for signature verification
     pub blindfold_webhook_secret: String,
     /// Program vault address for USDC deposits
@@ -82,6 +90,15 @@ impl AppConfig {
             .filter(|s| !s.is_empty())
             .collect();
 
+        let evm_enabled = env::var("EVM_ENABLED")
+            .unwrap_or_else(|_| "false".to_string())
+            .to_lowercase()
+            == "true";
+        let solana_enabled = env::var("SOLANA_ENABLED")
+            .unwrap_or_else(|_| "true".to_string())
+            .to_lowercase()
+            == "true";
+
         Self {
             host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port: env::var("PORT")
@@ -118,12 +135,22 @@ impl AppConfig {
             jwt_secret,
             cors_origins,
             is_development,
-            solana_enabled: env::var("SOLANA_ENABLED")
-                .unwrap_or_else(|_| "true".to_string())
+            solana_enabled,
+            evm_enabled,
+            legacy_reads_enabled: env::var("LEGACY_READS_ENABLED")
+                .unwrap_or_else(|_| if evm_enabled { "false".to_string() } else { "true".to_string() })
                 .to_lowercase()
                 == "true",
-            evm_enabled: env::var("EVM_ENABLED")
-                .unwrap_or_else(|_| "false".to_string())
+            legacy_writes_enabled: env::var("LEGACY_WRITES_ENABLED")
+                .unwrap_or_else(|_| if evm_enabled { "false".to_string() } else { "true".to_string() })
+                .to_lowercase()
+                == "true",
+            evm_reads_enabled: env::var("EVM_READS_ENABLED")
+                .unwrap_or_else(|_| if evm_enabled { "true".to_string() } else { "false".to_string() })
+                .to_lowercase()
+                == "true",
+            evm_writes_enabled: env::var("EVM_WRITES_ENABLED")
+                .unwrap_or_else(|_| if evm_enabled { "true".to_string() } else { "false".to_string() })
                 .to_lowercase()
                 == "true",
             blindfold_webhook_secret: env::var("BLINDFOLD_WEBHOOK_SECRET").unwrap_or_else(|_| {
@@ -173,6 +200,10 @@ mod tests {
             "BASE_CHAIN_ID",
             "SIWE_DOMAIN",
             "EVM_ENABLED",
+            "LEGACY_READS_ENABLED",
+            "LEGACY_WRITES_ENABLED",
+            "EVM_READS_ENABLED",
+            "EVM_WRITES_ENABLED",
             "ORDER_BOOK_ADDRESS",
         ];
         let saved: Vec<_> = env_vars

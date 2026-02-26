@@ -15,14 +15,16 @@ mod services;
 use api::JwtService;
 use config::AppConfig;
 use services::{
-    DatabaseService, MetricsService, OrderBookService, ReconciliationConfig, ReconciliationService,
-    RedisService, SolanaService, WebSocketHub,
+    DatabaseService, EvmIndexerService, EvmRpcService, MetricsService, OrderBookService,
+    ReconciliationConfig, ReconciliationService, RedisService, SolanaService, WebSocketHub,
 };
 
 pub struct AppState {
     pub config: AppConfig,
     pub db: DatabaseService,
     pub solana: SolanaService,
+    pub evm_rpc: EvmRpcService,
+    pub evm_indexer: EvmIndexerService,
     pub orderbook: OrderBookService,
     pub redis: RedisService,
     pub jwt: JwtService,
@@ -73,6 +75,8 @@ async fn main() -> std::io::Result<()> {
     let redis = RedisService::new(&config.redis_url)
         .await
         .expect("Failed to connect to Redis");
+    let evm_rpc = EvmRpcService::new(&config.base_rpc_url);
+    let evm_indexer = EvmIndexerService::new(evm_rpc.clone(), 20_000);
 
     let orderbook = OrderBookService::new();
 
@@ -121,6 +125,8 @@ async fn main() -> std::io::Result<()> {
         config: config.clone(),
         db,
         solana,
+        evm_rpc,
+        evm_indexer: evm_indexer.clone(),
         orderbook,
         redis,
         jwt,
@@ -129,6 +135,37 @@ async fn main() -> std::io::Result<()> {
         reconciliation,
         is_shutting_down: Arc::new(AtomicBool::new(false)),
     });
+
+    if config.evm_enabled && config.evm_reads_enabled {
+        let market_core = config.market_core_address.clone();
+        let order_book = config.order_book_address.clone();
+        let indexer = evm_indexer.clone();
+
+        if market_core.is_empty() || order_book.is_empty() {
+            warn!("Skipping EVM indexer start: MARKET_CORE_ADDRESS or ORDER_BOOK_ADDRESS is missing");
+        } else {
+            info!("Starting EVM log indexer background loop");
+            tokio::spawn(async move {
+                const TOPICS: [&str; 6] = [
+                    "0x550857481380e1875f94e5eac6470eff69ecd368405067d9d5dfdf645d3d1f8e", // MarketCreated
+                    "0xbc7c1013df472d2b00db2b9da4c476dbf8f0bc22116913d78750cf21d2c80fc2", // MarketResolved
+                    "0xac1c16fb14f9a45ec49f65d268ff0d0f1945c504b82df54a9c6ad9f01b059be5", // OrderPlaced
+                    "0x9384174c8517f5537b08e79211fc039e8a098571a3a2b4cb21dfa6f3237e8de1", // OrderCanceled
+                    "0x5aac01386940f75e601757cfe5dc1d4ab2bac84f98d30664486114a8abb38a45", // OrderFilled
+                    "0x93c1c30a0fa404e7a08a9f6a9d68323786a7e120f3adc0c16eb8855922e35dfa", // Claimed
+                ];
+
+                loop {
+                    if let Err(err) = indexer.sync(&market_core, &order_book, 25_000, &TOPICS).await {
+                        warn!("EVM indexer sync failed: {}", err);
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(20)).await;
+                }
+            });
+        }
+    } else {
+        info!("EVM indexer disabled by config toggles");
+    }
 
     // Spawn graceful shutdown handler
     let shutdown_state = app_state.clone();

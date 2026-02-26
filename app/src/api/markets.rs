@@ -13,11 +13,23 @@ use super::auth::extract_jwt_user;
 use super::jwt::UserRole;
 use super::rate_limit::check_market_create_rate_limit;
 
+fn ensure_legacy_market_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.legacy_reads_enabled {
+        return Err(ApiError::bad_request(
+            "BASE_MARKET_PATH_NOT_AVAILABLE",
+            "Use /v1/evm/markets endpoints in Base mode",
+        ));
+    }
+    Ok(())
+}
+
 /// List all markets with filtering
 pub async fn list_markets(
     state: web::Data<Arc<AppState>>,
     query: web::Query<ListMarketsQuery>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_market_mode(&state)?;
+
     let status = query.status.as_ref().map(|s| match s.as_str() {
         "active" => MarketStatus::Active,
         "closed" => MarketStatus::Closed,
@@ -48,6 +60,8 @@ pub async fn get_market(
     state: web::Data<Arc<AppState>>,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_market_mode(&state)?;
+
     let market_id = path.into_inner();
 
     let market = state.db
@@ -67,6 +81,13 @@ pub async fn create_market(
     state: web::Data<Arc<AppState>>,
     body: web::Json<CreateMarketRequest>,
 ) -> Result<impl Responder, ApiError> {
+    if !state.config.legacy_writes_enabled {
+        return Err(ApiError::bad_request(
+            "LEGACY_WRITE_PATH_DISABLED",
+            "Legacy market write path is disabled",
+        ));
+    }
+
     // Require JWT authentication with role
     let user = extract_jwt_user(&req, &state)?;
 
@@ -135,6 +156,8 @@ pub async fn get_orderbook(
     path: web::Path<String>,
     query: web::Query<OrderBookQuery>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_market_mode(&state)?;
+
     let market_id = path.into_inner();
     let outcome = match query.outcome.as_deref().unwrap_or("yes") {
         "yes" => Outcome::Yes,
@@ -176,6 +199,8 @@ pub async fn get_trades(
     path: web::Path<String>,
     query: web::Query<ListTradesQuery>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_market_mode(&state)?;
+
     let market_id = path.into_inner();
     let outcome = query.outcome.as_ref().map(|o| match o.as_str() {
         "yes" => Outcome::Yes,

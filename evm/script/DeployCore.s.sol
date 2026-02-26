@@ -18,12 +18,12 @@ contract DeployCoreScript is Script {
 
         NeuraToken token = new NeuraToken("Neura", "NEURA", cap, admin, treasury, initialSupply);
         MarketCore marketCore = new MarketCore(admin);
-        OrderBook orderBook = new OrderBook(admin);
 
         address collateralToken = vm.envOr("COLLATERAL_TOKEN_ADDRESS", address(0));
         if (collateralToken == address(0)) {
             collateralToken = address(token);
         }
+        OrderBook orderBook = new OrderBook(admin, address(marketCore), collateralToken);
         CollateralVault collateralVault = new CollateralVault(admin, collateralToken);
 
         vm.stopBroadcast();

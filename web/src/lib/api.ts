@@ -28,7 +28,6 @@ import type {
   PublicProfile,
   ProfileActivity,
 } from '@/types';
-import { CHAIN_MODE } from '@/lib/constants';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/v1';
 
@@ -416,36 +415,7 @@ class ApiClient {
     marketId: string,
     params?: { outcome?: Outcome; limit?: number; before?: string }
   ): Promise<PaginatedResponse<Trade>> {
-    if (CHAIN_MODE === 'base') {
-      return this.getBaseTrades(marketId, params);
-    }
-
-    const query = this.buildQuery(params || {});
-    const response = await this.request<{
-      trades?: Record<string, unknown>[];
-      data?: Record<string, unknown>[];
-      total?: number;
-      limit?: number;
-      offset?: number;
-      hasMore?: boolean;
-      has_more?: boolean;
-      cursor?: string | null;
-    }>(`/markets/${marketId}/trades${query}`);
-
-    const raw = response.trades ?? response.data ?? [];
-    const data = raw.map((trade) => normalizeTrade(trade));
-    const total = toNumber(response.total, data.length);
-    const limit = toNumber(response.limit, params?.limit ?? data.length);
-    const offset = toNumber(response.offset, 0);
-    const hasMore = response.hasMore ?? response.has_more ?? (offset + limit < total);
-
-    return {
-      data,
-      total,
-      limit,
-      offset,
-      hasMore,
-    };
+    return this.getBaseTrades(marketId, params);
   }
 
   // Orders
@@ -606,8 +576,7 @@ class ApiClient {
 
   // Auth
   async getNonce(): Promise<string> {
-    const res = await this.request<{ nonce: string }>('/auth/nonce', {}, true);
-    return res.nonce;
+    return this.getSiweNonce();
   }
 
   async getSiweNonce(): Promise<string> {
@@ -620,21 +589,7 @@ class ApiClient {
     signature: string,
     message: string
   ): Promise<{ accessToken: string; expiresAt: number }> {
-    // Use Next.js API route which sets httpOnly cookie for refresh token
-    const res = await fetch('/api/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet, signature, message, flow: 'solana' }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json();
-      throw new ApiError(res.status, data.error || 'Login failed');
-    }
-
-    const data = await res.json();
-    this.setAccessToken(data.accessToken, data.expiresAt);
-    return data;
+    return this.loginSiwe(wallet, signature, message);
   }
 
   async loginSiwe(

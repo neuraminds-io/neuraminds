@@ -1,7 +1,7 @@
 {
   "name": "@polyguard/agent-sdk",
   "version": "0.1.0",
-  "description": "Polyguard AI Trading Agent SDK",
+  "description": "NeuraMinds Base agent SDK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -9,19 +9,13 @@
     "test": "jest",
     "lint": "eslint src --ext .ts"
   },
-  "keywords": ["solana", "prediction-market", "trading-agent", "ai"],
+  "keywords": ["base", "prediction-market", "trading-agent", "ai"],
   "license": "MIT",
   "dependencies": {
-    "@coral-xyz/anchor": "^0.31.1",
-    "@solana/web3.js": "^1.95.3",
-    "@solana/spl-token": "^0.4.6"
+    "viem": "^2.39.3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0"
-  },
-  "peerDependencies": {
-    "@coral-xyz/anchor": ">=0.30.0",
-    "@solana/web3.js": ">=1.90.0"
   }
 }

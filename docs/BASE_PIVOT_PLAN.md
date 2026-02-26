@@ -145,7 +145,13 @@ Companion tracker: `docs/BASE_MIGRATION_BOARD.md`
 - [x] Base Sepolia backend smoke script added (`scripts/base-sepolia-smoke.mjs`)
 - [x] Base Sepolia frontend smoke harness added (`scripts/base-sepolia-web-smoke.mjs`, `web/e2e/base-sepolia.spec.ts`)
 - [x] CI gate added for Foundry tests (`forge test --root evm`)
-- [x] Contract test baseline passing (`forge test`: 23/23)
+- [x] Contract test baseline passing (`forge test`: 24/24)
+- [x] Order matching + payout claim path implemented on Base (`OrderBook.matchOrders`, `OrderBook.claim`)
+- [x] Timelock governance path added (`DeployTimelock.s.sol`, `HandoffToTimelock.s.sol`, `TimelockGovernance.t.sol`)
+- [x] Backend EVM RPC service + log indexer added (`app/src/services/evm_rpc.rs`, `app/src/services/evm_indexer.rs`)
+- [x] Backend dual read/write toggles added (`LEGACY_*_ENABLED`, `EVM_*_ENABLED`)
+- [x] Frontend Base write flows enabled (`CreateMarketForm`, `usePlaceOrder`, `useCancelOrder`, `useClaimWinnings`)
+- [x] Agent SDK migrated from Solana client to Base viem client (`sdk/agent`)
 
 ## Source Links
 - https://docs.base.org/base-chain/quickstart/connecting-to-base

@@ -45,8 +45,31 @@ Base Sepolia frontend smoke (Playwright, remote target):
 npm run base:web:e2e:sepolia -- --api-url https://staging-api.neuraminds.ai --web-url https://staging.neuraminds.ai
 ```
 
+Base wallet and funding ops:
+
+```bash
+npm run base:wallets:status
+npm run base:fund:sepolia
+npm run base:fund:mainnet
+```
+
+Base programs deploy (runbook wrappers):
+
+```bash
+npm run evm:deploy:programs:sepolia:run
+npm run evm:deploy:programs:mainnet:run
+```
+
+Base governance handoff:
+
+```bash
+npm run evm:deploy:timelock:base
+npm run evm:handoff:timelock:base
+```
+
 Base launch runbook:
 - `docs/runbooks/BASE_MAINNET_LAUNCH.md`
+- `docs/reports/BASE_PLAN_EXECUTION_REPORT_2026-02-26.md`
 
 ## Local End-to-End Launch Rehearsal
 

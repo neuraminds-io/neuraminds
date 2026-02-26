@@ -198,7 +198,7 @@ export interface OrderFilters {
 }
 
 // Wallet types
-export type DepositSource = 'wallet' | 'blindfold' | 'jupiter';
+export type DepositSource = 'wallet' | 'blindfold';
 
 export interface WalletBalance {
   available: number;

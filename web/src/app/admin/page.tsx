@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useBaseWallet } from '@/hooks/useBaseWallet';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 
 // Admin wallet addresses (replace with actual admin pubkeys)
 const ADMIN_WALLETS = new Set([
-  '11111111111111111111111111111111', // Placeholder - replace with real admin wallet
+  '0x0000000000000000000000000000000000000000', // Placeholder - replace with real admin wallet
 ]);
 
 interface Stats {
@@ -29,20 +29,19 @@ interface PendingMarket {
 }
 
 export default function AdminDashboard() {
-  const { publicKey } = useWallet();
+  const { address } = useBaseWallet();
   const [isAdmin, setIsAdmin] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [pendingMarkets, setPendingMarkets] = useState<PendingMarket[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (publicKey) {
-      const walletAddress = publicKey.toBase58();
-      setIsAdmin(ADMIN_WALLETS.has(walletAddress));
+    if (address) {
+      setIsAdmin(ADMIN_WALLETS.has(address.toLowerCase()));
     } else {
       setIsAdmin(false);
     }
-  }, [publicKey]);
+  }, [address]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -82,7 +81,7 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
-  if (!publicKey) {
+  if (!address) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <Card>

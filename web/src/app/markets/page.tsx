@@ -28,8 +28,9 @@ function MarketsContent() {
     limit: 50,
   };
 
-  const { data, isLoading } = useMarkets(filters);
+  const { data, isLoading, error } = useMarkets(filters);
   const markets = data?.data || [];
+  const errorMessage = error instanceof Error ? error.message : null;
 
   return (
     <div className="min-h-screen bg-bg-base">
@@ -111,6 +112,12 @@ function MarketsContent() {
             {data?.total || 0} markets
           </span>
         </div>
+
+        {errorMessage && (
+          <div className="mb-4 p-3 border border-ask/20 bg-ask/10 text-ask text-sm">
+            {errorMessage}
+          </div>
+        )}
 
         <MarketList
           markets={markets}

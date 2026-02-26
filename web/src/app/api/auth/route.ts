@@ -119,13 +119,9 @@ function requireMutatingRequestGuards(request: NextRequest): NextResponse | null
   return validateBodySize(request);
 }
 
-type LoginFlow = 'solana' | 'siwe';
-const DEFAULT_LOGIN_FLOW: LoginFlow =
-  process.env.NEXT_PUBLIC_CHAIN_MODE === 'base' ? 'siwe' : 'solana';
-
 function parseLoginRequestBody(
   bodyText: string
-): { wallet: string; signature: string; message: string; flow: LoginFlow } | null {
+): { wallet: string; signature: string; message: string } | null {
   try {
     const parsed = JSON.parse(bodyText) as {
       wallet?: unknown;
@@ -146,16 +142,14 @@ function parseLoginRequestBody(
       return null;
     }
 
-    const flow: LoginFlow =
-      parsed.flow === 'siwe' || parsed.flow === 'solana'
-        ? parsed.flow
-        : DEFAULT_LOGIN_FLOW;
+    if (parsed.flow && parsed.flow !== 'siwe') {
+      return null;
+    }
 
     return {
       wallet: parsed.wallet.trim(),
       signature: parsed.signature.trim(),
       message: parsed.message,
-      flow,
     };
   } catch {
     return null;
@@ -209,19 +203,16 @@ export async function POST(request: NextRequest) {
       return jsonError(400, 'Invalid request body');
     }
 
-    const { wallet, signature, message, flow } = body;
+    const { wallet, signature, message } = body;
 
     if (!wallet || !signature || !message) {
       return jsonError(400, 'Missing required fields');
     }
 
-    const target = flow === 'siwe' ? `${API_BASE}/auth/siwe/login` : `${API_BASE}/auth/login`;
+    const target = `${API_BASE}/auth/siwe/login`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    if (flow === 'solana') {
-      headers.Authorization = `Bearer ${wallet}:${signature}:${message}`;
-    }
 
     const res = await fetch(target, {
       method: 'POST',

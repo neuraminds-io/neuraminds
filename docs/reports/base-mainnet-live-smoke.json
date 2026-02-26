@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-02-26T12:41:30Z",
+  "network": "base-mainnet",
+  "contracts": {
+    "marketCore": "0x823d54726ddc48a784ee6eb53235f5d68c94f1c0",
+    "orderBook": "0xc6ec840da50fc708bf155b5b15a585c5d0004ebf",
+    "collateralVault": "0x588e19e5831ddc8aed5c8e0d687f86884ff98ee2"
+  },
+  "fundingTx": {
+    "matcher": "0x936e9beb1eb329a8126ec43d1776585a9adaa1e03fccbf0a3569f6f6315d24c3",
+    "pauser": "0x253905cf02e19956e645fda2c8c88be198c3c5c78c43110ee8bb376ada571b1d"
+  },
+  "orderFlow": {
+    "preOrderCount": 0,
+    "postOrderCount": 1,
+    "orderPlacedTx": "0x0b855b586f0f44e28c1df377151a20ca327a7f3c9143ce54fa4e4f4f3a272e24",
+    "orderFilledTx": "0xa3f1444113f353af09178843ec559b4ab8d3b82e9d2b3444853d8821cbf49546",
+    "orderId": 1,
+    "remainingAfterFill": 750000
+  },
+  "pauseFlow": {
+    "orderBook": {
+      "pauseTx": "0x1798dc23c904c8777bd75760c1bfccd9f5eb259d22fd260a0f091d2c058f44de",
+      "unpauseTx": "0x3e9599bc99e910eba99c530fbd287bedcf3e1c0033c0ba9eb2fd2f6172341464",
+      "pausedWriteGuardConfirmed": true
+    },
+    "marketCore": {
+      "pauseTx": "0xd53d153ea71dc0afbcbd727590fb7a616b751b22c2732489b76a5167c65e0abb",
+      "unpauseTx": "0xa3e6e8c040b118de6cdd09e006e180aee88e255139e3446a9dc2d2c09b5432ab"
+    },
+    "collateralVault": {
+      "pauseTx": "0x1bd8ba9679122c9db1d0c7fc6ad3855e1fb84bee2b4fa3b0f546c2e91d849fc4",
+      "unpauseTx": "0x67545d4bc006facea18f78314c1304be0d6b4345bba508f5e23a638536e72e97"
+    },
+    "finalPausedStates": {
+      "marketCore": false,
+      "orderBook": false,
+      "collateralVault": false
+    }
+  },
+  "notes": [
+    "Admin, resolver, and market-creation write paths were not exercised from CLI because admin signing is only available in wallet UI in this environment.",
+    "Collateral deposit/withdraw/lock/settle paths were not exercised because no USDC was provisioned to test users yet."
+  ]
+}

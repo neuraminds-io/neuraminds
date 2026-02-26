@@ -2,21 +2,18 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useWallet } from '@solana/wallet-adapter-react';
 import { useBaseWallet } from '@/hooks/useBaseWallet';
 import { PageShell } from '@/components/layout';
 import { LoadingScreen } from '@/components/ui';
 import { MarketHeader, MarketStats, MarketInfo } from '@/components/market';
 import { OrderForm, OrderBookDisplay, OrderList } from '@/components/order';
 import { useMarket } from '@/hooks';
-import { CHAIN_MODE } from '@/lib/constants';
 
 export default function MarketDetailPage() {
   const params = useParams();
   const marketId = params.id as string;
-  const { connected } = useWallet();
   const baseWallet = useBaseWallet();
-  const walletConnected = CHAIN_MODE === 'base' ? baseWallet.isConnected : connected;
+  const walletConnected = baseWallet.isConnected;
 
   const { data: market, isLoading, error } = useMarket(marketId);
 

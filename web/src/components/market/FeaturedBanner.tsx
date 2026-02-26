@@ -11,8 +11,7 @@ export interface FeaturedBannerProps {
   markets: Market[];
 }
 
-// Generate mock timeframe data for a market
-// Using orange-forward colors consistent with design system
+// Generate timeframe labels from the current market state
 function generateTimeframes(market: Market) {
   const yesPercent = Math.round(market.yesPrice * 100);
   return [

@@ -1,196 +1,4 @@
-import { TradingAgentAccount, RiskParams, OrderParams, PositionSizing } from './types';
-
-/**
- * Risk manager validates trades against agent constraints
- */
-export class RiskManager {
-  constructor(private readonly agent: TradingAgentAccount) {}
-
-  /**
-   * Validate a trade against all risk parameters
-   */
-  validateTrade(order: OrderParams): ValidationResult {
-    const checks: ValidationCheck[] = [
-      this.checkPositionSize(order),
-      this.checkExposure(order),
-      this.checkDrawdown(),
-      this.checkDailyLoss(),
-      this.checkMinEdge(order),
-    ];
-
-    const failed = checks.filter(c => !c.passed);
-
-    return {
-      valid: failed.length === 0,
-      checks,
-      failedChecks: failed,
-    };
-  }
-
-  /**
-   * Check position size limit
-   */
-  private checkPositionSize(order: OrderParams): ValidationCheck {
-    const size = order.quantity;
-    const maxSize = this.agent.maxPositionSize;
-
-    return {
-      name: 'position_size',
-      passed: size <= maxSize,
-      message: size <= maxSize
-        ? `Position size ${size} within limit ${maxSize}`
-        : `Position size ${size} exceeds limit ${maxSize}`,
-      value: Number(size),
-      limit: Number(maxSize),
-    };
-  }
-
-  /**
-   * Check total exposure limit
-   */
-  private checkExposure(order: OrderParams): ValidationCheck {
-    const currentLocked = this.agent.lockedBalance;
-    const orderCollateral = (order.quantity * BigInt(order.price)) / 10000n;
-    const newExposure = currentLocked + orderCollateral;
-    const maxExposure = this.agent.maxTotalExposure;
-
-    return {
-      name: 'exposure',
-      passed: newExposure <= maxExposure,
-      message: newExposure <= maxExposure
-        ? `Exposure ${newExposure} within limit ${maxExposure}`
-        : `Exposure ${newExposure} exceeds limit ${maxExposure}`,
-      value: Number(newExposure),
-      limit: Number(maxExposure),
-    };
-  }
-
-  /**
-   * Check drawdown limit
-   */
-  private checkDrawdown(): ValidationCheck {
-    const maxDrawdownBps = this.agent.riskParams.maxDrawdownBps;
-    if (maxDrawdownBps === 0 || this.agent.highWaterMark === 0n) {
-      return { name: 'drawdown', passed: true, message: 'Drawdown check disabled' };
-    }
-
-    const drawdownBps = Number(
-      (this.agent.currentDrawdown * 10000n) / this.agent.highWaterMark
-    );
-
-    return {
-      name: 'drawdown',
-      passed: drawdownBps <= maxDrawdownBps,
-      message: drawdownBps <= maxDrawdownBps
-        ? `Drawdown ${drawdownBps}bps within limit ${maxDrawdownBps}bps`
-        : `Drawdown ${drawdownBps}bps exceeds limit ${maxDrawdownBps}bps`,
-      value: drawdownBps,
-      limit: maxDrawdownBps,
-    };
-  }
-
-  /**
-   * Check daily loss limit
-   */
-  private checkDailyLoss(): ValidationCheck {
-    const maxDailyLoss = this.agent.riskParams.maxDailyLoss;
-    if (maxDailyLoss === 0n) {
-      return { name: 'daily_loss', passed: true, message: 'Daily loss check disabled' };
-    }
-
-    const currentDailyLoss = this.agent.dailyLoss;
-
-    return {
-      name: 'daily_loss',
-      passed: currentDailyLoss < maxDailyLoss,
-      message: currentDailyLoss < maxDailyLoss
-        ? `Daily loss ${currentDailyLoss} within limit ${maxDailyLoss}`
-        : `Daily loss ${currentDailyLoss} exceeds limit ${maxDailyLoss}`,
-      value: Number(currentDailyLoss),
-      limit: Number(maxDailyLoss),
-    };
-  }
-
-  /**
-   * Check minimum edge requirement
-   */
-  private checkMinEdge(order: OrderParams): ValidationCheck {
-    const minEdgeBps = this.agent.riskParams.minEdgeBps;
-    if (minEdgeBps === 0) {
-      return { name: 'min_edge', passed: true, message: 'Min edge check disabled' };
-    }
-
-    // Edge calculation would require market fair value
-    // For now, just return passed
-    return {
-      name: 'min_edge',
-      passed: true,
-      message: `Min edge check requires market data`,
-    };
-  }
-
-  /**
-   * Calculate position size based on risk parameters
-   */
-  calculatePositionSize(
-    edge: number, // Expected edge in basis points
-    winProbability: number, // Win probability (0-1)
-    price: number, // Current price in basis points
-  ): bigint {
-    const bankroll = this.agent.availableBalance;
-    const params = this.agent.riskParams;
-
-    switch (params.positionSizing) {
-      case PositionSizing.Fixed:
-        return params.sizingParam;
-
-      case PositionSizing.Kelly:
-        return this.kellySize(bankroll, edge, winProbability, params.sizingParam);
-
-      case PositionSizing.Proportional:
-        return this.proportionalSize(bankroll, params.sizingParam);
-
-      default:
-        return params.sizingParam;
-    }
-  }
-
-  /**
-   * Kelly criterion position sizing
-   */
-  private kellySize(
-    bankroll: bigint,
-    edgeBps: number,
-    winProb: number,
-    kellyFraction: bigint,
-  ): bigint {
-    // Kelly formula: f = (p*b - q) / b
-    // Simplified: f = edge / variance
-    // We use a fraction of Kelly for safety
-
-    const edge = edgeBps / 10000;
-    const kelly = edge * winProb; // Simplified Kelly
-
-    // Apply fraction
-    const adjustedKelly = kelly * Number(kellyFraction) / 10000;
-
-    // Calculate size
-    return BigInt(Math.floor(Number(bankroll) * adjustedKelly));
-  }
-
-  /**
-   * Proportional position sizing (fixed % of bankroll)
-   */
-  private proportionalSize(bankroll: bigint, riskBps: bigint): bigint {
-    return (bankroll * riskBps) / 10000n;
-  }
-}
-
-export interface ValidationResult {
-  valid: boolean;
-  checks: ValidationCheck[];
-  failedChecks: ValidationCheck[];
-}
+import { OrderParams, PositionSizing, RiskParams, TradingAgentConfig } from './types';
 
 export interface ValidationCheck {
   name: string;
@@ -200,84 +8,151 @@ export interface ValidationCheck {
   limit?: number;
 }
 
-/**
- * Position tracker for managing open positions
- */
-export class PositionTracker {
-  private positions: Map<string, Position> = new Map();
+export interface ValidationResult {
+  valid: boolean;
+  checks: ValidationCheck[];
+  failedChecks: ValidationCheck[];
+}
 
-  addPosition(position: Position): void {
-    const key = `${position.market.toBase58()}_${position.outcome}`;
-    const existing = this.positions.get(key);
+export class RiskManager {
+  constructor(private readonly agent: TradingAgentConfig) {}
 
-    if (existing) {
-      // Average into existing position
-      const totalQty = existing.quantity + position.quantity;
-      const avgPrice = (
-        (existing.avgEntryPrice * Number(existing.quantity)) +
-        (position.avgEntryPrice * Number(position.quantity))
-      ) / Number(totalQty);
-
-      existing.quantity = totalQty;
-      existing.avgEntryPrice = avgPrice;
-    } else {
-      this.positions.set(key, position);
-    }
+  validateTrade(order: OrderParams): ValidationResult {
+    const checks = [
+      this.checkPositionSize(order),
+      this.checkExposure(order),
+      this.checkDrawdown(),
+      this.checkDailyLoss(),
+    ];
+    const failedChecks = checks.filter((check) => !check.passed);
+    return {
+      valid: failedChecks.length === 0,
+      checks,
+      failedChecks,
+    };
   }
 
-  removePosition(market: string, outcome: number): Position | undefined {
-    const key = `${market}_${outcome}`;
-    const position = this.positions.get(key);
-    this.positions.delete(key);
-    return position;
-  }
+  calculatePositionSize(edgeBps: number): bigint {
+    const bankroll = this.agent.availableBalance;
+    const params = this.agent.riskParams;
 
-  reducePosition(market: string, outcome: number, quantity: bigint): void {
-    const key = `${market}_${outcome}`;
-    const position = this.positions.get(key);
-
-    if (position) {
-      position.quantity -= quantity;
-      if (position.quantity <= 0n) {
-        this.positions.delete(key);
+    switch (params.positionSizing) {
+      case PositionSizing.Fixed:
+        return params.sizingParam;
+      case PositionSizing.Kelly: {
+        const fraction = Math.max(0, edgeBps) / 10_000;
+        return BigInt(Math.floor(Number(bankroll) * fraction * Number(params.sizingParam) / 10_000));
       }
+      case PositionSizing.Proportional:
+        return (bankroll * params.sizingParam) / 10_000n;
+      default:
+        return params.sizingParam;
     }
   }
 
-  getPosition(market: string, outcome: number): Position | undefined {
-    return this.positions.get(`${market}_${outcome}`);
+  private checkPositionSize(order: OrderParams): ValidationCheck {
+    const passed = order.quantity <= this.agent.maxPositionSize;
+    return {
+      name: 'position_size',
+      passed,
+      message: passed
+        ? 'Position size within configured max'
+        : 'Position size exceeds configured max',
+      value: Number(order.quantity),
+      limit: Number(this.agent.maxPositionSize),
+    };
+  }
+
+  private checkExposure(order: OrderParams): ValidationCheck {
+    const projected = this.agent.lockedBalance + order.quantity;
+    const passed = projected <= this.agent.maxTotalExposure;
+    return {
+      name: 'total_exposure',
+      passed,
+      message: passed
+        ? 'Projected exposure within limit'
+        : 'Projected exposure exceeds limit',
+      value: Number(projected),
+      limit: Number(this.agent.maxTotalExposure),
+    };
+  }
+
+  private checkDrawdown(): ValidationCheck {
+    if (this.agent.highWaterMark === 0n || this.agent.riskParams.maxDrawdownBps <= 0) {
+      return { name: 'drawdown', passed: true, message: 'Drawdown check disabled' };
+    }
+
+    const drawdown = Number((this.agent.currentDrawdown * 10_000n) / this.agent.highWaterMark);
+    const passed = drawdown <= this.agent.riskParams.maxDrawdownBps;
+    return {
+      name: 'drawdown',
+      passed,
+      message: passed ? 'Drawdown within limit' : 'Drawdown exceeds limit',
+      value: drawdown,
+      limit: this.agent.riskParams.maxDrawdownBps,
+    };
+  }
+
+  private checkDailyLoss(): ValidationCheck {
+    const limit = this.agent.riskParams.maxDailyLoss;
+    if (limit === 0n) {
+      return { name: 'daily_loss', passed: true, message: 'Daily loss check disabled' };
+    }
+
+    const passed = this.agent.dailyLoss < limit;
+    return {
+      name: 'daily_loss',
+      passed,
+      message: passed ? 'Daily loss within limit' : 'Daily loss exceeds limit',
+      value: Number(this.agent.dailyLoss),
+      limit: Number(limit),
+    };
+  }
+}
+
+export interface Position {
+  marketId: bigint;
+  outcome: number;
+  quantity: bigint;
+  avgEntryPriceBps: number;
+  openedAt: number;
+}
+
+export class PositionTracker {
+  private positions = new Map<string, Position>();
+
+  addPosition(next: Position): void {
+    const key = `${next.marketId}_${next.outcome}`;
+    const current = this.positions.get(key);
+    if (!current) {
+      this.positions.set(key, next);
+      return;
+    }
+
+    const total = current.quantity + next.quantity;
+    const weightedPrice = (
+      Number(current.quantity) * current.avgEntryPriceBps +
+      Number(next.quantity) * next.avgEntryPriceBps
+    ) / Number(total);
+
+    this.positions.set(key, {
+      ...current,
+      quantity: total,
+      avgEntryPriceBps: Math.round(weightedPrice),
+    });
   }
 
   getAllPositions(): Position[] {
     return Array.from(this.positions.values());
   }
-
-  getTotalExposure(): bigint {
-    return this.getAllPositions().reduce(
-      (sum, pos) => sum + (pos.quantity * BigInt(Math.floor(pos.avgEntryPrice))) / 10000n,
-      0n
-    );
-  }
-
-  getUnrealizedPnl(currentPrices: Map<string, number>): bigint {
-    let totalPnl = 0n;
-
-    for (const pos of this.positions.values()) {
-      const key = `${pos.market.toBase58()}_${pos.outcome}`;
-      const currentPrice = currentPrices.get(key) || pos.avgEntryPrice;
-      const priceDiff = currentPrice - pos.avgEntryPrice;
-      const pnl = (pos.quantity * BigInt(Math.floor(priceDiff))) / 10000n;
-      totalPnl += pnl;
-    }
-
-    return totalPnl;
-  }
 }
 
-export interface Position {
-  market: import('@solana/web3.js').PublicKey;
-  outcome: number;
-  quantity: bigint;
-  avgEntryPrice: number;
-  openedAt: number;
+export function createDefaultRiskParams(): RiskParams {
+  return {
+    maxDrawdownBps: 2000,
+    maxDailyLoss: 0n,
+    minEdgeBps: 50,
+    positionSizing: PositionSizing.Proportional,
+    sizingParam: 500n,
+  };
 }

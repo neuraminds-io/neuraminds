@@ -7,11 +7,33 @@ use crate::require_auth;
 use super::ApiError;
 use super::rate_limit::check_claim_rate_limit;
 
+fn ensure_legacy_position_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.legacy_reads_enabled {
+        return Err(ApiError::bad_request(
+            "LEGACY_READ_PATH_DISABLED",
+            "Legacy position read path is disabled",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_legacy_position_write_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.legacy_writes_enabled {
+        return Err(ApiError::bad_request(
+            "LEGACY_WRITE_PATH_DISABLED",
+            "Legacy position write path is disabled",
+        ));
+    }
+    Ok(())
+}
+
 /// List all positions for authenticated user
 pub async fn list_positions(
     req: HttpRequest,
     state: web::Data<Arc<AppState>>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_position_mode(&state)?;
+
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
     let owner = &user.wallet_address;
@@ -30,6 +52,8 @@ pub async fn get_position(
     state: web::Data<Arc<AppState>>,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_position_mode(&state)?;
+
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
     let owner = &user.wallet_address;
@@ -53,6 +77,8 @@ pub async fn claim_winnings(
     state: web::Data<Arc<AppState>>,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_position_write_mode(&state)?;
+
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
     let owner = &user.wallet_address;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useBaseWallet } from '@/hooks/useBaseWallet';
 import { PageShell } from '@/components/layout';
 import { Card } from '@/components/ui';
 import { PositionList } from '@/components/position';
@@ -9,11 +9,11 @@ import { usePositions } from '@/hooks';
 import { formatCurrency, formatPnl } from '@/lib/utils';
 
 export default function PortfolioPage() {
-  const { connected } = useWallet();
+  const { isConnected } = useBaseWallet();
   const { data: positionsData } = usePositions();
   const positions = positionsData?.data || [];
 
-  if (!connected) {
+  if (!isConnected) {
     return (
       <PageShell>
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">

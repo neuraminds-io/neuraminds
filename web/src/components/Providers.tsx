@@ -1,15 +1,6 @@
 'use client';
 
-import { FC, ReactNode, useMemo } from 'react';
-import {
-  ConnectionProvider,
-  WalletProvider,
-} from '@solana/wallet-adapter-react';
-import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-} from '@solana/wallet-adapter-wallets';
+import { FC, ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { base, baseSepolia } from 'wagmi/chains';
@@ -21,12 +12,7 @@ import { ToastProvider } from '@/components/ui';
 import {
   BASE_CHAIN_ID,
   BASE_RPC_ENDPOINT,
-  SOLANA_RPC_ENDPOINT,
 } from '@/lib/constants';
-
-import '@solana/wallet-adapter-react-ui/styles.css';
-
-const getSolanaEndpoint = () => process.env.NEXT_PUBLIC_RPC_ENDPOINT || SOLANA_RPC_ENDPOINT;
 
 const wagmiConfig = createConfig({
   chains: [base, baseSepolia],
@@ -52,26 +38,12 @@ interface ProvidersProps {
 }
 
 export const Providers: FC<ProvidersProps> = ({ children }) => {
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-    ],
-    []
-  );
-
   return (
     <ErrorBoundary>
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           <WagmiProvider config={wagmiConfig}>
-            <ConnectionProvider endpoint={getSolanaEndpoint()}>
-              <WalletProvider wallets={wallets} autoConnect>
-                <WalletModalProvider>
-                  <ToastProvider>{children}</ToastProvider>
-                </WalletModalProvider>
-              </WalletProvider>
-            </ConnectionProvider>
+            <ToastProvider>{children}</ToastProvider>
           </WagmiProvider>
         </QueryClientProvider>
       </ThemeProvider>

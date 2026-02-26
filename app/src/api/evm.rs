@@ -125,16 +125,6 @@ struct BaseRawOrder {
     canceled: bool,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RpcLog {
-    transaction_hash: Option<String>,
-    block_number: Option<String>,
-    log_index: Option<String>,
-    topics: Vec<String>,
-    data: String,
-}
-
 #[derive(Clone)]
 struct PendingTrade {
     id: String,
@@ -148,27 +138,10 @@ struct PendingTrade {
     created_at: String,
 }
 
-#[derive(Deserialize)]
-struct JsonRpcResponse {
-    result: Option<String>,
-    error: Option<JsonRpcError>,
-}
-
-#[derive(Deserialize)]
-struct JsonRpcError {
-    message: String,
-}
-
-#[derive(Deserialize)]
-struct JsonRpcValueResponse {
-    result: Option<serde_json::Value>,
-    error: Option<JsonRpcError>,
-}
-
 pub async fn get_neura_token_state(
     state: web::Data<Arc<AppState>>,
 ) -> Result<impl Responder, ApiError> {
-    if !state.config.evm_enabled {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
         return Err(ApiError::bad_request(
             "EVM_DISABLED",
             "EVM services are disabled",
@@ -189,18 +162,16 @@ pub async fn get_neura_token_state(
         ));
     }
 
-    let total_supply_hex = eth_call(
-        &state.config.base_rpc_url,
-        token_address,
-        ERC20_TOTAL_SUPPLY_SELECTOR,
-    )
-    .await?;
-    let decimals_hex = eth_call(
-        &state.config.base_rpc_url,
-        token_address,
-        ERC20_DECIMALS_SELECTOR,
-    )
-    .await?;
+    let total_supply_hex = state
+        .evm_rpc
+        .eth_call(token_address, ERC20_TOTAL_SUPPLY_SELECTOR)
+        .await
+        .map_err(map_evm_rpc_error)?;
+    let decimals_hex = state
+        .evm_rpc
+        .eth_call(token_address, ERC20_DECIMALS_SELECTOR)
+        .await
+        .map_err(map_evm_rpc_error)?;
     let decimals = parse_u8_hex(&decimals_hex)?;
 
     Ok(HttpResponse::Ok().json(BaseTokenStateResponse {
@@ -215,7 +186,7 @@ pub async fn get_base_markets(
     state: web::Data<Arc<AppState>>,
     query: web::Query<BaseMarketsQuery>,
 ) -> Result<impl Responder, ApiError> {
-    if !state.config.evm_enabled {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
         return Err(ApiError::bad_request(
             "EVM_DISABLED",
             "EVM services are disabled",
@@ -224,13 +195,10 @@ pub async fn get_base_markets(
 
     let market_core = state.config.market_core_address.trim();
     if market_core.is_empty() {
-        return Ok(HttpResponse::Ok().json(BaseMarketsResponse {
-            markets: vec![],
-            total: 0,
-            limit: query.limit.unwrap_or(50).min(MAX_MARKETS_PAGE_SIZE),
-            offset: query.offset.unwrap_or(0),
-            source: "market_core_unconfigured".to_string(),
-        }));
+        return Err(ApiError::bad_request(
+            "MARKET_CORE_ADDRESS_NOT_CONFIGURED",
+            "MARKET_CORE_ADDRESS must be configured for Base markets",
+        ));
     }
 
     if !is_valid_evm_address(market_core) {
@@ -240,12 +208,11 @@ pub async fn get_base_markets(
         ));
     }
 
-    let total_hex = eth_call(
-        &state.config.base_rpc_url,
-        market_core,
-        MARKET_CORE_COUNT_SELECTOR,
-    )
-    .await?;
+    let total_hex = state
+        .evm_rpc
+        .eth_call(market_core, MARKET_CORE_COUNT_SELECTOR)
+        .await
+        .map_err(map_evm_rpc_error)?;
     let total = parse_u64_hex(&total_hex)?;
 
     let limit = query.limit.unwrap_or(50).min(MAX_MARKETS_PAGE_SIZE);
@@ -269,7 +236,11 @@ pub async fn get_base_markets(
             MARKET_CORE_MARKETS_SELECTOR,
             encode_u256_hex(index)
         );
-        let slot = eth_call(&state.config.base_rpc_url, market_core, &calldata).await?;
+        let slot = state
+            .evm_rpc
+            .eth_call(market_core, &calldata)
+            .await
+            .map_err(map_evm_rpc_error)?;
         markets.push(decode_market_snapshot(index, &slot)?);
     }
 
@@ -287,7 +258,7 @@ pub async fn get_base_orderbook(
     path: web::Path<String>,
     query: web::Query<BaseOrderBookQuery>,
 ) -> Result<impl Responder, ApiError> {
-    if !state.config.evm_enabled {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
         return Err(ApiError::bad_request(
             "EVM_DISABLED",
             "EVM services are disabled",
@@ -314,14 +285,10 @@ pub async fn get_base_orderbook(
 
     let order_book = state.config.order_book_address.trim();
     if order_book.is_empty() {
-        return Ok(HttpResponse::Ok().json(BaseOrderBookResponse {
-            market_id: market_id_raw,
-            outcome: outcome.to_string(),
-            bids: vec![],
-            asks: vec![],
-            last_updated: Utc::now().to_rfc3339(),
-            source: "order_book_unconfigured".to_string(),
-        }));
+        return Err(ApiError::bad_request(
+            "ORDER_BOOK_ADDRESS_NOT_CONFIGURED",
+            "ORDER_BOOK_ADDRESS must be configured for Base order books",
+        ));
     }
 
     if !is_valid_evm_address(order_book) {
@@ -331,12 +298,11 @@ pub async fn get_base_orderbook(
         ));
     }
 
-    let total_hex = eth_call(
-        &state.config.base_rpc_url,
-        order_book,
-        ORDER_BOOK_COUNT_SELECTOR,
-    )
-    .await?;
+    let total_hex = state
+        .evm_rpc
+        .eth_call(order_book, ORDER_BOOK_COUNT_SELECTOR)
+        .await
+        .map_err(map_evm_rpc_error)?;
     let total = parse_u64_hex(&total_hex)?;
     if total == 0 {
         return Ok(HttpResponse::Ok().json(BaseOrderBookResponse {
@@ -369,7 +335,11 @@ pub async fn get_base_orderbook(
             ORDER_BOOK_ORDERS_SELECTOR,
             encode_u256_hex(order_id)
         );
-        let payload = eth_call(&state.config.base_rpc_url, order_book, &calldata).await?;
+        let payload = state
+            .evm_rpc
+            .eth_call(order_book, &calldata)
+            .await
+            .map_err(map_evm_rpc_error)?;
         let Some(order) = decode_order_snapshot(&payload)? else {
             continue;
         };
@@ -435,7 +405,7 @@ pub async fn get_base_trades(
     path: web::Path<String>,
     query: web::Query<BaseTradesQuery>,
 ) -> Result<impl Responder, ApiError> {
-    if !state.config.evm_enabled {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
         return Err(ApiError::bad_request(
             "EVM_DISABLED",
             "EVM services are disabled",
@@ -463,14 +433,10 @@ pub async fn get_base_trades(
 
     let order_book = state.config.order_book_address.trim();
     if order_book.is_empty() {
-        return Ok(HttpResponse::Ok().json(BaseTradesResponse {
-            trades: vec![],
-            total: 0,
-            limit,
-            offset,
-            has_more: false,
-            source: "order_book_unconfigured".to_string(),
-        }));
+        return Err(ApiError::bad_request(
+            "ORDER_BOOK_ADDRESS_NOT_CONFIGURED",
+            "ORDER_BOOK_ADDRESS must be configured for Base trades",
+        ));
     }
 
     if !is_valid_evm_address(order_book) {
@@ -480,8 +446,11 @@ pub async fn get_base_trades(
         ));
     }
 
-    let latest_block_hex = eth_block_number(&state.config.base_rpc_url).await?;
-    let latest_block = parse_u64_hex(&latest_block_hex)?;
+    let latest_block = state
+        .evm_rpc
+        .eth_block_number()
+        .await
+        .map_err(map_evm_rpc_error)?;
     if latest_block == 0 {
         return Ok(HttpResponse::Ok().json(BaseTradesResponse {
             trades: vec![],
@@ -494,14 +463,35 @@ pub async fn get_base_trades(
     }
 
     let from_block = latest_block.saturating_sub(TRADES_BLOCK_SCAN_WINDOW);
-    let logs = eth_get_logs(
-        &state.config.base_rpc_url,
-        order_book,
-        ORDER_FILLED_TOPIC,
-        from_block,
-        latest_block,
-    )
-    .await?;
+    let _ = state
+        .evm_indexer
+        .sync(
+            state.config.market_core_address.trim(),
+            order_book,
+            TRADES_BLOCK_SCAN_WINDOW,
+            &[ORDER_FILLED_TOPIC],
+        )
+        .await;
+
+    let indexed_logs = state.evm_indexer.logs_by_topic(ORDER_FILLED_TOPIC).await;
+    let mut logs = indexed_logs
+        .into_iter()
+        .filter(|entry| {
+            entry
+                .block_number
+                .as_deref()
+                .and_then(|v| parse_u64_hex(v).ok())
+                .map(|block| block >= from_block && block <= latest_block)
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+    if logs.is_empty() {
+        logs = state
+            .evm_rpc
+            .eth_get_logs(order_book, ORDER_FILLED_TOPIC, from_block, latest_block)
+            .await
+            .map_err(map_evm_rpc_error)?;
+    }
 
     let mut trades = Vec::new();
     let mut block_timestamp_cache: HashMap<u64, u64> = HashMap::new();
@@ -539,7 +529,11 @@ pub async fn get_base_trades(
             ORDER_BOOK_ORDERS_SELECTOR,
             encode_u256_hex(order_id)
         );
-        let payload = eth_call(&state.config.base_rpc_url, order_book, &calldata).await?;
+        let payload = state
+            .evm_rpc
+            .eth_call(order_book, &calldata)
+            .await
+            .map_err(map_evm_rpc_error)?;
         let Some(order) = decode_order_snapshot(&payload)? else {
             continue;
         };
@@ -559,7 +553,11 @@ pub async fn get_base_trades(
         let timestamp = if let Some(ts) = block_timestamp_cache.get(&block_number) {
             *ts
         } else {
-            let ts = eth_get_block_timestamp(&state.config.base_rpc_url, block_number).await?;
+            let ts = state
+                .evm_rpc
+                .eth_get_block_timestamp(block_number)
+                .await
+                .map_err(map_evm_rpc_error)?;
             block_timestamp_cache.insert(block_number, ts);
             ts
         };
@@ -618,7 +616,7 @@ pub async fn get_base_trades(
             id: entry.id,
             market_id: market_id_raw.clone(),
             outcome: entry.outcome,
-            price: (entry.price_bps as f64) / 100.0,
+            price: (entry.price_bps as f64) / 10_000.0,
             price_bps: entry.price_bps,
             quantity: entry.quantity,
             tx_hash: entry.tx_hash,
@@ -749,8 +747,8 @@ fn decode_order_snapshot(slot: &str) -> Result<Option<BaseRawOrder>, ApiError> {
     }))
 }
 
-fn quantity_hex(value: u64) -> String {
-    format!("0x{:x}", value)
+fn map_evm_rpc_error(err: anyhow::Error) -> ApiError {
+    ApiError::internal(&format!("Base RPC request failed: {}", err))
 }
 
 fn unix_to_rfc3339(timestamp: u64) -> String {
@@ -758,127 +756,6 @@ fn unix_to_rfc3339(timestamp: u64) -> String {
         .single()
         .map(|value| value.to_rfc3339())
         .unwrap_or_else(|| Utc::now().to_rfc3339())
-}
-
-async fn rpc_value_call(
-    rpc_url: &str,
-    method: &str,
-    params: serde_json::Value,
-) -> Result<serde_json::Value, ApiError> {
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": method,
-        "params": params,
-    });
-
-    let response = reqwest::Client::new()
-        .post(rpc_url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| ApiError::internal(&format!("Base RPC request failed: {}", e)))?;
-
-    if !response.status().is_success() {
-        return Err(ApiError::internal("Base RPC returned non-success status"));
-    }
-
-    let payload: JsonRpcValueResponse = response
-        .json()
-        .await
-        .map_err(|_| ApiError::internal("Failed to decode Base RPC response"))?;
-
-    if let Some(error) = payload.error {
-        return Err(ApiError::internal(&format!(
-            "Base RPC error: {}",
-            error.message
-        )));
-    }
-
-    payload
-        .result
-        .ok_or_else(|| ApiError::internal("Base RPC response missing result"))
-}
-
-async fn eth_block_number(rpc_url: &str) -> Result<String, ApiError> {
-    let result = rpc_value_call(rpc_url, "eth_blockNumber", serde_json::json!([])).await?;
-    result
-        .as_str()
-        .map(|v| v.to_string())
-        .ok_or_else(|| ApiError::internal("Invalid Base RPC block number"))
-}
-
-async fn eth_get_logs(
-    rpc_url: &str,
-    address: &str,
-    topic0: &str,
-    from_block: u64,
-    to_block: u64,
-) -> Result<Vec<RpcLog>, ApiError> {
-    let params = serde_json::json!([
-        {
-            "address": address,
-            "fromBlock": quantity_hex(from_block),
-            "toBlock": quantity_hex(to_block),
-            "topics": [topic0],
-        }
-    ]);
-    let result = rpc_value_call(rpc_url, "eth_getLogs", params).await?;
-    serde_json::from_value(result).map_err(|_| ApiError::internal("Invalid Base RPC logs payload"))
-}
-
-async fn eth_get_block_timestamp(rpc_url: &str, block_number: u64) -> Result<u64, ApiError> {
-    let params = serde_json::json!([quantity_hex(block_number), false]);
-    let result = rpc_value_call(rpc_url, "eth_getBlockByNumber", params).await?;
-    let timestamp = result
-        .get("timestamp")
-        .and_then(|value| value.as_str())
-        .ok_or_else(|| ApiError::internal("Invalid Base block payload"))?;
-    parse_u64_hex(timestamp)
-}
-
-async fn eth_call(rpc_url: &str, to: &str, data: &str) -> Result<String, ApiError> {
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "eth_call",
-        "params": [
-            {
-                "to": to,
-                "data": data,
-            },
-            "latest"
-        ]
-    });
-
-    let response = reqwest::Client::new()
-        .post(rpc_url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| ApiError::internal(&format!("Base RPC request failed: {}", e)))?;
-
-    if !response.status().is_success() {
-        return Err(ApiError::internal("Base RPC returned non-success status"));
-    }
-
-    let payload: JsonRpcResponse = response
-        .json()
-        .await
-        .map_err(|_| ApiError::internal("Failed to decode Base RPC response"))?;
-
-    if let Some(error) = payload.error {
-        return Err(ApiError::internal(&format!(
-            "Base RPC error: {}",
-            error.message
-        )));
-    }
-
-    let result = payload
-        .result
-        .ok_or_else(|| ApiError::internal("Base RPC response missing result"))?;
-
-    Ok(result)
 }
 
 #[cfg(test)]
@@ -991,12 +868,6 @@ mod tests {
             format!("{:064x}", 0u64)
         );
         assert!(decode_order_snapshot(&payload).unwrap().is_none());
-    }
-
-    #[test]
-    fn test_quantity_hex() {
-        assert_eq!(quantity_hex(0), "0x0");
-        assert_eq!(quantity_hex(42), "0x2a");
     }
 
     #[test]

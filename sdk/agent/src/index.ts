@@ -5,14 +5,13 @@ export { TradingAgent, createAgent } from './agent';
 
 // Types
 export {
+  Address,
   PositionSizing,
   AgentStatus,
-  Side,
   Outcome,
   OrderType,
   RiskParams,
-  TradingAgentAccount,
-  CreateAgentParams,
+  TradingAgentConfig,
   OrderParams,
   Signal,
   MarketData,
@@ -25,7 +24,6 @@ export {
   Strategy,
   MomentumStrategy,
   MeanReversionStrategy,
-  ArbitrageStrategy,
   CompositeStrategy,
 } from './strategy';
 
@@ -36,4 +34,5 @@ export {
   ValidationResult,
   ValidationCheck,
   Position,
+  createDefaultRiskParams,
 } from './risk';

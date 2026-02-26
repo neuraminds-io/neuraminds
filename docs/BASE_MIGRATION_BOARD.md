@@ -3,6 +3,9 @@
 ## Scope
 Track Solana -> Base replacement work at module level.
 
+Latest execution report:
+- `docs/reports/BASE_PLAN_EXECUTION_REPORT_2026-02-26.md`
+
 ## Onchain
 - [x] Add Foundry workspace (`evm/`)
 - [x] Add `NeuraToken` contract (cap + role mint + pause)
@@ -10,21 +13,21 @@ Track Solana -> Base replacement work at module level.
 - [x] Add `OrderBook` lifecycle skeleton (place/cancel/fill)
 - [x] Add `CollateralVault` skeleton (deposit/withdraw/lock/unlock/settle)
 - [x] Add Foundry tests for token, market core, orderbook, and vault
-- [ ] Implement full order matching and settlement engine
-- [ ] Implement payout routing across market resolution + claim paths
-- [ ] Add upgrade/admin governance model and timelock policy
+- [x] Implement full order matching and settlement engine (`OrderBook.matchOrders`)
+- [x] Implement payout routing across market resolution + claim paths (`OrderBook.claim`)
+- [x] Add upgrade/admin governance model and timelock policy (`DeployTimelock.s.sol`, `HandoffToTimelock.s.sol`, `TimelockGovernance.t.sol`)
 
 ## Backend (app)
 - [x] Add Base config fields and `EVM_ENABLED` flag
 - [x] Add auth safety gate: block legacy Solana-signature login when `EVM_ENABLED=true`
 - [x] Add SIWE nonce+verification endpoints (`/v1/auth/siwe/nonce`, `/v1/auth/siwe/login`)
-- [ ] Add EVM RPC client service (replace Solana submission paths)
+- [x] Add EVM RPC client service (`app/src/services/evm_rpc.rs`)
 - [x] Add Base read endpoints (`/v1/evm/token/state`, `/v1/evm/markets` via `eth_call`)
 - [x] Add Base orderbook read endpoint (`/v1/evm/markets/{id}/orderbook`)
 - [x] Add Base trades read endpoint (`/v1/evm/markets/{id}/trades` via log scan)
-- [ ] Add EVM log indexer for markets, orders, and claims
+- [x] Add EVM log indexer for markets, orders, and claims (`app/src/services/evm_indexer.rs`)
 - [x] Migrate auth address validation from Solana pubkey to EVM checksum address
-- [ ] Add dual-write/dual-read toggles for controlled rollout
+- [x] Add dual-write/dual-read toggles for controlled rollout (`LEGACY_*_ENABLED`, `EVM_*_ENABLED`)
 
 ## Frontend (web)
 - [x] Add chain-mode constants (`solana`/`base`)
@@ -36,7 +39,7 @@ Track Solana -> Base replacement work at module level.
 - [x] Replace market list/detail reads in hooks with Base EVM endpoint (`/v1/evm/markets`)
 - [x] Replace orderbook reads in hooks with Base EVM endpoint (`/v1/evm/markets/{id}/orderbook`)
 - [x] Replace trade reads in hooks with Base endpoint (`/v1/evm/markets/{id}/trades`)
-- [ ] Replace Solana write flows (create order, cancel, claim)
+- [x] Replace Solana write flows (create market, create order, cancel, claim) with Base contract writes
 - [x] Update network/token text to Base-native defaults
 
 ## DevOps + Docs
@@ -48,7 +51,7 @@ Track Solana -> Base replacement work at module level.
 - [x] Add Base Sepolia frontend smoke harness (`scripts/base-sepolia-web-smoke.mjs`, `web/e2e/base-sepolia.spec.ts`)
 
 ## Validation Gates
-- [x] EVM tests passing (`forge test`, 23 tests)
+- [x] EVM tests passing (`forge test`, 24 tests)
 - [x] Backend smoke test script for Base Sepolia (`scripts/base-sepolia-smoke.mjs`)
-- [ ] Frontend E2E smoke executed against live Base Sepolia staging
-- [ ] Rollback playbook validated in staging
+- [ ] Frontend E2E smoke executed against live Base Sepolia staging (latest run failed: `/health` and `/v1/auth/siwe/nonce` returned 404 on staging web URL; see `docs/reports/base-sepolia-web-smoke-2026-02-26.json`)
+- [ ] Rollback playbook validated in staging (blocked pending staging deployment with funded signer roles)

@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-02-26T14:12:11Z",
+  "network": "mainnet",
+  "contracts": {
+    "marketCore": "0x723a565f03e5d46b56866ff7e1a084f09f8f7030",
+    "orderBook": "0x37ca877505976805f10a1bc6fc06e005502273a9",
+    "collateralVault": "0xbd63831a06daf3e5165b26604380b38f1db90617"
+  },
+  "roleChecks": {
+    "marketCore": {
+      "adminDefaultRole": true,
+      "marketCreatorRole": true,
+      "resolverRole": true,
+      "pauserRole": true
+    },
+    "orderBook": {
+      "adminDefaultRole": true,
+      "matcherRole": true,
+      "pauserRole": true
+    },
+    "collateralVault": {
+      "adminDefaultRole": true,
+      "operatorRole": true,
+      "pauserRole": true
+    }
+  }
+}

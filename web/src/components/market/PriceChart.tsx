@@ -231,30 +231,3 @@ export function PriceChart({
     </div>
   );
 }
-
-// Generate mock data for demonstration
-export function generateMockPriceData(
-  days: number = 30,
-  startPrice: number = 50
-): PricePoint[] {
-  const data: PricePoint[] = [];
-  const now = Date.now();
-  const pointsPerDay = 24;
-  const totalPoints = days * pointsPerDay;
-
-  let price = startPrice;
-
-  for (let i = 0; i < totalPoints; i++) {
-    // Random walk with mean reversion
-    const change = (Math.random() - 0.5) * 3 + (50 - price) * 0.01;
-    price = Math.max(1, Math.min(99, price + change));
-
-    data.push({
-      timestamp: now - (totalPoints - i) * (24 * 60 * 60 * 1000 / pointsPerDay),
-      price,
-      volume: Math.random() * 10000,
-    });
-  }
-
-  return data;
-}

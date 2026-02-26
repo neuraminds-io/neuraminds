@@ -1,38 +1,37 @@
 {
-  "generatedAt": "2026-02-25T23:14:08.531Z",
+  "generatedAt": "2026-02-26T13:56:23.870Z",
   "mode": "production",
   "chainMode": "base",
   "allowMissingSecrets": true,
   "summary": {
-    "missingCount": 20,
-    "warningCount": 1,
-    "errorCount": 0,
-    "ready": true
+    "missingCount": 15,
+    "warningCount": 2,
+    "errorCount": 2,
+    "ready": false
   },
   "missing": [
-    "DATABASE_URL",
-    "REDIS_URL",
-    "JWT_SECRET",
     "CORS_ORIGINS",
     "METRICS_TOKEN",
     "BLINDFOLD_WEBHOOK_SECRET",
-    "BASE_RPC_URL",
-    "BASE_WS_URL",
-    "BASE_CHAIN_ID",
-    "SIWE_DOMAIN",
-    "NEURA_TOKEN_ADDRESS",
     "MARKET_CORE_ADDRESS",
     "ORDER_BOOK_ADDRESS",
-    "EVM_ENABLED",
-    "NEXT_PUBLIC_API_URL",
-    "AUTH_ALLOWED_ORIGINS",
+    "COLLATERAL_VAULT_ADDRESS",
+    "EVM_READS_ENABLED",
+    "EVM_WRITES_ENABLED",
+    "LEGACY_READS_ENABLED",
+    "LEGACY_WRITES_ENABLED",
     "NEXT_PUBLIC_CHAIN_MODE",
-    "NEXT_PUBLIC_BASE_RPC_URL",
-    "NEXT_PUBLIC_BASE_CHAIN_ID",
-    "NEXT_PUBLIC_SIWE_DOMAIN"
+    "NEXT_PUBLIC_MARKET_CORE_ADDRESS",
+    "NEXT_PUBLIC_ORDER_BOOK_ADDRESS",
+    "NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS",
+    "NEXT_PUBLIC_COLLATERAL_VAULT_ADDRESS"
   ],
   "warnings": [
-    "Missing required variables tolerated by --allow-missing-secrets: DATABASE_URL, REDIS_URL, JWT_SECRET, CORS_ORIGINS, METRICS_TOKEN, BLINDFOLD_WEBHOOK_SECRET, BASE_RPC_URL, BASE_WS_URL, BASE_CHAIN_ID, SIWE_DOMAIN, NEURA_TOKEN_ADDRESS, MARKET_CORE_ADDRESS, ORDER_BOOK_ADDRESS, EVM_ENABLED, NEXT_PUBLIC_API_URL, AUTH_ALLOWED_ORIGINS, NEXT_PUBLIC_CHAIN_MODE, NEXT_PUBLIC_BASE_RPC_URL, NEXT_PUBLIC_BASE_CHAIN_ID, NEXT_PUBLIC_SIWE_DOMAIN"
+    "NEURA_TOKEN_ADDRESS is not set. Token-related UI/API features should stay disabled until token launch.",
+    "Missing required variables tolerated by --allow-missing-secrets: CORS_ORIGINS, METRICS_TOKEN, BLINDFOLD_WEBHOOK_SECRET, MARKET_CORE_ADDRESS, ORDER_BOOK_ADDRESS, COLLATERAL_VAULT_ADDRESS, EVM_READS_ENABLED, EVM_WRITES_ENABLED, LEGACY_READS_ENABLED, LEGACY_WRITES_ENABLED, NEXT_PUBLIC_CHAIN_MODE, NEXT_PUBLIC_MARKET_CORE_ADDRESS, NEXT_PUBLIC_ORDER_BOOK_ADDRESS, NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS, NEXT_PUBLIC_COLLATERAL_VAULT_ADDRESS"
   ],
-  "errors": []
+  "errors": [
+    "NEXT_PUBLIC_API_URL must be https in staging/production",
+    "Origin must be https in launch mode: http://localhost:3000"
+  ]
 }

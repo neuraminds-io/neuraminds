@@ -3,9 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Search } from 'lucide-react';
-import { useWalletModal } from '@solana/wallet-adapter-react-ui';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { CHAIN_MODE } from '@/lib/constants';
 import { useBaseWallet } from '@/hooks/useBaseWallet';
 import { BrandLogo } from '@/components/layout/BrandLogo';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -18,37 +15,22 @@ const navLinks = [
 ];
 
 function ConnectWalletButton() {
-  const { setVisible } = useWalletModal();
-  const { connected, publicKey, disconnect } = useWallet();
   const baseWallet = useBaseWallet();
-  const isBaseMode = CHAIN_MODE === 'base';
 
   const handleClick = () => {
-    if (isBaseMode) {
-      if (baseWallet.isConnected) {
-        baseWallet.disconnect();
-      } else {
-        baseWallet.connect().catch((error) => {
-          console.error('Base wallet connect failed:', error);
-        });
-      }
+    if (baseWallet.isConnected) {
+      baseWallet.disconnect();
       return;
     }
 
-    if (connected) {
-      disconnect();
-      return;
-    }
-
-    setVisible(true);
+    baseWallet.connect().catch((error) => {
+      console.error('Base wallet connect failed:', error);
+    });
   };
 
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 4)}...${address.slice(-4)}`;
   };
-
-  const connectedAddress = isBaseMode ? baseWallet.address : publicKey?.toBase58();
-  const isConnected = isBaseMode ? baseWallet.isConnected : connected;
 
   return (
     <button
@@ -61,8 +43,8 @@ function ConnectWalletButton() {
         'transition-all cursor-pointer'
       )}
     >
-      {isConnected && connectedAddress
-        ? truncateAddress(connectedAddress)
+      {baseWallet.isConnected && baseWallet.address
+        ? truncateAddress(baseWallet.address)
         : 'Connect Wallet'}
     </button>
   );
@@ -75,7 +57,6 @@ export function Header() {
     <header className="sticky top-0 z-sticky bg-bg-primary border-b border-border">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
         <div className="relative flex items-center justify-between h-14">
-          {/* Logo + Nav */}
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center group">
               <BrandLogo />
@@ -102,7 +83,6 @@ export function Header() {
             </nav>
           </div>
 
-          {/* Search - centered on screen */}
           <div className="hidden sm:block absolute left-1/2 -translate-x-1/2" style={{ width: 'min(400px, calc(100% - 500px))' }}>
             <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
@@ -120,7 +100,6 @@ export function Header() {
             </div>
           </div>
 
-          {/* Right side */}
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <ConnectWalletButton />

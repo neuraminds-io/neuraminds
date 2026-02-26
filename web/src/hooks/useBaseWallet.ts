@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
 
-import { BASE_CHAIN_ID, CHAIN_MODE } from '@/lib/constants';
+import { BASE_CHAIN_ID } from '@/lib/constants';
 
 export function useBaseWallet() {
   const account = useAccount();
@@ -29,7 +29,7 @@ export function useBaseWallet() {
   };
 
   return {
-    enabled: CHAIN_MODE === 'base',
+    enabled: true,
     address: account.address,
     isConnected: account.isConnected,
     chainId: account.chainId,

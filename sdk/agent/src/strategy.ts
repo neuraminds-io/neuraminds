@@ -1,249 +1,137 @@
-import { PublicKey } from '@solana/web3.js';
-import { Signal, MarketData, OrderParams, Side, Outcome, OrderType } from './types';
+import { MarketData, OrderParams, OrderType, Outcome, Signal } from './types';
 
-/**
- * Base strategy interface that all trading strategies must implement
- */
 export interface Strategy {
-  /** Strategy name */
   name: string;
-
-  /** Analyze market and generate signal */
-  analyze(market: PublicKey, data: MarketData): Signal | null;
-
-  /** Convert signal to order parameters */
+  analyze(data: MarketData): Signal | null;
   toOrder(signal: Signal, bankroll: bigint): OrderParams | null;
 }
 
-/**
- * Momentum strategy - trades based on price movement
- */
 export class MomentumStrategy implements Strategy {
   name = 'momentum';
 
   constructor(
-    private readonly minEdge: number = 0.05, // 5% minimum edge
-    private readonly lookbackPeriod: number = 24, // hours
+    private readonly minEdge = 0.05,
+    private readonly maxConfidence = 1
   ) {}
 
-  analyze(market: PublicKey, data: MarketData): Signal | null {
-    // Simple momentum: if price moved significantly, expect continuation
-    // In production, would analyze historical price data
-    const currentPrice = data.yesPrice;
+  analyze(data: MarketData): Signal | null {
+    if (data.resolved) return null;
 
-    // Placeholder momentum calculation
-    const momentum = this.calculateMomentum(data);
+    const deviation = (data.yesPriceBps - 5000) / 5000;
+    if (Math.abs(deviation) < this.minEdge) return null;
 
-    if (Math.abs(momentum) < this.minEdge) {
-      return null;
-    }
-
+    const bullish = deviation > 0;
+    const confidence = Math.min(Math.abs(deviation) / this.minEdge, this.maxConfidence);
     return {
-      market,
-      direction: momentum > 0 ? 'buy_yes' : 'buy_no',
-      confidence: Math.min(Math.abs(momentum) / this.minEdge, 1),
-      targetPrice: currentPrice + (momentum > 0 ? 100 : -100),
-      reason: `Momentum signal: ${momentum > 0 ? 'bullish' : 'bearish'}`,
+      marketId: data.marketId,
+      direction: bullish ? 'buy_yes' : 'buy_no',
+      confidence,
+      targetPriceBps: Math.max(100, Math.min(9900, data.yesPriceBps + (bullish ? 50 : -50))),
+      reason: bullish ? 'Momentum bullish' : 'Momentum bearish',
     };
   }
 
   toOrder(signal: Signal, bankroll: bigint): OrderParams | null {
-    if (signal.confidence < 0.5) {
-      return null;
-    }
+    if (signal.confidence < 0.4) return null;
 
-    const riskAmount = bankroll * BigInt(Math.floor(signal.confidence * 100)) / 10000n;
-    const quantity = riskAmount * 10000n / BigInt(signal.targetPrice);
+    const stakeBps = BigInt(Math.floor(signal.confidence * 1000));
+    const quantity = (bankroll * stakeBps) / 10000n;
+    if (quantity <= 0n) return null;
 
     return {
-      side: signal.direction.startsWith('buy') ? Side.Buy : Side.Sell,
-      outcome: signal.direction.includes('yes') ? Outcome.Yes : Outcome.No,
-      price: signal.targetPrice,
+      marketId: signal.marketId,
+      outcome: signal.direction === 'buy_yes' ? Outcome.Yes : Outcome.No,
+      priceBps: signal.targetPriceBps,
       quantity,
       orderType: OrderType.Limit,
     };
   }
-
-  private calculateMomentum(data: MarketData): number {
-    // Simplified momentum calculation
-    // In production, would use historical price data
-    const midPrice = (data.yesPrice + (10000 - data.noPrice)) / 2;
-    return (midPrice - 5000) / 5000; // Deviation from 50%
-  }
 }
 
-/**
- * Mean reversion strategy - trades expecting price to return to mean
- */
 export class MeanReversionStrategy implements Strategy {
   name = 'mean_reversion';
 
-  constructor(
-    private readonly deviationThreshold: number = 0.15, // 15% from mean
-    private readonly meanPrice: number = 5000, // 50% default mean
-  ) {}
+  constructor(private readonly thresholdBps = 1200) {}
 
-  analyze(market: PublicKey, data: MarketData): Signal | null {
-    const currentPrice = data.yesPrice;
-    const deviation = (currentPrice - this.meanPrice) / this.meanPrice;
+  analyze(data: MarketData): Signal | null {
+    if (data.resolved) return null;
 
-    if (Math.abs(deviation) < this.deviationThreshold) {
-      return null;
-    }
+    const delta = data.yesPriceBps - 5000;
+    if (Math.abs(delta) < this.thresholdBps) return null;
 
-    // Trade against the deviation
+    const buyYes = delta < 0;
     return {
-      market,
-      direction: deviation > 0 ? 'buy_no' : 'buy_yes',
-      confidence: Math.min(Math.abs(deviation) / this.deviationThreshold, 1) * 0.8,
-      targetPrice: this.meanPrice,
-      reason: `Mean reversion: price ${deviation > 0 ? 'above' : 'below'} mean`,
+      marketId: data.marketId,
+      direction: buyYes ? 'buy_yes' : 'buy_no',
+      confidence: Math.min(Math.abs(delta) / this.thresholdBps, 1),
+      targetPriceBps: 5000,
+      reason: buyYes ? 'Yes reverted below mean' : 'No reverted below mean',
     };
   }
 
   toOrder(signal: Signal, bankroll: bigint): OrderParams | null {
-    if (signal.confidence < 0.4) {
-      return null;
-    }
-
-    const riskAmount = bankroll * BigInt(Math.floor(signal.confidence * 50)) / 10000n;
-    const quantity = riskAmount * 10000n / BigInt(signal.targetPrice);
+    if (signal.confidence < 0.3) return null;
+    const quantity = (bankroll * BigInt(Math.floor(signal.confidence * 800))) / 10000n;
+    if (quantity <= 0n) return null;
 
     return {
-      side: signal.direction.startsWith('buy') ? Side.Buy : Side.Sell,
-      outcome: signal.direction.includes('yes') ? Outcome.Yes : Outcome.No,
-      price: signal.targetPrice,
+      marketId: signal.marketId,
+      outcome: signal.direction === 'buy_yes' ? Outcome.Yes : Outcome.No,
+      priceBps: signal.targetPriceBps,
       quantity,
       orderType: OrderType.Limit,
     };
   }
 }
 
-/**
- * Arbitrage strategy - exploits price differences
- */
-export class ArbitrageStrategy implements Strategy {
-  name = 'arbitrage';
-
-  constructor(
-    private readonly minSpread: number = 50, // 0.5% minimum spread
-  ) {}
-
-  analyze(market: PublicKey, data: MarketData): Signal | null {
-    // In prediction markets, YES + NO should equal 1
-    // Any deviation is arbitrage opportunity
-    const impliedSum = data.yesPrice + data.noPrice;
-    const deviation = impliedSum - 10000;
-
-    if (Math.abs(deviation) < this.minSpread) {
-      return null;
-    }
-
-    // If sum > 10000, both are overpriced - sell both
-    // If sum < 10000, both are underpriced - buy both
-    // For simplicity, we target the more mispriced side
-    if (deviation > 0) {
-      // Overpriced - sell the higher one
-      return {
-        market,
-        direction: data.yesPrice > data.noPrice ? 'sell_yes' : 'sell_no',
-        confidence: Math.min(Math.abs(deviation) / 100, 1),
-        targetPrice: data.yesPrice > data.noPrice ? data.yesPrice - 50 : data.noPrice - 50,
-        reason: `Arbitrage: market overpriced by ${deviation}bps`,
-      };
-    } else {
-      // Underpriced - buy the lower one
-      return {
-        market,
-        direction: data.yesPrice < data.noPrice ? 'buy_yes' : 'buy_no',
-        confidence: Math.min(Math.abs(deviation) / 100, 1),
-        targetPrice: data.yesPrice < data.noPrice ? data.yesPrice + 50 : data.noPrice + 50,
-        reason: `Arbitrage: market underpriced by ${-deviation}bps`,
-      };
-    }
-  }
-
-  toOrder(signal: Signal, bankroll: bigint): OrderParams | null {
-    // Arbitrage uses larger positions due to lower risk
-    const riskAmount = bankroll * BigInt(Math.floor(signal.confidence * 200)) / 10000n;
-    const quantity = riskAmount * 10000n / BigInt(signal.targetPrice);
-
-    return {
-      side: signal.direction.startsWith('buy') ? Side.Buy : Side.Sell,
-      outcome: signal.direction.includes('yes') ? Outcome.Yes : Outcome.No,
-      price: signal.targetPrice,
-      quantity,
-      orderType: OrderType.ImmediateOrCancel, // Execute immediately
-    };
-  }
-}
-
-/**
- * Composite strategy that combines multiple strategies
- */
 export class CompositeStrategy implements Strategy {
   name = 'composite';
 
-  constructor(
-    private readonly strategies: Array<{ strategy: Strategy; weight: number }>,
-  ) {}
+  constructor(private readonly strategies: Array<{ strategy: Strategy; weight: number }>) {}
 
-  analyze(market: PublicKey, data: MarketData): Signal | null {
-    const signals: Array<{ signal: Signal; weight: number }> = [];
-
+  analyze(data: MarketData): Signal | null {
+    const weightedSignals: Array<{ signal: Signal; weight: number }> = [];
     for (const { strategy, weight } of this.strategies) {
-      const signal = strategy.analyze(market, data);
-      if (signal) {
-        signals.push({ signal, weight });
-      }
+      const signal = strategy.analyze(data);
+      if (signal) weightedSignals.push({ signal, weight });
     }
+    if (weightedSignals.length === 0) return null;
 
-    if (signals.length === 0) {
-      return null;
-    }
-
-    // Find consensus direction
     let yesScore = 0;
     let noScore = 0;
-
-    for (const { signal, weight } of signals) {
-      const score = signal.confidence * weight;
-      if (signal.direction.includes('yes')) {
-        yesScore += score;
-      } else {
-        noScore += score;
-      }
+    for (const { signal, weight } of weightedSignals) {
+      if (signal.direction === 'buy_yes') yesScore += signal.confidence * weight;
+      else noScore += signal.confidence * weight;
     }
 
-    const totalWeight = this.strategies.reduce((sum, s) => sum + s.weight, 0);
+    const totalWeight = this.strategies.reduce((sum, entry) => sum + entry.weight, 0) || 1;
     const normalizedYes = yesScore / totalWeight;
     const normalizedNo = noScore / totalWeight;
+    if (Math.max(normalizedYes, normalizedNo) < 0.3) return null;
 
-    if (Math.max(normalizedYes, normalizedNo) < 0.3) {
-      return null;
-    }
-
-    const direction = normalizedYes > normalizedNo ? 'buy_yes' : 'buy_no';
-    const avgPrice = signals.reduce((sum, s) => sum + s.signal.targetPrice * s.weight, 0) /
-                     signals.reduce((sum, s) => sum + s.weight, 0);
+    const direction = normalizedYes >= normalizedNo ? 'buy_yes' : 'buy_no';
+    const averageTarget = Math.round(
+      weightedSignals.reduce((sum, item) => sum + item.signal.targetPriceBps * item.weight, 0) /
+      weightedSignals.reduce((sum, item) => sum + item.weight, 0)
+    );
 
     return {
-      market,
-      direction: direction as Signal['direction'],
+      marketId: data.marketId,
+      direction,
       confidence: Math.max(normalizedYes, normalizedNo),
-      targetPrice: Math.round(avgPrice),
-      reason: `Composite: ${signals.length} strategies agree`,
+      targetPriceBps: averageTarget,
+      reason: `${weightedSignals.length} strategy consensus`,
     };
   }
 
   toOrder(signal: Signal, bankroll: bigint): OrderParams | null {
-    const riskAmount = bankroll * BigInt(Math.floor(signal.confidence * 100)) / 10000n;
-    const quantity = riskAmount * 10000n / BigInt(signal.targetPrice);
+    const quantity = (bankroll * BigInt(Math.floor(signal.confidence * 1000))) / 10000n;
+    if (quantity <= 0n) return null;
 
     return {
-      side: signal.direction.startsWith('buy') ? Side.Buy : Side.Sell,
-      outcome: signal.direction.includes('yes') ? Outcome.Yes : Outcome.No,
-      price: signal.targetPrice,
+      marketId: signal.marketId,
+      outcome: signal.direction === 'buy_yes' ? Outcome.Yes : Outcome.No,
+      priceBps: signal.targetPriceBps,
       quantity,
       orderType: OrderType.Limit,
     };

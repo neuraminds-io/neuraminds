@@ -70,7 +70,7 @@ export function OrderForm({ market, onSuccess }: OrderFormProps) {
         outcome,
         orderType: price ? 'limit' : 'market',
         price: price ? parseFloat(price) : undefined,
-        quantity: side === 'buy' ? Math.floor(shares) : amountValue,
+        quantity: amountValue,
       });
       setAmount('');
       setPrice('');

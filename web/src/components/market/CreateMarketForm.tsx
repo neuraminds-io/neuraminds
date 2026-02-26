@@ -1,11 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { waitForTransactionReceipt } from '@wagmi/core';
+import { parseEventLogs, keccak256, stringToBytes } from 'viem';
+import { useConfig, useWriteContract } from 'wagmi';
+import { useBaseWallet } from '@/hooks/useBaseWallet';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { MARKET_CORE_ABI, MARKET_CORE_ADDRESS, MARKET_CREATED_EVENT_ABI, assertContractAddress } from '@/lib/contracts';
 import { cn } from '@/lib/utils';
 
 interface CreateMarketFormProps {
@@ -31,8 +34,9 @@ const RESOLUTION_SOURCES = [
 ];
 
 export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
-  const router = useRouter();
-  const { publicKey, connected } = useWallet();
+  const baseWallet = useBaseWallet();
+  const config = useConfig();
+  const { writeContractAsync } = useWriteContract();
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -116,7 +120,7 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
   };
 
   const handleSubmit = async () => {
-    if (!connected || !publicKey) {
+    if (!baseWallet.isConnected || !baseWallet.address) {
       setError('Please connect your wallet');
       return;
     }
@@ -125,27 +129,50 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
     setError(null);
 
     try {
-      // TODO: Call API to create market
-      const endDateTime = new Date(`${tradingEndDate}T${tradingEndTime}`);
+      await baseWallet.ensureBaseChain();
 
-      const marketData = {
-        question,
-        description,
-        category,
-        resolutionSource: resolutionSource === 'custom' ? customSource : resolutionSource,
-        tradingEnd: endDateTime.toISOString(),
-        initialLiquidity: parseFloat(initialLiquidity) * 1_000_000,
-        creator: publicKey.toBase58(),
-      };
+      const marketCoreAddress = assertContractAddress(
+        MARKET_CORE_ADDRESS,
+        'NEXT_PUBLIC_MARKET_CORE_ADDRESS'
+      );
+      const closeTimeSeconds = BigInt(
+        Math.floor(new Date(`${tradingEndDate}T${tradingEndTime}:00Z`).getTime() / 1000)
+      );
+      if (closeTimeSeconds <= BigInt(Math.floor(Date.now() / 1000))) {
+        throw new Error('Trading end date must be in the future');
+      }
 
-      console.log('Creating market:', marketData);
+      const questionHash = keccak256(stringToBytes(question.trim().toLowerCase()));
+      const resolver = baseWallet.address as `0x${string}`;
+      const txHash = await writeContractAsync({
+        address: marketCoreAddress,
+        abi: MARKET_CORE_ABI,
+        functionName: 'createMarket',
+        args: [questionHash, closeTimeSeconds, resolver],
+      });
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const receipt = await waitForTransactionReceipt(config, { hash: txHash });
+      const [event] = parseEventLogs({
+        abi: MARKET_CREATED_EVENT_ABI,
+        eventName: 'MarketCreated',
+        logs: receipt.logs,
+      });
 
-      const mockMarketId = 'market-' + Date.now();
-      onSuccess?.(mockMarketId);
-      router.push(`/markets/${mockMarketId}`);
+      const marketId = event?.args.marketId?.toString() || '';
+      if (!marketId) {
+        throw new Error('Market created but market id was not emitted');
+      }
+      onSuccess?.(marketId);
+
+      setQuestion('');
+      setDescription('');
+      setCategory('');
+      setResolutionSource('');
+      setCustomSource('');
+      setTradingEndDate('');
+      setTradingEndTime('23:59');
+      setInitialLiquidity('100');
+      setStep(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create market');
     } finally {
@@ -360,7 +387,7 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
 
             <div className="p-4  bg-bg-tertiary">
               <p className="text-sm text-text-secondary">Creation Fee</p>
-              <p className="text-xl font-semibold text-text-primary">0.5 SOL</p>
+              <p className="text-xl font-semibold text-text-primary">0.5 NEURA</p>
             </div>
           </div>
         )}
@@ -391,9 +418,9 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
               variant="primary"
               onClick={handleSubmit}
               loading={loading}
-              disabled={!connected}
+              disabled={!baseWallet.isConnected}
             >
-              {connected ? 'Create Market' : 'Connect Wallet'}
+              {baseWallet.isConnected ? 'Create Market' : 'Connect Wallet'}
             </Button>
           )}
         </div>

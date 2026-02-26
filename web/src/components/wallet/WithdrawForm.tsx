@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { api } from '@/lib/api';
-import { CHAIN_MODE } from '@/lib/constants';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 
@@ -16,7 +15,6 @@ function formatUsdc(amount: number): string {
 }
 
 export function WithdrawForm({ availableBalance, onSuccess }: WithdrawFormProps) {
-  const isBaseMode = CHAIN_MODE === 'base';
   const [amount, setAmount] = useState('');
   const [destination, setDestination] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,10 +27,7 @@ export function WithdrawForm({ availableBalance, onSuccess }: WithdrawFormProps)
   const netAmount = amountLamports - fee;
 
   const isValidDestination = (address: string) => {
-    if (isBaseMode) {
-      return /^0x[a-fA-F0-9]{40}$/.test(address);
-    }
-    return address.length >= 32;
+    return /^0x[a-fA-F0-9]{40}$/.test(address);
   };
 
   const handleWithdraw = async () => {
@@ -47,11 +42,7 @@ export function WithdrawForm({ availableBalance, onSuccess }: WithdrawFormProps)
     }
 
     if (!destination || !isValidDestination(destination)) {
-      setError(
-        isBaseMode
-          ? 'Enter a valid Base wallet address (0x...)'
-          : 'Enter a valid Solana wallet address'
-      );
+      setError('Enter a valid Base wallet address (0x...)');
       return;
     }
 
@@ -129,7 +120,7 @@ export function WithdrawForm({ availableBalance, onSuccess }: WithdrawFormProps)
           type="text"
           value={destination}
           onChange={(e) => setDestination(e.target.value)}
-          placeholder={isBaseMode ? '0x wallet address' : 'Solana wallet address'}
+          placeholder="0x wallet address"
           className="font-mono text-sm"
         />
       </div>

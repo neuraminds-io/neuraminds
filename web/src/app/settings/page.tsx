@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
 
 import { useBaseWallet } from '@/hooks/useBaseWallet';
 import { api, type BaseTokenState } from '@/lib/api';
@@ -9,8 +8,6 @@ import { PageShell } from '@/components/layout';
 import { Card, Button } from '@/components/ui';
 import {
   BASE_RPC_ENDPOINT,
-  CHAIN_MODE,
-  SOLANA_RPC_ENDPOINT,
 } from '@/lib/constants';
 import { truncateAddress } from '@/lib/utils';
 
@@ -34,25 +31,15 @@ function formatTokenSupply(totalSupplyHex: string, decimals: number): string {
 }
 
 export default function SettingsPage() {
-  const solanaWallet = useWallet();
   const baseWallet = useBaseWallet();
-  const isBaseMode = CHAIN_MODE === 'base';
 
   const [baseTokenState, setBaseTokenState] = useState<BaseTokenState | null>(null);
   const [baseTokenError, setBaseTokenError] = useState<string | null>(null);
 
-  const connected = isBaseMode ? baseWallet.isConnected : solanaWallet.connected;
-  const walletAddress = isBaseMode
-    ? baseWallet.address
-    : solanaWallet.publicKey?.toBase58();
+  const connected = baseWallet.isConnected;
+  const walletAddress = baseWallet.address;
 
   useEffect(() => {
-    if (!isBaseMode) {
-      setBaseTokenState(null);
-      setBaseTokenError(null);
-      return;
-    }
-
     let mounted = true;
 
     api
@@ -71,14 +58,10 @@ export default function SettingsPage() {
     return () => {
       mounted = false;
     };
-  }, [isBaseMode]);
+  }, []);
 
   const disconnectWallet = () => {
-    if (isBaseMode) {
-      baseWallet.disconnect();
-      return;
-    }
-    solanaWallet.disconnect();
+    baseWallet.disconnect();
   };
 
   return (
@@ -126,15 +109,15 @@ export default function SettingsPage() {
 
       <Card className="mb-6">
         <h2 className="font-semibold mb-4">Network</h2>
-        <div className="space-y-2">
+          <div className="space-y-2">
           <div className="flex items-center justify-between py-2">
-            <span>{isBaseMode ? 'Base' : 'Solana Devnet'}</span>
+            <span>Base</span>
             <span className="w-2 h-2 bg-accent " />
           </div>
           <div className="text-text-secondary text-sm break-all">
-            RPC: {isBaseMode ? BASE_RPC_ENDPOINT : SOLANA_RPC_ENDPOINT}
+            RPC: {BASE_RPC_ENDPOINT}
           </div>
-          {isBaseMode && baseTokenState && (
+          {baseTokenState && (
             <>
               <div className="text-text-secondary text-sm break-all">
                 Token: {baseTokenState.token_address}
@@ -144,7 +127,7 @@ export default function SettingsPage() {
               </div>
             </>
           )}
-          {isBaseMode && baseTokenError && (
+          {baseTokenError && (
             <div className="text-red-400 text-sm">Token state unavailable: {baseTokenError}</div>
           )}
         </div>

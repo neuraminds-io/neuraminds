@@ -16,6 +16,26 @@ use super::rate_limit::check_order_rate_limit;
 
 const IDEMPOTENCY_KEY_HEADER: &str = "idempotency-key";
 
+fn ensure_legacy_order_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.legacy_reads_enabled {
+        return Err(ApiError::bad_request(
+            "LEGACY_READ_PATH_DISABLED",
+            "Legacy order read path is disabled",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_legacy_order_write_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.legacy_writes_enabled {
+        return Err(ApiError::bad_request(
+            "LEGACY_WRITE_PATH_DISABLED",
+            "Legacy order write path is disabled",
+        ));
+    }
+    Ok(())
+}
+
 /// Extract idempotency key from request headers
 fn get_idempotency_key(headers: &HeaderMap) -> Option<String> {
     headers
@@ -30,6 +50,8 @@ pub async fn list_orders(
     state: web::Data<Arc<AppState>>,
     query: web::Query<ListOrdersQuery>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_order_mode(&state)?;
+
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
     let owner = &user.wallet_address;
@@ -63,6 +85,8 @@ pub async fn get_order(
     state: web::Data<Arc<AppState>>,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_order_mode(&state)?;
+
     // SECURITY: Require authentication
     let user = require_auth!(&req, &state);
 
@@ -95,6 +119,8 @@ pub async fn place_order(
     state: web::Data<Arc<AppState>>,
     body: web::Json<PlaceOrderRequest>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_order_write_mode(&state)?;
+
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
 
@@ -330,6 +356,8 @@ pub async fn cancel_order(
     state: web::Data<Arc<AppState>>,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
+    ensure_legacy_order_write_mode(&state)?;
+
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
 

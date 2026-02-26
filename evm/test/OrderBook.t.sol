@@ -2,96 +2,194 @@
 pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {MarketCore} from "../src/MarketCore.sol";
 import {OrderBook} from "../src/OrderBook.sol";
+import {MockERC20} from "./mocks/MockERC20.sol";
 
 contract OrderBookTest is Test {
     address internal admin = makeAddr("admin");
+    address internal creator = makeAddr("creator");
+    address internal resolver = makeAddr("resolver");
     address internal matcher = makeAddr("matcher");
-    address internal maker = makeAddr("maker");
+    address internal yesTrader = makeAddr("yes-trader");
+    address internal noTrader = makeAddr("no-trader");
     address internal outsider = makeAddr("outsider");
 
+    MarketCore internal marketCore;
     OrderBook internal orderBook;
+    MockERC20 internal usdc;
 
     function setUp() external {
-        orderBook = new OrderBook(admin);
+        marketCore = new MarketCore(admin);
+        usdc = new MockERC20("USD Coin", "USDC");
+        orderBook = new OrderBook(admin, address(marketCore), address(usdc));
 
-        bytes32 matcherRole = orderBook.MATCHER_ROLE();
-        vm.prank(admin);
-        orderBook.grantRole(matcherRole, matcher);
+        vm.startPrank(admin);
+        marketCore.grantRole(marketCore.MARKET_CREATOR_ROLE(), creator);
+        marketCore.grantRole(marketCore.RESOLVER_ROLE(), resolver);
+        orderBook.grantRole(orderBook.MATCHER_ROLE(), matcher);
+        vm.stopPrank();
+
+        usdc.mint(yesTrader, 1_000e6);
+        usdc.mint(noTrader, 1_000e6);
+
+        vm.prank(yesTrader);
+        usdc.approve(address(orderBook), type(uint256).max);
+        vm.prank(noTrader);
+        usdc.approve(address(orderBook), type(uint256).max);
     }
 
     function test_placeOrder() external {
-        vm.prank(maker);
+        vm.prank(yesTrader);
         uint256 orderId = orderBook.placeOrder(1, true, 5_000, 100e6, uint64(block.timestamp + 1 days));
 
         (
-            address orderMaker,
+            address maker,
             uint256 marketId,
             bool isYes,
             uint128 priceBps,
             uint128 size,
-            uint128 remaining,,
+            uint128 remaining,
+            uint64 expiry,
             bool canceled
         ) = orderBook.orders(orderId);
 
         assertEq(orderId, 1);
-        assertEq(orderMaker, maker);
+        assertEq(maker, yesTrader);
         assertEq(marketId, 1);
         assertEq(isYes, true);
         assertEq(priceBps, 5_000);
         assertEq(size, 100e6);
         assertEq(remaining, 100e6);
+        assertGt(expiry, block.timestamp);
         assertEq(canceled, false);
     }
 
-    function test_cancelOrder() external {
-        vm.prank(maker);
-        uint256 orderId = orderBook.placeOrder(7, false, 4_900, 50e6, uint64(block.timestamp + 1 days));
+    function test_matchAndClaimResolvedMarket() external {
+        uint64 closeTime = uint64(block.timestamp + 4 hours);
 
-        vm.prank(maker);
-        orderBook.cancelOrder(orderId);
+        vm.prank(creator);
+        uint256 marketId = marketCore.createMarket(keccak256("Will BTC close above 120k?"), closeTime, resolver);
 
-        (,,,,,,, bool canceled) = orderBook.orders(orderId);
-        assertTrue(canceled);
-    }
+        vm.prank(yesTrader);
+        uint256 yesOrderId = orderBook.placeOrder(marketId, true, 5_500, 100e6, uint64(block.timestamp + 1 days));
 
-    function test_fillOrder() external {
-        vm.prank(maker);
-        uint256 orderId = orderBook.placeOrder(3, true, 4_200, 75e6, uint64(block.timestamp + 1 days));
+        vm.prank(noTrader);
+        uint256 noOrderId = orderBook.placeOrder(marketId, false, 4_800, 100e6, uint64(block.timestamp + 1 days));
 
         vm.prank(matcher);
-        orderBook.fillOrder(orderId, 25e6);
+        orderBook.matchOrders(yesOrderId, noOrderId, 40e6);
 
-        (,,,,, uint128 remaining,,) = orderBook.orders(orderId);
-        assertEq(remaining, 50e6);
+        (,,,,, uint128 yesRemaining,,) = orderBook.orders(yesOrderId);
+        (,,,,, uint128 noRemaining,,) = orderBook.orders(noOrderId);
+        assertEq(yesRemaining, 60e6);
+        assertEq(noRemaining, 60e6);
+        assertEq(usdc.balanceOf(address(orderBook)), 80e6);
+
+        (uint128 yesShares,, bool yesClaimed) = orderBook.positions(marketId, yesTrader);
+        (, uint128 noShares, bool noClaimed) = orderBook.positions(marketId, noTrader);
+        assertEq(yesShares, 40e6);
+        assertEq(noShares, 40e6);
+        assertEq(yesClaimed, false);
+        assertEq(noClaimed, false);
+
+        vm.warp(closeTime + 1);
+        vm.prank(resolver);
+        marketCore.resolveMarket(marketId, true);
+
+        assertEq(orderBook.claimable(marketId, yesTrader), 80e6);
+        assertEq(orderBook.claimable(marketId, noTrader), 0);
+
+        vm.prank(yesTrader);
+        uint256 payout = orderBook.claim(marketId);
+        assertEq(payout, 80e6);
+        assertEq(usdc.balanceOf(yesTrader), 1_040e6);
+
+        vm.prank(noTrader);
+        vm.expectRevert(OrderBook.NoWinningShares.selector);
+        orderBook.claim(marketId);
     }
 
-    function test_fillFailsForUnauthorizedMatcher() external {
-        vm.prank(maker);
-        uint256 orderId = orderBook.placeOrder(3, true, 4_200, 75e6, uint64(block.timestamp + 1 days));
+    function test_matchFailsForInvalidPriceCross() external {
+        vm.prank(creator);
+        uint256 marketId = marketCore.createMarket(keccak256("price-cross"), uint64(block.timestamp + 2 hours), resolver);
+
+        vm.prank(yesTrader);
+        uint256 yesOrderId = orderBook.placeOrder(marketId, true, 4_000, 100e6, uint64(block.timestamp + 1 days));
+
+        vm.prank(noTrader);
+        uint256 noOrderId = orderBook.placeOrder(marketId, false, 5_000, 100e6, uint64(block.timestamp + 1 days));
+
+        vm.prank(matcher);
+        vm.expectRevert(OrderBook.PriceCrossFailed.selector);
+        orderBook.matchOrders(yesOrderId, noOrderId, 10e6);
+    }
+
+    function test_matchFailsForUnauthorizedMatcher() external {
+        vm.prank(creator);
+        uint256 marketId = marketCore.createMarket(keccak256("auth"), uint64(block.timestamp + 2 hours), resolver);
+
+        vm.prank(yesTrader);
+        uint256 yesOrderId = orderBook.placeOrder(marketId, true, 5_200, 50e6, uint64(block.timestamp + 1 days));
+
+        vm.prank(noTrader);
+        uint256 noOrderId = orderBook.placeOrder(marketId, false, 4_900, 50e6, uint64(block.timestamp + 1 days));
 
         vm.prank(outsider);
         vm.expectRevert();
-        orderBook.fillOrder(orderId, 10e6);
+        orderBook.matchOrders(yesOrderId, noOrderId, 10e6);
     }
 
-    function test_fillFailsWhenAmountExceedsRemaining() external {
-        vm.prank(maker);
-        uint256 orderId = orderBook.placeOrder(3, true, 4_200, 75e6, uint64(block.timestamp + 1 days));
+    function test_claimFailsBeforeResolve() external {
+        vm.prank(creator);
+        uint256 marketId = marketCore.createMarket(keccak256("resolve-gate"), uint64(block.timestamp + 2 hours), resolver);
+
+        vm.prank(yesTrader);
+        uint256 yesOrderId = orderBook.placeOrder(marketId, true, 5_100, 50e6, uint64(block.timestamp + 1 days));
+
+        vm.prank(noTrader);
+        uint256 noOrderId = orderBook.placeOrder(marketId, false, 4_900, 50e6, uint64(block.timestamp + 1 days));
 
         vm.prank(matcher);
-        vm.expectRevert(OrderBook.FillExceedsRemaining.selector);
-        orderBook.fillOrder(orderId, 100e6);
+        orderBook.matchOrders(yesOrderId, noOrderId, 15e6);
+
+        vm.prank(yesTrader);
+        vm.expectRevert(OrderBook.MarketNotResolved.selector);
+        orderBook.claim(marketId);
     }
 
-    function test_orderExpires() external {
-        vm.prank(maker);
-        uint256 orderId = orderBook.placeOrder(5, false, 5_500, 10e6, uint64(block.timestamp + 1 hours));
+    function test_pauseBlocksMatchingAndClaim() external {
+        vm.prank(creator);
+        uint256 marketId = marketCore.createMarket(keccak256("pause"), uint64(block.timestamp + 1 hours), resolver);
+
+        vm.prank(yesTrader);
+        uint256 yesOrderId = orderBook.placeOrder(marketId, true, 5_100, 40e6, uint64(block.timestamp + 1 days));
+
+        vm.prank(noTrader);
+        uint256 noOrderId = orderBook.placeOrder(marketId, false, 4_900, 40e6, uint64(block.timestamp + 1 days));
+
+        vm.prank(admin);
+        orderBook.pause();
+
+        vm.prank(matcher);
+        vm.expectRevert();
+        orderBook.matchOrders(yesOrderId, noOrderId, 10e6);
+
+        vm.prank(admin);
+        orderBook.unpause();
+
+        vm.prank(matcher);
+        orderBook.matchOrders(yesOrderId, noOrderId, 10e6);
 
         vm.warp(block.timestamp + 1 hours + 1);
+        vm.prank(resolver);
+        marketCore.resolveMarket(marketId, true);
 
-        vm.prank(matcher);
-        vm.expectRevert(OrderBook.OrderExpired.selector);
-        orderBook.fillOrder(orderId, 1e6);
+        vm.prank(admin);
+        orderBook.pause();
+
+        vm.prank(yesTrader);
+        vm.expectRevert();
+        orderBook.claim(marketId);
     }
 }

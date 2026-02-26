@@ -8,6 +8,43 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 
+function parseEnvLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith('#')) return null;
+
+  const idx = trimmed.indexOf('=');
+  if (idx <= 0) return null;
+
+  const key = trimmed.slice(0, idx).trim();
+  let value = trimmed.slice(idx + 1).trim();
+
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+
+  return { key, value };
+}
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, 'utf8');
+  for (const line of content.split(/\r?\n/)) {
+    const parsed = parseEnvLine(line);
+    if (!parsed) continue;
+
+    const current = process.env[parsed.key];
+    if (typeof current === 'string' && current.trim().length > 0) continue;
+    process.env[parsed.key] = parsed.value;
+  }
+}
+
+loadEnvFile(path.join(ROOT, '.env'));
+loadEnvFile(path.join(ROOT, '.env.secrets.local'));
+loadEnvFile(path.join(ROOT, 'web', '.env.local'));
+
 const args = new Set(process.argv.slice(2));
 const modeArg = process.argv.find((arg) => arg.startsWith('--mode='));
 const mode = (modeArg?.split('=')[1] || 'production').toLowerCase();
@@ -36,15 +73,23 @@ const requiredByMode = {
       'BASE_WS_URL',
       'BASE_CHAIN_ID',
       'SIWE_DOMAIN',
-      'NEURA_TOKEN_ADDRESS',
       'MARKET_CORE_ADDRESS',
       'ORDER_BOOK_ADDRESS',
+      'COLLATERAL_VAULT_ADDRESS',
       'EVM_ENABLED',
+      'EVM_READS_ENABLED',
+      'EVM_WRITES_ENABLED',
+      'LEGACY_READS_ENABLED',
+      'LEGACY_WRITES_ENABLED',
     ],
     frontendBase: [
       'NEXT_PUBLIC_BASE_RPC_URL',
       'NEXT_PUBLIC_BASE_CHAIN_ID',
       'NEXT_PUBLIC_SIWE_DOMAIN',
+      'NEXT_PUBLIC_MARKET_CORE_ADDRESS',
+      'NEXT_PUBLIC_ORDER_BOOK_ADDRESS',
+      'NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS',
+      'NEXT_PUBLIC_COLLATERAL_VAULT_ADDRESS',
     ],
     backendSolana: [
       'SOLANA_RPC_URL',
@@ -62,15 +107,23 @@ const requiredByMode = {
       'BASE_WS_URL',
       'BASE_CHAIN_ID',
       'SIWE_DOMAIN',
-      'NEURA_TOKEN_ADDRESS',
       'MARKET_CORE_ADDRESS',
       'ORDER_BOOK_ADDRESS',
+      'COLLATERAL_VAULT_ADDRESS',
       'EVM_ENABLED',
+      'EVM_READS_ENABLED',
+      'EVM_WRITES_ENABLED',
+      'LEGACY_READS_ENABLED',
+      'LEGACY_WRITES_ENABLED',
     ],
     frontendBase: [
       'NEXT_PUBLIC_BASE_RPC_URL',
       'NEXT_PUBLIC_BASE_CHAIN_ID',
       'NEXT_PUBLIC_SIWE_DOMAIN',
+      'NEXT_PUBLIC_MARKET_CORE_ADDRESS',
+      'NEXT_PUBLIC_ORDER_BOOK_ADDRESS',
+      'NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS',
+      'NEXT_PUBLIC_COLLATERAL_VAULT_ADDRESS',
     ],
     backendSolana: ['SOLANA_RPC_URL', 'SOLANA_WS_URL', 'SOLANA_ENABLED'],
     frontendSolana: ['NEXT_PUBLIC_RPC_URL'],
@@ -212,13 +265,33 @@ function validate() {
 
   const frontendChainMode = readValue('NEXT_PUBLIC_CHAIN_MODE').toLowerCase();
   const evmEnabledRaw = readValue('EVM_ENABLED');
+  const evmReadsRaw = readValue('EVM_READS_ENABLED');
+  const evmWritesRaw = readValue('EVM_WRITES_ENABLED');
+  const legacyReadsRaw = readValue('LEGACY_READS_ENABLED');
+  const legacyWritesRaw = readValue('LEGACY_WRITES_ENABLED');
   const solanaEnabledRaw = readValue('SOLANA_ENABLED');
   const evmEnabled = parseBool(readValue('EVM_ENABLED'));
+  const evmReadsEnabled = parseBool(readValue('EVM_READS_ENABLED'));
+  const evmWritesEnabled = parseBool(readValue('EVM_WRITES_ENABLED'));
+  const legacyReadsEnabled = parseBool(readValue('LEGACY_READS_ENABLED'));
+  const legacyWritesEnabled = parseBool(readValue('LEGACY_WRITES_ENABLED'));
   const solanaEnabled = parseBool(readValue('SOLANA_ENABLED'));
 
   if (chainMode === 'base' || chainMode === 'dual') {
     if (!evmEnabled && mode !== 'development' && (!allowMissingSecrets || evmEnabledRaw)) {
       errors.push('EVM_ENABLED must be true when chain mode includes base');
+    }
+    if (!evmReadsEnabled && mode !== 'development' && (!allowMissingSecrets || evmReadsRaw)) {
+      errors.push('EVM_READS_ENABLED must be true when chain mode includes base');
+    }
+    if (!evmWritesEnabled && mode !== 'development' && (!allowMissingSecrets || evmWritesRaw)) {
+      errors.push('EVM_WRITES_ENABLED must be true when chain mode includes base');
+    }
+    if (legacyReadsEnabled && mode !== 'development' && (!allowMissingSecrets || legacyReadsRaw)) {
+      errors.push('LEGACY_READS_ENABLED must be false when chain mode includes base');
+    }
+    if (legacyWritesEnabled && mode !== 'development' && (!allowMissingSecrets || legacyWritesRaw)) {
+      errors.push('LEGACY_WRITES_ENABLED must be false when chain mode includes base');
     }
     if (frontendChainMode && frontendChainMode !== 'base') {
       errors.push('NEXT_PUBLIC_CHAIN_MODE must be base when chain mode includes base');
@@ -236,6 +309,12 @@ function validate() {
     if (frontendChainMode && chainMode === 'solana' && frontendChainMode !== 'solana') {
       errors.push('NEXT_PUBLIC_CHAIN_MODE must be solana when chain mode is solana');
     }
+  }
+
+  if ((chainMode === 'base' || chainMode === 'dual') && !readValue('NEURA_TOKEN_ADDRESS')) {
+    warnings.push(
+      'NEURA_TOKEN_ADDRESS is not set. Token-related UI/API features should stay disabled until token launch.'
+    );
   }
 
   if (mode === 'production') {

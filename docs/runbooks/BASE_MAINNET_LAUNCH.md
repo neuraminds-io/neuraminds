@@ -1,57 +1,69 @@
 # Base Mainnet Launch Runbook
 
-Last updated: February 25, 2026
-Owner: Protocol + Backend + Frontend joint release team
+Last updated: February 26, 2026
+Owner: Protocol + Backend + Frontend release team
 
 ## 1. Objective
 
-Launch NeuralMinds on Base mainnet with a controlled cutover from pre-production.
+Launch NeuralMinds on Base with production programs only:
+- `MarketCore`
+- `OrderBook`
+- `CollateralVault`
 
-This runbook covers:
-- Sepolia rehearsal (required)
-- Mainnet deployment
-- Verification and smoke checks
-- Cutover sequence
-- Rollback protocol
+Native token launch is out of scope for this runbook. If token support is required at launch, use the externally launched token address in config.
 
 ## 2. Preconditions
 
 All must be true before mainnet:
 
-- `docs/BASE_MIGRATION_BOARD.md` has no unresolved `P0` migration blockers.
 - `npm run evm:test` passes locally and in CI.
 - `cargo check --manifest-path app/Cargo.toml` passes.
 - `npm --prefix web run build` passes.
 - Launch readiness checks pass:
   - `npm run launch:config`
   - `npm run launch:readiness:strict`
-- Staging environment is running with Base chain mode and passing synthetic checks.
-- Deployer keys are in Foundry keystore (not raw env vars in shell history).
+- Staging is running in Base mode and synthetic checks are green.
+- Deployer and admin keys are present in Foundry keystore.
+- Admin wallet has enough Base ETH for role-wallet funding and deploy tx fees.
+- Collateral wallet has planned launch USDC budget.
 
 ## 3. Required Environment Variables
 
-### 3.1 Contracts/Deploy
+### 3.1 Contracts / Deploy
 
 - `BASE_RPC_URL`
 - `BASE_SEPOLIA_RPC_URL`
-- `BASESCAN_API_KEY`
 - `FOUNDRY_ACCOUNT`
+- `BASE_KEYSTORE_PASSWORD` (in `.env.secrets.local`)
 - `BASE_ADMIN`
-- `BASE_TREASURY`
-- `NEURA_CAP_WEI`
-- `NEURA_INITIAL_SUPPLY_WEI`
-- `COLLATERAL_TOKEN_ADDRESS` (if external collateral token is used)
+- `BASE_MARKET_CREATOR`
+- `BASE_PAUSER`
+- `BASE_RESOLVER`
+- `BASE_MATCHER`
+- `BASE_OPERATOR`
+- `BOOTSTRAP_ADMIN`
+- `TIMELOCK_MIN_DELAY` (recommended)
+- `TIMELOCK_PROPOSER` (recommended)
+- `TIMELOCK_EXECUTOR` (recommended)
+- `COLLATERAL_TOKEN_BASE_MAINNET`
+- `COLLATERAL_TOKEN_BASE_SEPOLIA`
+- `BASESCAN_API_KEY` (recommended for verification)
 
 ### 3.2 Backend
 
+- `CHAIN_MODE=base`
 - `EVM_ENABLED=true`
+- `EVM_READS_ENABLED=true`
+- `EVM_WRITES_ENABLED=true`
+- `LEGACY_READS_ENABLED=false`
+- `LEGACY_WRITES_ENABLED=false`
 - `BASE_RPC_URL`
 - `BASE_WS_URL`
 - `BASE_CHAIN_ID=8453`
 - `SIWE_DOMAIN`
-- `NEURA_TOKEN_ADDRESS`
 - `MARKET_CORE_ADDRESS`
 - `ORDER_BOOK_ADDRESS`
+- `COLLATERAL_VAULT_ADDRESS`
 - `DATABASE_URL`
 - `REDIS_URL`
 - `JWT_SECRET`
@@ -64,29 +76,73 @@ All must be true before mainnet:
 - `NEXT_PUBLIC_BASE_RPC_URL`
 - `NEXT_PUBLIC_BASE_CHAIN_ID=8453`
 - `NEXT_PUBLIC_SIWE_DOMAIN`
+- `NEXT_PUBLIC_MARKET_CORE_ADDRESS`
+- `NEXT_PUBLIC_ORDER_BOOK_ADDRESS`
+- `NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS`
+- `NEXT_PUBLIC_COLLATERAL_VAULT_ADDRESS`
 - `AUTH_ALLOWED_ORIGINS`
 
-## 4. Sepolia Rehearsal (Mandatory)
+## 4. Funding Model (Current Launch Budget)
 
-Run this full sequence before mainnet deployment.
+Recommended starting allocation for a `$500` initial budget:
 
-### 4.1 Deploy contracts to Sepolia
+- `$425` USDC collateral (initial market depth)
+- `$75` ETH operational reserve (gas + emergency admin actions)
+
+Minimum technical requirement for deploy is much lower, but this split avoids underfunding ops during launch window.
+
+### 4.1 Check balances
 
 ```bash
-npm run evm:deploy:base-sepolia
+npm run base:wallets:status
 ```
 
-Capture deployed addresses and write them to release notes.
+### 4.2 Fund role wallets from admin signer
 
-### 4.2 Contract verification checks
+If the admin key is not in Foundry keystore yet:
 
-- Verify contracts are published on BaseScan for Sepolia.
-- Verify constructor args match expected config.
-- Verify role assignments (`DEFAULT_ADMIN_ROLE`, `MATCHER_ROLE`, `PAUSER_ROLE`) are correct.
+```bash
+cast wallet import base-admin --interactive
+```
 
-### 4.3 Runtime API checks (staging)
+Sepolia rehearsal funding:
 
-With staging backend configured for Sepolia:
+```bash
+npm run base:fund:sepolia
+```
+
+Mainnet funding:
+
+```bash
+npm run base:fund:mainnet
+```
+
+If needed, override defaults:
+
+```bash
+bash scripts/base-distribute-funds.sh --network mainnet --eth-deployer 0.005 --eth-pauser 0.002 --eth-resolver 0.002 --eth-matcher 0.002 --usdc-operator 425
+```
+
+## 5. Sepolia Rehearsal (Mandatory)
+
+### 5.1 Dry-run deployment
+
+```bash
+bash scripts/base-deploy-programs.sh --network sepolia --dry-run --no-verify
+```
+
+### 5.2 Broadcast deployment
+
+```bash
+bash scripts/base-deploy-programs.sh --network sepolia
+```
+
+Artifacts generated:
+- `docs/reports/base-programs-deploy-sepolia.json`
+- `docs/reports/base-programs-deploy-sepolia.env`
+- `docs/reports/base-programs-roles-sepolia.json`
+
+### 5.3 Runtime API checks (staging)
 
 ```bash
 node scripts/synthetic-monitor.mjs \
@@ -96,72 +152,61 @@ node scripts/synthetic-monitor.mjs \
   --chain-mode base
 ```
 
-Expected:
-- `api_health` PASS
-- `api_health_detailed` PASS
-- `api_evm_markets_public` PASS
-- `api_evm_orderbook_smoke` PASS
-- `api_evm_trades_smoke` PASS
-- `web_home` PASS
-
-### 4.4 Functional smoke
-
-Run automated frontend smoke against staging:
+### 5.4 Frontend smoke
 
 ```bash
 npm run base:web:e2e:sepolia -- --api-url https://<staging-api-host> --web-url https://<staging-web-host>
 ```
 
-Then perform manual staging smoke:
-- SIWE login success
-- Market list/detail loads
-- Orderbook renders
-- Trades panel renders
-- At least one order lifecycle action in staging test path (if write flow enabled)
+## 6. Mainnet Deployment Procedure
 
-## 5. Mainnet Deployment Procedure
-
-## 5.1 Freeze window and comms
+### 6.1 Freeze window
 
 - Announce deployment window and rollback owner.
 - Freeze non-launch merges.
-- Pin target commit SHA for deployment.
+- Pin target commit SHA.
 
-### 5.2 Deploy contracts to Base mainnet
+### 6.2 Broadcast programs to Base mainnet
 
 ```bash
-npm run evm:deploy:base
+bash scripts/base-deploy-programs.sh --network mainnet
 ```
 
-Record:
-- deploy tx hashes
-- deployed addresses
-- verification links
+Artifacts generated:
+- `docs/reports/base-programs-deploy-mainnet.json`
+- `docs/reports/base-programs-deploy-mainnet.env`
+- `docs/reports/base-programs-roles-mainnet.json`
 
-### 5.3 Post-deploy onchain verification
+### 6.3 Timelock governance handoff (recommended before opening traffic)
 
-Use `cast` against mainnet RPC:
+Deploy timelock:
 
 ```bash
-cast call <NEURA_TOKEN_ADDRESS> "decimals()(uint8)" --rpc-url "$BASE_RPC_URL"
+npm run evm:deploy:timelock:base
+```
+
+Set `TIMELOCK_ADDRESS` to deployed timelock, then hand off admin roles:
+
+```bash
+npm run evm:handoff:timelock:base
+```
+
+### 6.4 Post-deploy onchain checks
+
+```bash
 cast call <MARKET_CORE_ADDRESS> "marketCount()(uint256)" --rpc-url "$BASE_RPC_URL"
 cast call <ORDER_BOOK_ADDRESS> "orderCount()(uint256)" --rpc-url "$BASE_RPC_URL"
+cast call <COLLATERAL_VAULT_ADDRESS> "collateral()(address)" --rpc-url "$BASE_RPC_URL"
+cast call <ORDER_BOOK_ADDRESS> "claimable(uint256,address)(uint256)" 1 <WALLET_ADDRESS> --rpc-url "$BASE_RPC_URL"
 ```
 
-Sanity criteria:
-- Calls return successfully
-- Values are internally consistent with expected launch state
+### 6.5 Configure backend/frontend
 
-### 5.4 Configure backend and frontend
+- Apply generated contract addresses to production env.
+- Set collateral token and SIWE domain values.
+- Redeploy backend + frontend.
 
-Update production secrets/config:
-- backend Base RPC/WS, chain id, SIWE domain
-- contract addresses (`NEURA_TOKEN_ADDRESS`, `MARKET_CORE_ADDRESS`, `ORDER_BOOK_ADDRESS`)
-- frontend chain mode and Base chain vars
-
-Redeploy backend and frontend.
-
-### 5.5 Post-config smoke
+### 6.6 Post-config smoke
 
 ```bash
 node scripts/synthetic-monitor.mjs \
@@ -169,53 +214,39 @@ node scripts/synthetic-monitor.mjs \
   --api-url https://<prod-api-host> \
   --web-url https://<prod-web-host> \
   --chain-mode base
-```
-
-Run launch summary:
-
-```bash
 npm run launch:summary
 ```
 
-## 6. Production Acceptance Criteria
+## 7. Production Acceptance Criteria
 
-Mainnet launch is considered successful when:
-- All required synthetic monitor checks pass.
-- Backend `/health/detailed` reports healthy database/redis/base components.
-- SIWE auth path works from production domain.
-- Market and orderbook endpoints respond within SLO.
-- Error rate and p95 latency remain within production gates for 60 minutes after launch.
+Launch is successful only if all are true:
 
-## 7. Rollback Plan
+- Synthetic monitor checks pass.
+- Role report for mainnet shows all required roles assigned.
+- Backend `/health/detailed` is green.
+- SIWE login works from production domain.
+- Market and orderbook endpoints stay within SLO for 60 minutes.
 
-Rollback triggers (any one):
-- sustained auth failure
-- sustained API failure for required Base endpoints
-- critical contract misconfiguration discovered post-deploy
-- unacceptable error/latency breach without short-term mitigation
+## 8. Rollback Plan
 
-### 7.1 Application rollback
+Rollback immediately on:
 
-1. Repoint frontend to previous stable release.
-2. Revert backend deployment to previous image/config revision.
-3. If needed, set `EVM_ENABLED=false` and restore prior chain mode behavior.
-4. Confirm service recovery with synthetic monitor.
+- sustained auth failure,
+- sustained API failures for required Base endpoints,
+- contract misconfiguration,
+- unacceptable latency/error spikes.
 
-### 7.2 Contract-side emergency response
+Immediate actions:
 
-If contract controls support pausing and emergency roles:
-- execute pause actions from authorized role accounts
-- suspend risky flows while incident response proceeds
+1. Repoint frontend to prior stable release.
+2. Roll backend to prior image/config revision.
+3. Pause contracts with authorized pauser if required.
+4. Confirm recovery using synthetic monitor.
 
-Document all pause tx hashes in incident log.
-
-## 8. Post-Launch Tasks
+## 9. Post-Launch Tasks
 
 Within 24 hours:
-- publish launch verification report to `docs/reports/`
-- update `docs/BASE_MIGRATION_BOARD.md` with completed launch items
-- schedule cleanup of deprecated Solana-only paths after stability window
 
-Within 7 days:
-- retrospective on launch quality, incidents, and missing safeguards
-- create follow-up tasks for any observed debt or operational blind spots
+- publish launch verification report in `docs/reports/`
+- record deployed addresses and tx hashes in release notes
+- open follow-up issues for any observed operational gaps

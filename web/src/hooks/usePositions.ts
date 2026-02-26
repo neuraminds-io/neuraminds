@@ -1,49 +1,152 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { waitForTransactionReceipt } from '@wagmi/core';
+import { useConfig, usePublicClient, useWriteContract } from 'wagmi';
+
 import { api } from '@/lib/api';
-import { mockPositions } from '@/lib/mockData';
+import { ORDER_BOOK_ABI, ORDER_BOOK_ADDRESS, assertContractAddress } from '@/lib/contracts';
+import { useBaseWallet } from '@/hooks/useBaseWallet';
 import type { PaginatedResponse, Position } from '@/types';
 
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true' || true;
+function toUnits(value: bigint): number {
+  return Number(value) / 1_000_000;
+}
 
 export function usePositions() {
+  const publicClient = usePublicClient();
+  const baseWallet = useBaseWallet();
+
   return useQuery({
-    queryKey: ['positions'],
+    queryKey: ['positions', baseWallet.address],
+    enabled: !!publicClient && !!baseWallet.address,
+    refetchInterval: 15000,
     queryFn: async (): Promise<PaginatedResponse<Position>> => {
-      if (USE_MOCK) {
-        return {
-          data: mockPositions,
-          total: mockPositions.length,
-          limit: 50,
-          offset: 0,
-          hasMore: false,
-        };
+      if (!publicClient || !baseWallet.address) {
+        return { data: [], total: 0, limit: 0, offset: 0, hasMore: false };
       }
-      return api.getPositions();
+
+      const orderBookAddress = assertContractAddress(
+        ORDER_BOOK_ADDRESS,
+        'NEXT_PUBLIC_ORDER_BOOK_ADDRESS'
+      );
+      const markets = await api.getBaseMarkets({ limit: 200, offset: 0 });
+      if (markets.data.length === 0) {
+        return { data: [], total: 0, limit: 200, offset: 0, hasMore: false };
+      }
+
+      const now = new Date().toISOString();
+      const positions: Position[] = [];
+      for (let idx = 0; idx < markets.data.length; idx += 1) {
+        const market = markets.data[idx];
+        const marketId = BigInt(market.id);
+        let positionRead: readonly [bigint, bigint, boolean];
+        let claimableRaw: bigint;
+        try {
+          positionRead = await publicClient.readContract({
+            address: orderBookAddress,
+            abi: ORDER_BOOK_ABI,
+            functionName: 'positions',
+            args: [marketId, baseWallet.address as `0x${string}`],
+          });
+          claimableRaw = await publicClient.readContract({
+            address: orderBookAddress,
+            abi: ORDER_BOOK_ABI,
+            functionName: 'claimable',
+            args: [marketId, baseWallet.address as `0x${string}`],
+          });
+        } catch {
+          continue;
+        }
+
+        const [yesSharesRaw, noSharesRaw] = positionRead;
+        const yesBalance = toUnits(yesSharesRaw);
+        const noBalance = toUnits(noSharesRaw);
+        if (yesBalance === 0 && noBalance === 0) continue;
+
+        const claimable = toUnits(claimableRaw);
+        const totalDeposited = yesBalance + noBalance;
+        const currentYesPrice = market.yesPrice || 0.5;
+        const currentNoPrice = market.noPrice || 0.5;
+        const markValue = yesBalance * currentYesPrice + noBalance * currentNoPrice;
+        const unrealizedPnl = claimable > 0 ? claimable - totalDeposited : markValue - totalDeposited;
+
+        positions.push({
+          marketId: market.id,
+          marketQuestion: market.question,
+          owner: baseWallet.address,
+          yesBalance,
+          noBalance,
+          avgYesCost: currentYesPrice,
+          avgNoCost: currentNoPrice,
+          currentYesPrice,
+          currentNoPrice,
+          unrealizedPnl,
+          realizedPnl: 0,
+          totalDeposited,
+          totalWithdrawn: 0,
+          openOrderCount: 0,
+          totalTrades: 0,
+          createdAt: now,
+        });
+      }
+
+      return {
+        data: positions,
+        total: positions.length,
+        limit: positions.length,
+        offset: 0,
+        hasMore: false,
+      };
     },
-    enabled: USE_MOCK || api.isAuthenticated(),
   });
 }
 
 export function usePosition(marketId: string) {
+  const positions = usePositions();
   return useQuery({
-    queryKey: ['position', marketId],
+    queryKey: ['position', marketId, positions.data?.data.length || 0],
+    enabled: !!marketId,
     queryFn: async () => {
-      if (USE_MOCK) {
-        return mockPositions.find(p => p.marketId === marketId) || null;
-      }
-      return api.getPosition(marketId);
+      const position = positions.data?.data.find((candidate) => candidate.marketId === marketId);
+      if (!position) throw new Error('Position not found');
+      return position;
     },
-    enabled: !!marketId && (USE_MOCK || api.isAuthenticated()),
   });
 }
 
 export function useClaimWinnings() {
   const queryClient = useQueryClient();
+  const baseWallet = useBaseWallet();
+  const config = useConfig();
+  const { writeContractAsync } = useWriteContract();
 
   return useMutation({
-    mutationFn: (marketId: string) => api.claimWinnings(marketId),
+    mutationFn: async (marketId: string) => {
+      const orderBookAddress = assertContractAddress(
+        ORDER_BOOK_ADDRESS,
+        'NEXT_PUBLIC_ORDER_BOOK_ADDRESS'
+      );
+
+      if (!baseWallet.address || !baseWallet.isConnected) {
+        throw new Error('Connect your wallet before claiming');
+      }
+
+      await baseWallet.ensureBaseChain();
+      const hash = await writeContractAsync({
+        address: orderBookAddress,
+        abi: ORDER_BOOK_ABI,
+        functionName: 'claim',
+        args: [BigInt(marketId)],
+      });
+
+      const receipt = await waitForTransactionReceipt(config, { hash });
+      return {
+        amount: 0,
+        txSignature: receipt.transactionHash,
+      };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['positions'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
   });
 }

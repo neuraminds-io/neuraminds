@@ -48,7 +48,7 @@ export async function createPaymentSession(
     amount: (config.amount / 1_000_000).toFixed(2),
     currency: 'USD',
     crypto_currency: 'USDC',
-    network: 'solana',
+    network: 'base',
     wallet_address: config.walletAddress,
     callback_url: config.callbackUrl,
     success_url: config.successUrl,
