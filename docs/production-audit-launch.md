@@ -17,7 +17,7 @@ The system had useful security and deployment foundations, but launch readiness 
 - [x] Add alert routing ownership matrix (pager, fallback, escalation windows) (`docs/ALERT_ROUTING_MATRIX.md`).
 - [x] Add capacity/load-test baseline for p95/p99 at target QPS (`tests/load/public-baseline.js`, `scripts/load-baseline-report.mjs`, `docs/LOAD_BASELINE.md`).
 - [x] Resolve local strict-gate `web_build` timeout.
-- [ ] Confirm clean strict pass in CI (blocked: all workflow types still end `startup_failure` with zero jobs; latest examples are `Launch Readiness` `22392405620`, self-hosted smoke `22411875355`, and push run `22411957678` on February 25, 2026. Org API also reports GitHub-hosted runners are not supported for this organization.)
+- [x] Confirm clean strict pass in CI (`Launch Readiness` workflow-dispatch run `22456208669` passed on February 26, 2026 with strict gates enabled, including `evm_forge_tests` after Foundry setup was added.)
 
 ## Low Priority (P3 - Technical Debt)
 - [ ] Consolidate legacy compatibility keys once migration window ends.
