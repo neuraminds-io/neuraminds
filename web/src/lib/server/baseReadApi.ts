@@ -240,8 +240,14 @@ export async function readDetailedHealth() {
 
     return {
       status: 'healthy',
+      service: 'neuraminds-web',
       timestamp: new Date().toISOString(),
       checks: {
+        runtime: {
+          status: 'healthy',
+          mode: 'web-only',
+          service: 'neuraminds-web',
+        },
         base: {
           status: 'healthy',
           chain_id: config.chainId,

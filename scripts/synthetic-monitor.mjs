@@ -182,6 +182,10 @@ async function run() {
   } else {
     const payload = parseJsonOrNull(detailed.bodyText);
     const components = payload?.checks || payload?.components || {};
+    const webOnlyApi =
+      payload?.service === 'neuraminds-web' ||
+      components?.runtime?.mode === 'web-only' ||
+      components?.runtime?.service === 'neuraminds-web';
     const componentStatuses = {
       database: components.database?.status,
       redis: components.redis?.status,
@@ -198,7 +202,10 @@ async function run() {
       solana: componentMessages.solana.toLowerCase().includes('disabled'),
       base: componentMessages.base.toLowerCase().includes('disabled'),
     };
-    const requiredComponents = ['database', 'redis'];
+    const requiredComponents = [];
+    if (!webOnlyApi) {
+      requiredComponents.push('database', 'redis');
+    }
     if (requiresSolana) requiredComponents.push('solana');
     if (requiresBase) requiredComponents.push('base');
 
