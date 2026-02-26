@@ -4,7 +4,7 @@
 # Build stage
 FROM rust:1.83-bookworm AS builder
 
-WORKDIR /usr/src/polyguard
+WORKDIR /usr/src/polyguard/app
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -13,22 +13,20 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy manifests first for dependency caching
-COPY Cargo.toml Cargo.lock ./
-COPY app/Cargo.toml ./app/
+# Copy manifest first for dependency caching
+COPY app/Cargo.toml ./Cargo.toml
 
 # Create dummy source for dependency compilation
-RUN mkdir -p app/src && \
-    echo 'fn main() {}' > app/src/main.rs && \
-    cargo build --release --manifest-path app/Cargo.toml && \
-    rm -rf app/src
+RUN mkdir -p src && \
+    echo 'fn main() {}' > src/main.rs && \
+    cargo build --release && \
+    rm -rf src
 
 # Copy actual source
-COPY app/src ./app/src
+COPY app/src ./src
 
 # Build release binary
-RUN touch app/src/main.rs && \
-    cargo build --release --manifest-path app/Cargo.toml
+RUN touch src/main.rs && cargo build --release
 
 # Build sqlx-cli for migrations
 RUN cargo install sqlx-cli --no-default-features --features postgres
@@ -48,7 +46,7 @@ USER polyguard
 WORKDIR /home/polyguard
 
 # Copy binary and sqlx-cli from builder
-COPY --from=builder /usr/src/polyguard/target/release/polyguard-api ./
+COPY --from=builder /usr/src/polyguard/app/target/release/polyguard-api ./
 COPY --from=builder /usr/local/cargo/bin/sqlx ./
 
 # Copy migrations

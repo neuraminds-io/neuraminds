@@ -76,6 +76,19 @@ pub struct DatabaseService {
 }
 
 impl DatabaseService {
+    fn migrations_path() -> PathBuf {
+        if let Ok(path) = env::var("MIGRATIONS_DIR") {
+            return PathBuf::from(path);
+        }
+
+        let runtime_path = PathBuf::from("migrations");
+        if runtime_path.exists() {
+            return runtime_path;
+        }
+
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../migrations")
+    }
+
     pub async fn new(database_url: &str) -> Result<Self> {
         Self::with_config(database_url, PoolConfig::from_env()).await
     }
@@ -101,7 +114,7 @@ impl DatabaseService {
 
         // Run migrations automatically
         info!("Running database migrations...");
-        let migrations_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../migrations");
+        let migrations_path = Self::migrations_path();
         sqlx::migrate::Migrator::new(migrations_path.as_path())
             .await
             .map_err(|e| anyhow::anyhow!("Failed to load migrations: {}", e))?
