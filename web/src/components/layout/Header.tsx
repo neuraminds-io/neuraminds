@@ -1,13 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { CHAIN_MODE } from '@/lib/constants';
 import { useBaseWallet } from '@/hooks/useBaseWallet';
+import { BrandLogo } from '@/components/layout/BrandLogo';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { cn } from '@/lib/utils';
 
@@ -78,13 +78,7 @@ export function Header() {
           {/* Logo + Nav */}
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center group">
-              <Image
-                src="/neuraminds.svg"
-                alt="neuraminds"
-                width={28}
-                height={28}
-                className="w-7 h-7"
-              />
+              <BrandLogo />
             </Link>
 
             <nav className="hidden md:flex items-center gap-1">

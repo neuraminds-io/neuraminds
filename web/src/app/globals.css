@@ -186,6 +186,62 @@
     @apply font-mono text-[11px] uppercase tracking-[0.16em] text-text-secondary;
     background-color: color-mix(in srgb, var(--color-bg-secondary) 92%, transparent);
   }
+
+  .brandmark {
+    display: inline-flex;
+    flex-direction: column;
+    line-height: 1;
+    user-select: none;
+    text-transform: lowercase;
+  }
+
+  .brandmark-main {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    font-family: var(--font-mono);
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--color-text-primary);
+  }
+
+  .brandmark-main::before {
+    content: '>';
+    margin-right: 6px;
+    color: var(--color-text-muted);
+  }
+
+  .brandmark-dots {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    gap: 4px;
+  }
+
+  .brandmark-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 999px !important;
+  }
+
+  .brandmark-dot-black {
+    background-color: #111111;
+  }
+
+  .brandmark-dot-orange {
+    background-color: var(--color-accent);
+  }
+
+  .brandmark-sub {
+    margin-top: 3px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
 }
 
 @layer utilities {
