@@ -1,37 +1,17 @@
 {
-  "generatedAt": "2026-02-26T13:56:23.870Z",
-  "mode": "production",
+  "generatedAt": "2026-02-26T18:38:35.155Z",
+  "mode": "staging",
   "chainMode": "base",
-  "allowMissingSecrets": true,
+  "allowMissingSecrets": false,
   "summary": {
-    "missingCount": 15,
-    "warningCount": 2,
-    "errorCount": 2,
-    "ready": false
+    "missingCount": 0,
+    "warningCount": 1,
+    "errorCount": 0,
+    "ready": true
   },
-  "missing": [
-    "CORS_ORIGINS",
-    "METRICS_TOKEN",
-    "BLINDFOLD_WEBHOOK_SECRET",
-    "MARKET_CORE_ADDRESS",
-    "ORDER_BOOK_ADDRESS",
-    "COLLATERAL_VAULT_ADDRESS",
-    "EVM_READS_ENABLED",
-    "EVM_WRITES_ENABLED",
-    "LEGACY_READS_ENABLED",
-    "LEGACY_WRITES_ENABLED",
-    "NEXT_PUBLIC_CHAIN_MODE",
-    "NEXT_PUBLIC_MARKET_CORE_ADDRESS",
-    "NEXT_PUBLIC_ORDER_BOOK_ADDRESS",
-    "NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS",
-    "NEXT_PUBLIC_COLLATERAL_VAULT_ADDRESS"
-  ],
+  "missing": [],
   "warnings": [
-    "NEURA_TOKEN_ADDRESS is not set. Token-related UI/API features should stay disabled until token launch.",
-    "Missing required variables tolerated by --allow-missing-secrets: CORS_ORIGINS, METRICS_TOKEN, BLINDFOLD_WEBHOOK_SECRET, MARKET_CORE_ADDRESS, ORDER_BOOK_ADDRESS, COLLATERAL_VAULT_ADDRESS, EVM_READS_ENABLED, EVM_WRITES_ENABLED, LEGACY_READS_ENABLED, LEGACY_WRITES_ENABLED, NEXT_PUBLIC_CHAIN_MODE, NEXT_PUBLIC_MARKET_CORE_ADDRESS, NEXT_PUBLIC_ORDER_BOOK_ADDRESS, NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS, NEXT_PUBLIC_COLLATERAL_VAULT_ADDRESS"
+    "NEURA_TOKEN_ADDRESS is not set. Token-related UI/API features should stay disabled until token launch."
   ],
-  "errors": [
-    "NEXT_PUBLIC_API_URL must be https in staging/production",
-    "Origin must be https in launch mode: http://localhost:3000"
-  ]
+  "errors": []
 }

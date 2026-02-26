@@ -22,12 +22,30 @@ jobs:
     name: Readiness Gates
     runs-on: ubuntu-latest
     env:
+      CHAIN_MODE: base
+      EVM_ENABLED: "true"
+      EVM_READS_ENABLED: "true"
+      EVM_WRITES_ENABLED: "true"
+      LEGACY_READS_ENABLED: "false"
+      LEGACY_WRITES_ENABLED: "false"
       NEXT_PUBLIC_API_URL: https://api.neuraminds.ai/v1
-      NEXT_PUBLIC_RPC_URL: https://api.mainnet-beta.solana.com
+      NEXT_PUBLIC_CHAIN_MODE: base
       AUTH_ALLOWED_ORIGINS: https://app.neuraminds.ai
       CORS_ORIGINS: https://app.neuraminds.ai
-      SOLANA_RPC_URL: https://api.mainnet-beta.solana.com
-      SOLANA_WS_URL: wss://api.mainnet-beta.solana.com
+      BASE_RPC_URL: https://mainnet.base.org
+      BASE_WS_URL: wss://mainnet.base.org
+      BASE_CHAIN_ID: "8453"
+      SIWE_DOMAIN: app.neuraminds.ai
+      MARKET_CORE_ADDRESS: 0x723a565f03e5d46b56866ff7e1a084f09f8f7030
+      ORDER_BOOK_ADDRESS: 0x37ca877505976805f10a1bc6fc06e005502273a9
+      COLLATERAL_VAULT_ADDRESS: 0xbd63831a06daf3e5165b26604380b38f1db90617
+      NEXT_PUBLIC_BASE_RPC_URL: https://mainnet.base.org
+      NEXT_PUBLIC_BASE_CHAIN_ID: "8453"
+      NEXT_PUBLIC_SIWE_DOMAIN: app.neuraminds.ai
+      NEXT_PUBLIC_MARKET_CORE_ADDRESS: 0x723a565f03e5d46b56866ff7e1a084f09f8f7030
+      NEXT_PUBLIC_ORDER_BOOK_ADDRESS: 0x37ca877505976805f10a1bc6fc06e005502273a9
+      NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+      NEXT_PUBLIC_COLLATERAL_VAULT_ADDRESS: 0xbd63831a06daf3e5165b26604380b38f1db90617
     steps:
       - uses: actions/checkout@v4
 
@@ -39,6 +57,9 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Install root dependencies
         run: npm ci

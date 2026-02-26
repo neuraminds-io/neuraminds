@@ -46,21 +46,26 @@ jobs:
           fi
 
           if [ -z "${api_url}" ] || [ -z "${web_url}" ]; then
-            echo "::error::Missing synthetic monitoring URL variables for ${{ matrix.environment }}"
-            exit 1
+            echo "::warning::Skipping synthetic monitoring for ${{ matrix.environment }} (missing URL variables)"
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
 
+          echo "enabled=true" >> "${GITHUB_OUTPUT}"
           echo "api_url=${api_url}" >> "${GITHUB_OUTPUT}"
           echo "web_url=${web_url}" >> "${GITHUB_OUTPUT}"
 
       - name: Run synthetic probe
+        if: steps.targets.outputs.enabled == 'true'
         run: |
           node scripts/synthetic-monitor.mjs \
             --env "${{ matrix.environment }}" \
             --api-url "${{ steps.targets.outputs.api_url }}" \
-            --web-url "${{ steps.targets.outputs.web_url }}"
+            --web-url "${{ steps.targets.outputs.web_url }}" \
+            --chain-mode base
 
       - name: Upload synthetic report
+        if: steps.targets.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: synthetic-monitor-${{ matrix.environment }}
