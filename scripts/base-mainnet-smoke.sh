@@ -23,6 +23,10 @@ COLLATERAL_TOKEN_ADDRESS="${COLLATERAL_TOKEN_ADDRESS:-${NEXT_PUBLIC_COLLATERAL_T
 SMOKE_ADMIN_PRIVATE_KEY="${BASE_SMOKE_ADMIN_PRIVATE_KEY:-}"
 SMOKE_YES_TRADER_PRIVATE_KEY="${BASE_SMOKE_YES_TRADER_PRIVATE_KEY:-}"
 SMOKE_NO_TRADER_PRIVATE_KEY="${BASE_SMOKE_NO_TRADER_PRIVATE_KEY:-}"
+SMOKE_ADMIN_ACCOUNT="${BASE_SMOKE_ADMIN_ACCOUNT:-}"
+SMOKE_YES_TRADER_ACCOUNT="${BASE_SMOKE_YES_TRADER_ACCOUNT:-}"
+SMOKE_NO_TRADER_ACCOUNT="${BASE_SMOKE_NO_TRADER_ACCOUNT:-}"
+SMOKE_PASSWORD_FILE="${BASE_SMOKE_PASSWORD_FILE:-${BASE_KEYSTORE_PASSWORD_FILE:-$ROOT_DIR/keys/base-keystore-password.local}}"
 
 usage() {
   cat <<USAGE
@@ -43,9 +47,20 @@ Options:
   -h|--help                           Show this help
 
 Environment (required for live execution):
-  BASE_SMOKE_ADMIN_PRIVATE_KEY
-  BASE_SMOKE_YES_TRADER_PRIVATE_KEY
-  BASE_SMOKE_NO_TRADER_PRIVATE_KEY    Optional; defaults to YES trader key
+  Admin signer (one required):
+    BASE_SMOKE_ADMIN_PRIVATE_KEY
+    BASE_SMOKE_ADMIN_ACCOUNT
+
+  YES trader signer (one required):
+    BASE_SMOKE_YES_TRADER_PRIVATE_KEY
+    BASE_SMOKE_YES_TRADER_ACCOUNT
+
+  NO trader signer (optional; defaults to YES trader signer):
+    BASE_SMOKE_NO_TRADER_PRIVATE_KEY
+    BASE_SMOKE_NO_TRADER_ACCOUNT
+
+  For account-based signers:
+    BASE_SMOKE_PASSWORD_FILE (or BASE_KEYSTORE_PASSWORD_FILE)
 
 Contract addresses are read from env first:
   MARKET_CORE_ADDRESS, ORDER_BOOK_ADDRESS, COLLATERAL_VAULT_ADDRESS, COLLATERAL_TOKEN_ADDRESS
@@ -227,15 +242,61 @@ call_bool() {
   esac
 }
 
+require_password_file() {
+  if [[ ! -f "$SMOKE_PASSWORD_FILE" ]]; then
+    echo "password file not found: $SMOKE_PASSWORD_FILE" >&2
+    exit 1
+  fi
+}
+
+signer_address() {
+  local private_key="$1"
+  local account="$2"
+  if [[ -n "$private_key" ]]; then
+    cast wallet address --private-key "$private_key"
+    return
+  fi
+  if [[ -n "$account" ]]; then
+    require_password_file
+    cast wallet address --account "$account" --password-file "$SMOKE_PASSWORD_FILE"
+    return
+  fi
+  echo "missing signer" >&2
+  exit 1
+}
+
 tx_send() {
   local private_key="$1"
-  shift
-  local cmd=(cast send --rpc-url "$RPC_URL" --private-key "$private_key" "$@")
+  local account="$2"
+  shift 2
+  local cmd=(cast send --rpc-url "$RPC_URL")
+  local dry_cmd=(cast send --rpc-url "$RPC_URL")
+  local has_signer=1
+
+  if [[ -n "$private_key" ]]; then
+    cmd+=(--private-key "$private_key")
+    dry_cmd+=(--private-key "<redacted>")
+  elif [[ -n "$account" ]]; then
+    require_password_file
+    cmd+=(--account "$account" --password-file "$SMOKE_PASSWORD_FILE")
+    dry_cmd+=(--account "$account" --password-file "$SMOKE_PASSWORD_FILE")
+  else
+    has_signer=0
+    dry_cmd+=(--from "<unset-signer>")
+  fi
+
+  cmd+=("$@")
+  dry_cmd+=("$@")
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "dry-run: ${cmd[*]}"
+    echo "dry-run: ${dry_cmd[*]}"
     echo "0x0000000000000000000000000000000000000000000000000000000000000000"
     return 0
+  fi
+
+  if [[ "$has_signer" -eq 0 ]]; then
+    echo "missing signer for transaction" >&2
+    exit 1
   fi
 
   local output
@@ -288,15 +349,20 @@ if [[ ! -n "$RPC_URL" ]]; then
   exit 1
 fi
 
-if [[ "$DRY_RUN" -eq 0 ]]; then
-  if [[ -z "$SMOKE_ADMIN_PRIVATE_KEY" || -z "$SMOKE_YES_TRADER_PRIVATE_KEY" ]]; then
-    echo "BASE_SMOKE_ADMIN_PRIVATE_KEY and BASE_SMOKE_YES_TRADER_PRIVATE_KEY are required" >&2
-    exit 1
-  fi
+if [[ -z "$SMOKE_NO_TRADER_PRIVATE_KEY" && -z "$SMOKE_NO_TRADER_ACCOUNT" ]]; then
+  SMOKE_NO_TRADER_PRIVATE_KEY="$SMOKE_YES_TRADER_PRIVATE_KEY"
+  SMOKE_NO_TRADER_ACCOUNT="$SMOKE_YES_TRADER_ACCOUNT"
 fi
 
-if [[ -z "$SMOKE_NO_TRADER_PRIVATE_KEY" ]]; then
-  SMOKE_NO_TRADER_PRIVATE_KEY="$SMOKE_YES_TRADER_PRIVATE_KEY"
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  if [[ -z "$SMOKE_ADMIN_PRIVATE_KEY" && -z "$SMOKE_ADMIN_ACCOUNT" ]]; then
+    echo "admin signer missing: set BASE_SMOKE_ADMIN_PRIVATE_KEY or BASE_SMOKE_ADMIN_ACCOUNT" >&2
+    exit 1
+  fi
+  if [[ -z "$SMOKE_YES_TRADER_PRIVATE_KEY" && -z "$SMOKE_YES_TRADER_ACCOUNT" ]]; then
+    echo "YES trader signer missing: set BASE_SMOKE_YES_TRADER_PRIVATE_KEY or BASE_SMOKE_YES_TRADER_ACCOUNT" >&2
+    exit 1
+  fi
 fi
 
 resolve_contracts_from_report
@@ -337,9 +403,9 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   YES_TRADER_ADDR="0x0000000000000000000000000000000000000002"
   NO_TRADER_ADDR="0x0000000000000000000000000000000000000003"
 else
-  ADMIN_ADDR="$(cast wallet address --private-key "$SMOKE_ADMIN_PRIVATE_KEY")"
-  YES_TRADER_ADDR="$(cast wallet address --private-key "$SMOKE_YES_TRADER_PRIVATE_KEY")"
-  NO_TRADER_ADDR="$(cast wallet address --private-key "$SMOKE_NO_TRADER_PRIVATE_KEY")"
+  ADMIN_ADDR="$(signer_address "$SMOKE_ADMIN_PRIVATE_KEY" "$SMOKE_ADMIN_ACCOUNT")"
+  YES_TRADER_ADDR="$(signer_address "$SMOKE_YES_TRADER_PRIVATE_KEY" "$SMOKE_YES_TRADER_ACCOUNT")"
+  NO_TRADER_ADDR="$(signer_address "$SMOKE_NO_TRADER_PRIVATE_KEY" "$SMOKE_NO_TRADER_ACCOUNT")"
 fi
 
 echo "base smoke start"
@@ -373,14 +439,14 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   fi
 fi
 
-APPROVE_YES_TX="$(tx_send "$SMOKE_YES_TRADER_PRIVATE_KEY" "$COLLATERAL_TOKEN_ADDRESS" "approve(address,uint256)" "$COLLATERAL_VAULT_ADDRESS" "$DEPOSIT_AMOUNT")"
-DEPOSIT_YES_TX="$(tx_send "$SMOKE_YES_TRADER_PRIVATE_KEY" "$COLLATERAL_VAULT_ADDRESS" "deposit(uint256)" "$DEPOSIT_AMOUNT")"
+APPROVE_YES_TX="$(tx_send "$SMOKE_YES_TRADER_PRIVATE_KEY" "$SMOKE_YES_TRADER_ACCOUNT" "$COLLATERAL_TOKEN_ADDRESS" "approve(address,uint256)" "$COLLATERAL_VAULT_ADDRESS" "$DEPOSIT_AMOUNT")"
+DEPOSIT_YES_TX="$(tx_send "$SMOKE_YES_TRADER_PRIVATE_KEY" "$SMOKE_YES_TRADER_ACCOUNT" "$COLLATERAL_VAULT_ADDRESS" "deposit(uint256)" "$DEPOSIT_AMOUNT")"
 
 APPROVE_NO_TX=""
 DEPOSIT_NO_TX=""
-if [[ "$SMOKE_NO_TRADER_PRIVATE_KEY" != "$SMOKE_YES_TRADER_PRIVATE_KEY" ]]; then
-  APPROVE_NO_TX="$(tx_send "$SMOKE_NO_TRADER_PRIVATE_KEY" "$COLLATERAL_TOKEN_ADDRESS" "approve(address,uint256)" "$COLLATERAL_VAULT_ADDRESS" "$DEPOSIT_AMOUNT")"
-  DEPOSIT_NO_TX="$(tx_send "$SMOKE_NO_TRADER_PRIVATE_KEY" "$COLLATERAL_VAULT_ADDRESS" "deposit(uint256)" "$DEPOSIT_AMOUNT")"
+if [[ "$SMOKE_NO_TRADER_PRIVATE_KEY" != "$SMOKE_YES_TRADER_PRIVATE_KEY" || "$SMOKE_NO_TRADER_ACCOUNT" != "$SMOKE_YES_TRADER_ACCOUNT" ]]; then
+  APPROVE_NO_TX="$(tx_send "$SMOKE_NO_TRADER_PRIVATE_KEY" "$SMOKE_NO_TRADER_ACCOUNT" "$COLLATERAL_TOKEN_ADDRESS" "approve(address,uint256)" "$COLLATERAL_VAULT_ADDRESS" "$DEPOSIT_AMOUNT")"
+  DEPOSIT_NO_TX="$(tx_send "$SMOKE_NO_TRADER_PRIVATE_KEY" "$SMOKE_NO_TRADER_ACCOUNT" "$COLLATERAL_VAULT_ADDRESS" "deposit(uint256)" "$DEPOSIT_AMOUNT")"
 fi
 
 NOW_TS="$(date +%s)"
@@ -390,7 +456,7 @@ RUN_ID="$(date -u +"%Y%m%dT%H%M%SZ")"
 QUESTION="NeuraMinds Base smoke $RUN_ID?"
 DESCRIPTION="Production smoke test for create/trade/match/resolve/claim."
 
-CREATE_TX="$(tx_send "$SMOKE_ADMIN_PRIVATE_KEY" "$MARKET_CORE_ADDRESS" \
+CREATE_TX="$(tx_send "$SMOKE_ADMIN_PRIVATE_KEY" "$SMOKE_ADMIN_ACCOUNT" "$MARKET_CORE_ADDRESS" \
   "createMarketRich(string,string,string,string,uint64,address)" \
   "$QUESTION" "$DESCRIPTION" "smoke" "ops" "$CLOSE_TIME" "$ADMIN_ADDR")"
 
@@ -401,7 +467,7 @@ else
   MARKET_ID="$(call_uint "$MARKET_CORE_ADDRESS" "marketCount()(uint256)")"
 fi
 
-PLACE_YES_TX="$(tx_send "$SMOKE_YES_TRADER_PRIVATE_KEY" "$ORDER_BOOK_ADDRESS" \
+PLACE_YES_TX="$(tx_send "$SMOKE_YES_TRADER_PRIVATE_KEY" "$SMOKE_YES_TRADER_ACCOUNT" "$ORDER_BOOK_ADDRESS" \
   "placeOrder(uint256,bool,uint128,uint128,uint64)" \
   "$MARKET_ID" "true" "$YES_PRICE_BPS" "$ORDER_SIZE" "$EXPIRY_TIME")"
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -411,7 +477,7 @@ else
   YES_ORDER_ID="$(call_uint "$ORDER_BOOK_ADDRESS" "orderCount()(uint256)")"
 fi
 
-PLACE_NO_TX="$(tx_send "$SMOKE_NO_TRADER_PRIVATE_KEY" "$ORDER_BOOK_ADDRESS" \
+PLACE_NO_TX="$(tx_send "$SMOKE_NO_TRADER_PRIVATE_KEY" "$SMOKE_NO_TRADER_ACCOUNT" "$ORDER_BOOK_ADDRESS" \
   "placeOrder(uint256,bool,uint128,uint128,uint64)" \
   "$MARKET_ID" "false" "$NO_PRICE_BPS" "$ORDER_SIZE" "$EXPIRY_TIME")"
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -420,7 +486,7 @@ else
   NO_ORDER_ID="$(call_uint "$ORDER_BOOK_ADDRESS" "orderCount()(uint256)")"
 fi
 
-MATCH_TX="$(tx_send "$SMOKE_ADMIN_PRIVATE_KEY" "$ORDER_BOOK_ADDRESS" \
+MATCH_TX="$(tx_send "$SMOKE_ADMIN_PRIVATE_KEY" "$SMOKE_ADMIN_ACCOUNT" "$ORDER_BOOK_ADDRESS" \
   "matchOrders(uint256,uint256,uint128)" \
   "$YES_ORDER_ID" "$NO_ORDER_ID" "$ORDER_SIZE")"
 
@@ -435,14 +501,16 @@ if [[ "$OUTCOME" == "yes" ]]; then
   RESOLVE_BOOL="true"
   WINNER_ADDR="$YES_TRADER_ADDR"
   WINNER_KEY="$SMOKE_YES_TRADER_PRIVATE_KEY"
+  WINNER_ACCOUNT="$SMOKE_YES_TRADER_ACCOUNT"
 else
   RESOLVE_BOOL="false"
   WINNER_ADDR="$NO_TRADER_ADDR"
   WINNER_KEY="$SMOKE_NO_TRADER_PRIVATE_KEY"
+  WINNER_ACCOUNT="$SMOKE_NO_TRADER_ACCOUNT"
 fi
 
-RESOLVE_TX="$(tx_send "$SMOKE_ADMIN_PRIVATE_KEY" "$MARKET_CORE_ADDRESS" "resolveMarket(uint256,bool)" "$MARKET_ID" "$RESOLVE_BOOL")"
-CLAIM_TX="$(tx_send "$WINNER_KEY" "$ORDER_BOOK_ADDRESS" "claim(uint256)" "$MARKET_ID")"
+RESOLVE_TX="$(tx_send "$SMOKE_ADMIN_PRIVATE_KEY" "$SMOKE_ADMIN_ACCOUNT" "$MARKET_CORE_ADDRESS" "resolveMarket(uint256,bool)" "$MARKET_ID" "$RESOLVE_BOOL")"
+CLAIM_TX="$(tx_send "$WINNER_KEY" "$WINNER_ACCOUNT" "$ORDER_BOOK_ADDRESS" "claim(uint256)" "$MARKET_ID")"
 
 jq -n \
   --arg generatedAt "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
