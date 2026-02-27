@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, TrendingUp, Briefcase, Settings } from 'lucide-react';
+import { Home, TrendingUp, Briefcase, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/markets', label: 'Markets', icon: TrendingUp },
+  { href: '/agents', label: 'Agents', icon: Bot },
   { href: '/portfolio', label: 'Portfolio', icon: Briefcase },
-  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function BottomNav() {

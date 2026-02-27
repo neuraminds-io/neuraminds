@@ -170,8 +170,12 @@ MARKET_CORE_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE
 ORDER_BOOK_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE" and .contractName=="OrderBook") | .contractAddress' "$RUN_FILE" | tail -n 1)"
 COLLATERAL_VAULT_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE" and .contractName=="CollateralVault") | .contractAddress' "$RUN_FILE" | tail -n 1)"
 AGENT_RUNTIME_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE" and .contractName=="AgentRuntime") | .contractAddress' "$RUN_FILE" | tail -n 1)"
+AGENT_IDENTITY_REGISTRY_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE" and .contractName=="AgentIdentityRegistry") | .contractAddress' "$RUN_FILE" | tail -n 1)"
+AGENT_REPUTATION_REGISTRY_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE" and .contractName=="AgentReputationRegistry") | .contractAddress' "$RUN_FILE" | tail -n 1)"
+ERC8004_IDENTITY_REGISTRY_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE" and .contractName=="ERC8004IdentityRegistry") | .contractAddress' "$RUN_FILE" | tail -n 1)"
+ERC8004_REPUTATION_REGISTRY_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE" and .contractName=="ERC8004ReputationRegistry") | .contractAddress' "$RUN_FILE" | tail -n 1)"
 
-if [[ -z "$MARKET_CORE_ADDRESS" || "$MARKET_CORE_ADDRESS" == "null" || -z "$ORDER_BOOK_ADDRESS" || "$ORDER_BOOK_ADDRESS" == "null" || -z "$COLLATERAL_VAULT_ADDRESS" || "$COLLATERAL_VAULT_ADDRESS" == "null" || -z "$AGENT_RUNTIME_ADDRESS" || "$AGENT_RUNTIME_ADDRESS" == "null" ]]; then
+if [[ -z "$MARKET_CORE_ADDRESS" || "$MARKET_CORE_ADDRESS" == "null" || -z "$ORDER_BOOK_ADDRESS" || "$ORDER_BOOK_ADDRESS" == "null" || -z "$COLLATERAL_VAULT_ADDRESS" || "$COLLATERAL_VAULT_ADDRESS" == "null" || -z "$AGENT_RUNTIME_ADDRESS" || "$AGENT_RUNTIME_ADDRESS" == "null" || -z "$AGENT_IDENTITY_REGISTRY_ADDRESS" || "$AGENT_IDENTITY_REGISTRY_ADDRESS" == "null" || -z "$AGENT_REPUTATION_REGISTRY_ADDRESS" || "$AGENT_REPUTATION_REGISTRY_ADDRESS" == "null" || -z "$ERC8004_IDENTITY_REGISTRY_ADDRESS" || "$ERC8004_IDENTITY_REGISTRY_ADDRESS" == "null" || -z "$ERC8004_REPUTATION_REGISTRY_ADDRESS" || "$ERC8004_REPUTATION_REGISTRY_ADDRESS" == "null" ]]; then
   echo "Could not extract deployed contract addresses from $RUN_FILE" >&2
   exit 1
 fi
@@ -198,6 +202,10 @@ jq -n \
   --arg orderBook "$ORDER_BOOK_ADDRESS" \
   --arg collateralVault "$COLLATERAL_VAULT_ADDRESS" \
   --arg agentRuntime "$AGENT_RUNTIME_ADDRESS" \
+  --arg identityRegistry "$AGENT_IDENTITY_REGISTRY_ADDRESS" \
+  --arg reputationRegistry "$AGENT_REPUTATION_REGISTRY_ADDRESS" \
+  --arg erc8004IdentityRegistry "$ERC8004_IDENTITY_REGISTRY_ADDRESS" \
+  --arg erc8004ReputationRegistry "$ERC8004_REPUTATION_REGISTRY_ADDRESS" \
   --arg runFile "$RUN_FILE_REL" \
   '{
     timestamp: $timestamp,
@@ -210,7 +218,11 @@ jq -n \
       marketCore: $marketCore,
       orderBook: $orderBook,
       collateralVault: $collateralVault,
-      agentRuntime: $agentRuntime
+      agentRuntime: $agentRuntime,
+      agentIdentityRegistry: $identityRegistry,
+      agentReputationRegistry: $reputationRegistry,
+      erc8004IdentityRegistry: $erc8004IdentityRegistry,
+      erc8004ReputationRegistry: $erc8004ReputationRegistry
     },
     runFile: $runFile
   }' > "$REPORT_JSON"
@@ -221,6 +233,10 @@ MARKET_CORE_ADDRESS=$MARKET_CORE_ADDRESS
 ORDER_BOOK_ADDRESS=$ORDER_BOOK_ADDRESS
 COLLATERAL_VAULT_ADDRESS=$COLLATERAL_VAULT_ADDRESS
 AGENT_RUNTIME_ADDRESS=$AGENT_RUNTIME_ADDRESS
+AGENT_IDENTITY_REGISTRY_ADDRESS=$AGENT_IDENTITY_REGISTRY_ADDRESS
+AGENT_REPUTATION_REGISTRY_ADDRESS=$AGENT_REPUTATION_REGISTRY_ADDRESS
+ERC8004_IDENTITY_REGISTRY_ADDRESS=$ERC8004_IDENTITY_REGISTRY_ADDRESS
+ERC8004_REPUTATION_REGISTRY_ADDRESS=$ERC8004_REPUTATION_REGISTRY_ADDRESS
 ENV
 
 echo ""
@@ -229,6 +245,10 @@ echo "MarketCore: $MARKET_CORE_ADDRESS"
 echo "OrderBook: $ORDER_BOOK_ADDRESS"
 echo "CollateralVault: $COLLATERAL_VAULT_ADDRESS"
 echo "AgentRuntime: $AGENT_RUNTIME_ADDRESS"
+echo "AgentIdentityRegistry: $AGENT_IDENTITY_REGISTRY_ADDRESS"
+echo "AgentReputationRegistry: $AGENT_REPUTATION_REGISTRY_ADDRESS"
+echo "ERC8004IdentityRegistry: $ERC8004_IDENTITY_REGISTRY_ADDRESS"
+echo "ERC8004ReputationRegistry: $ERC8004_REPUTATION_REGISTRY_ADDRESS"
 echo "Report: $REPORT_JSON"
 echo "Env snippet: $REPORT_ENV"
 
@@ -266,8 +286,19 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   wait_for_code "$ORDER_BOOK_ADDRESS" "OrderBook"
   wait_for_code "$COLLATERAL_VAULT_ADDRESS" "CollateralVault"
   wait_for_code "$AGENT_RUNTIME_ADDRESS" "AgentRuntime"
+  wait_for_code "$AGENT_IDENTITY_REGISTRY_ADDRESS" "AgentIdentityRegistry"
+  wait_for_code "$AGENT_REPUTATION_REGISTRY_ADDRESS" "AgentReputationRegistry"
+  wait_for_code "$ERC8004_IDENTITY_REGISTRY_ADDRESS" "ERC8004IdentityRegistry"
+  wait_for_code "$ERC8004_REPUTATION_REGISTRY_ADDRESS" "ERC8004ReputationRegistry"
 
   ROLE_REPORT="$REPORT_DIR/base-programs-roles-${NETWORK}.json"
+  REPUTATION_ORACLE_ADDRESS="${BASE_REPUTATION_ORACLE:-${BASE_OPERATOR:-}}"
+  if [[ -z "$REPUTATION_ORACLE_ADDRESS" ]]; then
+    echo "Missing required variable for role verification: BASE_REPUTATION_ORACLE or BASE_OPERATOR" >&2
+    exit 1
+  fi
+  ERC8004_ISSUER_ADDRESS="${BASE_IDENTITY_ISSUER:-${BASE_ADMIN:-}}"
+  ERC8004_ATTESTER_ADDRESS="${BASE_REPUTATION_ATTESTER:-$REPUTATION_ORACLE_ADDRESS}"
 
   DEFAULT_ADMIN_ROLE="0x0000000000000000000000000000000000000000000000000000000000000000"
   MARKET_CREATOR_ROLE="$(cast call --rpc-url "$RPC_URL" "$MARKET_CORE_ADDRESS" "MARKET_CREATOR_ROLE()(bytes32)")"
@@ -278,6 +309,14 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   OPERATOR_ROLE="$(cast call --rpc-url "$RPC_URL" "$COLLATERAL_VAULT_ADDRESS" "OPERATOR_ROLE()(bytes32)")"
   VAULT_PAUSER_ROLE="$(cast call --rpc-url "$RPC_URL" "$COLLATERAL_VAULT_ADDRESS" "PAUSER_ROLE()(bytes32)")"
   RUNTIME_PAUSER_ROLE="$(cast call --rpc-url "$RPC_URL" "$AGENT_RUNTIME_ADDRESS" "PAUSER_ROLE()(bytes32)")"
+  IDENTITY_PAUSER_ROLE="$(cast call --rpc-url "$RPC_URL" "$AGENT_IDENTITY_REGISTRY_ADDRESS" "PAUSER_ROLE()(bytes32)")"
+  IDENTITY_REGISTRAR_ROLE="$(cast call --rpc-url "$RPC_URL" "$AGENT_IDENTITY_REGISTRY_ADDRESS" "REGISTRAR_ROLE()(bytes32)")"
+  REPUTATION_PAUSER_ROLE="$(cast call --rpc-url "$RPC_URL" "$AGENT_REPUTATION_REGISTRY_ADDRESS" "PAUSER_ROLE()(bytes32)")"
+  REPUTATION_ORACLE_ROLE="$(cast call --rpc-url "$RPC_URL" "$AGENT_REPUTATION_REGISTRY_ADDRESS" "ORACLE_ROLE()(bytes32)")"
+  ERC8004_IDENTITY_PAUSER_ROLE="$(cast call --rpc-url "$RPC_URL" "$ERC8004_IDENTITY_REGISTRY_ADDRESS" "PAUSER_ROLE()(bytes32)")"
+  ERC8004_IDENTITY_ISSUER_ROLE="$(cast call --rpc-url "$RPC_URL" "$ERC8004_IDENTITY_REGISTRY_ADDRESS" "ISSUER_ROLE()(bytes32)")"
+  ERC8004_REPUTATION_PAUSER_ROLE="$(cast call --rpc-url "$RPC_URL" "$ERC8004_REPUTATION_REGISTRY_ADDRESS" "PAUSER_ROLE()(bytes32)")"
+  ERC8004_REPUTATION_ATTESTER_ROLE="$(cast call --rpc-url "$RPC_URL" "$ERC8004_REPUTATION_REGISTRY_ADDRESS" "ATTESTER_ROLE()(bytes32)")"
 
   has_role() {
     local contract="$1"
@@ -306,6 +345,23 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
 
   ADMIN_RUNTIME="$(has_role "$AGENT_RUNTIME_ADDRESS" "$DEFAULT_ADMIN_ROLE" "$BASE_ADMIN")"
   PAUSER_RUNTIME_HAS_ROLE="$(has_role "$AGENT_RUNTIME_ADDRESS" "$RUNTIME_PAUSER_ROLE" "$BASE_PAUSER")"
+  RUNTIME_IDENTITY_REGISTRY="$(cast call --rpc-url "$RPC_URL" "$AGENT_RUNTIME_ADDRESS" "identityRegistry()(address)")"
+
+  ADMIN_IDENTITY="$(has_role "$AGENT_IDENTITY_REGISTRY_ADDRESS" "$DEFAULT_ADMIN_ROLE" "$BASE_ADMIN")"
+  PAUSER_IDENTITY_HAS_ROLE="$(has_role "$AGENT_IDENTITY_REGISTRY_ADDRESS" "$IDENTITY_PAUSER_ROLE" "$BASE_PAUSER")"
+  REGISTRAR_IDENTITY_HAS_ROLE="$(has_role "$AGENT_IDENTITY_REGISTRY_ADDRESS" "$IDENTITY_REGISTRAR_ROLE" "$AGENT_RUNTIME_ADDRESS")"
+
+  ADMIN_REPUTATION="$(has_role "$AGENT_REPUTATION_REGISTRY_ADDRESS" "$DEFAULT_ADMIN_ROLE" "$BASE_ADMIN")"
+  PAUSER_REPUTATION_HAS_ROLE="$(has_role "$AGENT_REPUTATION_REGISTRY_ADDRESS" "$REPUTATION_PAUSER_ROLE" "$BASE_PAUSER")"
+  ORACLE_REPUTATION_HAS_ROLE="$(has_role "$AGENT_REPUTATION_REGISTRY_ADDRESS" "$REPUTATION_ORACLE_ROLE" "$REPUTATION_ORACLE_ADDRESS")"
+
+  ADMIN_ERC8004_IDENTITY="$(has_role "$ERC8004_IDENTITY_REGISTRY_ADDRESS" "$DEFAULT_ADMIN_ROLE" "$BASE_ADMIN")"
+  PAUSER_ERC8004_IDENTITY_HAS_ROLE="$(has_role "$ERC8004_IDENTITY_REGISTRY_ADDRESS" "$ERC8004_IDENTITY_PAUSER_ROLE" "$BASE_PAUSER")"
+  ISSUER_ERC8004_IDENTITY_HAS_ROLE="$(has_role "$ERC8004_IDENTITY_REGISTRY_ADDRESS" "$ERC8004_IDENTITY_ISSUER_ROLE" "$ERC8004_ISSUER_ADDRESS")"
+
+  ADMIN_ERC8004_REPUTATION="$(has_role "$ERC8004_REPUTATION_REGISTRY_ADDRESS" "$DEFAULT_ADMIN_ROLE" "$BASE_ADMIN")"
+  PAUSER_ERC8004_REPUTATION_HAS_ROLE="$(has_role "$ERC8004_REPUTATION_REGISTRY_ADDRESS" "$ERC8004_REPUTATION_PAUSER_ROLE" "$BASE_PAUSER")"
+  ATTESTER_ERC8004_REPUTATION_HAS_ROLE="$(has_role "$ERC8004_REPUTATION_REGISTRY_ADDRESS" "$ERC8004_REPUTATION_ATTESTER_ROLE" "$ERC8004_ATTESTER_ADDRESS")"
 
   jq -n \
     --arg timestamp "$TIMESTAMP" \
@@ -314,6 +370,10 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
     --arg orderBook "$ORDER_BOOK_ADDRESS" \
     --arg collateralVault "$COLLATERAL_VAULT_ADDRESS" \
     --arg agentRuntime "$AGENT_RUNTIME_ADDRESS" \
+    --arg identityRegistry "$AGENT_IDENTITY_REGISTRY_ADDRESS" \
+    --arg reputationRegistry "$AGENT_REPUTATION_REGISTRY_ADDRESS" \
+    --arg erc8004IdentityRegistry "$ERC8004_IDENTITY_REGISTRY_ADDRESS" \
+    --arg erc8004ReputationRegistry "$ERC8004_REPUTATION_REGISTRY_ADDRESS" \
     --arg adminHasDefault "$ADMIN_HAS_DEFAULT" \
     --arg creatorHasRole "$CREATOR_HAS_ROLE" \
     --arg resolverHasRole "$RESOLVER_HAS_ROLE" \
@@ -328,6 +388,22 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
     --arg pauserVaultHasRole "$PAUSER_VAULT_HAS_ROLE" \
     --arg adminRuntime "$ADMIN_RUNTIME" \
     --arg pauserRuntimeHasRole "$PAUSER_RUNTIME_HAS_ROLE" \
+    --arg runtimeIdentityRegistry "$RUNTIME_IDENTITY_REGISTRY" \
+    --arg adminIdentity "$ADMIN_IDENTITY" \
+    --arg pauserIdentityHasRole "$PAUSER_IDENTITY_HAS_ROLE" \
+    --arg registrarIdentityHasRole "$REGISTRAR_IDENTITY_HAS_ROLE" \
+    --arg adminReputation "$ADMIN_REPUTATION" \
+    --arg pauserReputationHasRole "$PAUSER_REPUTATION_HAS_ROLE" \
+    --arg oracleReputationHasRole "$ORACLE_REPUTATION_HAS_ROLE" \
+    --arg reputationOracle "$REPUTATION_ORACLE_ADDRESS" \
+    --arg adminErc8004Identity "$ADMIN_ERC8004_IDENTITY" \
+    --arg pauserErc8004IdentityHasRole "$PAUSER_ERC8004_IDENTITY_HAS_ROLE" \
+    --arg issuerErc8004IdentityHasRole "$ISSUER_ERC8004_IDENTITY_HAS_ROLE" \
+    --arg erc8004Issuer "$ERC8004_ISSUER_ADDRESS" \
+    --arg adminErc8004Reputation "$ADMIN_ERC8004_REPUTATION" \
+    --arg pauserErc8004ReputationHasRole "$PAUSER_ERC8004_REPUTATION_HAS_ROLE" \
+    --arg attesterErc8004ReputationHasRole "$ATTESTER_ERC8004_REPUTATION_HAS_ROLE" \
+    --arg erc8004Attester "$ERC8004_ATTESTER_ADDRESS" \
     '{
       timestamp: $timestamp,
       network: $network,
@@ -335,7 +411,11 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
         marketCore: $marketCore,
         orderBook: $orderBook,
         collateralVault: $collateralVault,
-        agentRuntime: $agentRuntime
+        agentRuntime: $agentRuntime,
+        agentIdentityRegistry: $identityRegistry,
+        agentReputationRegistry: $reputationRegistry,
+        erc8004IdentityRegistry: $erc8004IdentityRegistry,
+        erc8004ReputationRegistry: $erc8004ReputationRegistry
       },
       roleChecks: {
         marketCore: {
@@ -358,7 +438,31 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
         },
         agentRuntime: {
           adminDefaultRole: ($adminRuntime == "true"),
-          pauserRole: ($pauserRuntimeHasRole == "true")
+          pauserRole: ($pauserRuntimeHasRole == "true"),
+          identityRegistry: $runtimeIdentityRegistry
+        },
+        agentIdentityRegistry: {
+          adminDefaultRole: ($adminIdentity == "true"),
+          pauserRole: ($pauserIdentityHasRole == "true"),
+          registrarRoleForRuntime: ($registrarIdentityHasRole == "true")
+        },
+        agentReputationRegistry: {
+          adminDefaultRole: ($adminReputation == "true"),
+          pauserRole: ($pauserReputationHasRole == "true"),
+          oracleAddress: $reputationOracle,
+          oracleRole: ($oracleReputationHasRole == "true")
+        },
+        erc8004IdentityRegistry: {
+          adminDefaultRole: ($adminErc8004Identity == "true"),
+          pauserRole: ($pauserErc8004IdentityHasRole == "true"),
+          issuerAddress: $erc8004Issuer,
+          issuerRole: ($issuerErc8004IdentityHasRole == "true")
+        },
+        erc8004ReputationRegistry: {
+          adminDefaultRole: ($adminErc8004Reputation == "true"),
+          pauserRole: ($pauserErc8004ReputationHasRole == "true"),
+          attesterAddress: $erc8004Attester,
+          attesterRole: ($attesterErc8004ReputationHasRole == "true")
         }
       }
     }' > "$ROLE_REPORT"

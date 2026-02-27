@@ -120,7 +120,8 @@ contract OrderBookTest is Test {
 
     function test_matchFailsForInvalidPriceCross() external {
         vm.prank(creator);
-        uint256 marketId = marketCore.createMarket(keccak256("price-cross"), uint64(block.timestamp + 2 hours), resolver);
+        uint256 marketId =
+            marketCore.createMarket(keccak256("price-cross"), uint64(block.timestamp + 2 hours), resolver);
 
         vm.prank(yesTrader);
         uint256 yesOrderId = orderBook.placeOrder(marketId, true, 4_000, 100e6, uint64(block.timestamp + 1 days));
@@ -151,7 +152,8 @@ contract OrderBookTest is Test {
 
     function test_claimFailsBeforeResolve() external {
         vm.prank(creator);
-        uint256 marketId = marketCore.createMarket(keccak256("resolve-gate"), uint64(block.timestamp + 2 hours), resolver);
+        uint256 marketId =
+            marketCore.createMarket(keccak256("resolve-gate"), uint64(block.timestamp + 2 hours), resolver);
 
         vm.prank(yesTrader);
         uint256 yesOrderId = orderBook.placeOrder(marketId, true, 5_100, 50e6, uint64(block.timestamp + 1 days));

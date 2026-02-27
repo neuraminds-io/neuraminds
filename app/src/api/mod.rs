@@ -5,11 +5,13 @@ pub mod health;
 pub mod jwt;
 pub mod markets;
 pub mod orders;
+pub mod payments;
 pub mod positions;
 pub mod rate_limit;
 pub mod user;
 pub mod validation;
 pub mod wallet;
+pub mod web4;
 pub mod ws;
 
 pub use error::ApiError;

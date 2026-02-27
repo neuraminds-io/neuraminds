@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {AgentRuntime} from "../src/AgentRuntime.sol";
+import {AgentIdentityRegistry} from "../src/AgentIdentityRegistry.sol";
 import {CollateralVault} from "../src/CollateralVault.sol";
 import {MarketCore} from "../src/MarketCore.sol";
 import {OrderBook} from "../src/OrderBook.sol";
@@ -20,6 +21,7 @@ contract AgentRuntimeTest is Test {
     CollateralVault internal collateralVault;
     OrderBook internal orderBook;
     AgentRuntime internal agentRuntime;
+    AgentIdentityRegistry internal identityRegistry;
     uint256 internal marketId;
 
     function setUp() external {
@@ -28,12 +30,15 @@ contract AgentRuntimeTest is Test {
         collateralVault = new CollateralVault(admin, address(usdc));
         orderBook = new OrderBook(admin, address(marketCore), address(collateralVault));
         agentRuntime = new AgentRuntime(admin, address(orderBook));
+        identityRegistry = new AgentIdentityRegistry(admin);
 
         vm.startPrank(admin);
         marketCore.grantRole(marketCore.MARKET_CREATOR_ROLE(), creator);
         marketCore.grantRole(marketCore.RESOLVER_ROLE(), resolver);
         collateralVault.grantRole(collateralVault.OPERATOR_ROLE(), address(orderBook));
         orderBook.grantRole(orderBook.AGENT_RUNTIME_ROLE(), address(agentRuntime));
+        identityRegistry.grantRole(identityRegistry.REGISTRAR_ROLE(), address(agentRuntime));
+        agentRuntime.setIdentityRegistry(address(identityRegistry));
         vm.stopPrank();
 
         usdc.mint(alice, 1_000e6);
@@ -117,5 +122,17 @@ contract AgentRuntimeTest is Test {
 
         vm.expectRevert();
         agentRuntime.executeAgent(agentId);
+    }
+
+    function test_registerAgentIdentity() external {
+        vm.prank(alice);
+        uint256 agentId = agentRuntime.createAgent(marketId, true, 5_000, 10e6, 60, 600, "identity");
+
+        vm.prank(alice);
+        uint256 identityId = agentRuntime.registerAgentIdentity(agentId, "ipfs://neura-agent/1");
+
+        assertEq(identityId, 1);
+        assertEq(agentRuntime.agentIdentityId(agentId), 1);
+        assertEq(identityRegistry.ownerOf(identityId), alice);
     }
 }

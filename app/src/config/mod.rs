@@ -1,6 +1,14 @@
 use log::warn;
 use std::env;
 
+fn is_valid_hex_address(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.len() != 42 || !trimmed.starts_with("0x") {
+        return false;
+    }
+    trimmed[2..].chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
 #[derive(Clone)]
 pub struct AppConfig {
     pub host: String,
@@ -24,6 +32,20 @@ pub struct AppConfig {
     pub blindfold_webhook_secret: String,
     pub program_vault_address: String,
     pub usdc_mint: String,
+    pub erc8004_identity_registry_address: String,
+    pub erc8004_reputation_registry_address: String,
+    pub x402_enabled: bool,
+    pub x402_signing_key: String,
+    pub x402_receiver_address: String,
+    pub x402_orderbook_price_microusdc: u64,
+    pub x402_trades_price_microusdc: u64,
+    pub x402_mcp_price_microusdc: u64,
+    pub x402_quote_ttl_seconds: u64,
+    pub xmtp_swarm_enabled: bool,
+    pub xmtp_swarm_signing_key: String,
+    pub xmtp_swarm_topic_prefix: String,
+    pub xmtp_swarm_max_messages: u64,
+    pub xmtp_swarm_max_message_bytes: u64,
 }
 
 impl AppConfig {
@@ -77,6 +99,45 @@ impl AppConfig {
             .to_lowercase()
             == "true";
 
+        let x402_enabled = env::var("X402_ENABLED")
+            .unwrap_or_else(|_| "false".to_string())
+            .to_lowercase()
+            == "true";
+        let x402_signing_key = env::var("X402_SIGNING_KEY").unwrap_or_else(|_| {
+            if is_development {
+                warn!("SECURITY WARNING: Using default X402_SIGNING_KEY");
+                "dev-x402-signing-key-change-me".to_string()
+            } else {
+                String::new()
+            }
+        });
+        if x402_enabled && !is_development && x402_signing_key.trim().is_empty() {
+            panic!("SECURITY ERROR: X402_SIGNING_KEY must be set when X402_ENABLED=true");
+        }
+        let x402_receiver_address = env::var("X402_RECEIVER_ADDRESS")
+            .unwrap_or_else(|_| "0x0000000000000000000000000000000000000000".to_string());
+        if x402_enabled && !is_valid_hex_address(x402_receiver_address.as_str()) {
+            panic!("SECURITY ERROR: X402_RECEIVER_ADDRESS must be a valid 0x address");
+        }
+
+        let xmtp_swarm_enabled = env::var("XMTP_SWARM_ENABLED")
+            .unwrap_or_else(|_| "false".to_string())
+            .to_lowercase()
+            == "true";
+        let xmtp_swarm_signing_key = env::var("XMTP_SWARM_SIGNING_KEY").unwrap_or_else(|_| {
+            if is_development {
+                warn!("SECURITY WARNING: Using default XMTP_SWARM_SIGNING_KEY");
+                "dev-xmtp-swarm-signing-key-change-me".to_string()
+            } else {
+                String::new()
+            }
+        });
+        if xmtp_swarm_enabled && !is_development && xmtp_swarm_signing_key.trim().is_empty() {
+            panic!(
+                "SECURITY ERROR: XMTP_SWARM_SIGNING_KEY must be set when XMTP_SWARM_ENABLED=true"
+            );
+        }
+
         Self {
             host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port: env::var("PORT")
@@ -122,9 +183,43 @@ impl AppConfig {
             }),
             program_vault_address: env::var("PROGRAM_VAULT_ADDRESS")
                 .unwrap_or_else(|_| "".to_string()),
-            usdc_mint: env::var("USDC_MINT").unwrap_or_else(|_| {
-                "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".to_string()
-            }),
+            usdc_mint: env::var("USDC_MINT")
+                .unwrap_or_else(|_| "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".to_string()),
+            erc8004_identity_registry_address: env::var("ERC8004_IDENTITY_REGISTRY_ADDRESS")
+                .unwrap_or_else(|_| "".to_string()),
+            erc8004_reputation_registry_address: env::var("ERC8004_REPUTATION_REGISTRY_ADDRESS")
+                .unwrap_or_else(|_| "".to_string()),
+            x402_enabled,
+            x402_signing_key,
+            x402_receiver_address,
+            x402_orderbook_price_microusdc: env::var("X402_ORDERBOOK_PRICE_MICROUSDC")
+                .unwrap_or_else(|_| "2500".to_string())
+                .parse()
+                .expect("X402_ORDERBOOK_PRICE_MICROUSDC must be a number"),
+            x402_trades_price_microusdc: env::var("X402_TRADES_PRICE_MICROUSDC")
+                .unwrap_or_else(|_| "2500".to_string())
+                .parse()
+                .expect("X402_TRADES_PRICE_MICROUSDC must be a number"),
+            x402_mcp_price_microusdc: env::var("X402_MCP_PRICE_MICROUSDC")
+                .unwrap_or_else(|_| "5000".to_string())
+                .parse()
+                .expect("X402_MCP_PRICE_MICROUSDC must be a number"),
+            x402_quote_ttl_seconds: env::var("X402_QUOTE_TTL_SECONDS")
+                .unwrap_or_else(|_| "300".to_string())
+                .parse()
+                .expect("X402_QUOTE_TTL_SECONDS must be a number"),
+            xmtp_swarm_enabled,
+            xmtp_swarm_signing_key,
+            xmtp_swarm_topic_prefix: env::var("XMTP_SWARM_TOPIC_PREFIX")
+                .unwrap_or_else(|_| "neuraminds/base/swarm".to_string()),
+            xmtp_swarm_max_messages: env::var("XMTP_SWARM_MAX_MESSAGES")
+                .unwrap_or_else(|_| "500".to_string())
+                .parse()
+                .expect("XMTP_SWARM_MAX_MESSAGES must be a number"),
+            xmtp_swarm_max_message_bytes: env::var("XMTP_SWARM_MAX_MESSAGE_BYTES")
+                .unwrap_or_else(|_| "32768".to_string())
+                .parse()
+                .expect("XMTP_SWARM_MAX_MESSAGE_BYTES must be a number"),
         }
     }
 }
@@ -159,6 +254,20 @@ mod tests {
             "EVM_WRITES_ENABLED",
             "ORDER_BOOK_ADDRESS",
             "AGENT_RUNTIME_ADDRESS",
+            "ERC8004_IDENTITY_REGISTRY_ADDRESS",
+            "ERC8004_REPUTATION_REGISTRY_ADDRESS",
+            "X402_ENABLED",
+            "X402_SIGNING_KEY",
+            "X402_RECEIVER_ADDRESS",
+            "X402_ORDERBOOK_PRICE_MICROUSDC",
+            "X402_TRADES_PRICE_MICROUSDC",
+            "X402_MCP_PRICE_MICROUSDC",
+            "X402_QUOTE_TTL_SECONDS",
+            "XMTP_SWARM_ENABLED",
+            "XMTP_SWARM_SIGNING_KEY",
+            "XMTP_SWARM_TOPIC_PREFIX",
+            "XMTP_SWARM_MAX_MESSAGES",
+            "XMTP_SWARM_MAX_MESSAGE_BYTES",
         ];
         let saved: Vec<_> = env_vars
             .iter()

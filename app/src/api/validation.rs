@@ -379,8 +379,7 @@ mod tests {
 
     #[test]
     fn test_validate_tx_signature() {
-        let valid_sig =
-            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let valid_sig = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         assert!(validate_tx_signature(valid_sig).is_ok());
 
         // Invalid signatures

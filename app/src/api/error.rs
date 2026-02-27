@@ -7,6 +7,7 @@ pub struct ApiError {
     pub code: String,
     pub message: String,
     pub status: u16,
+    pub details: Option<serde_json::Value>,
 }
 
 impl ApiError {
@@ -15,6 +16,7 @@ impl ApiError {
             code: code.to_string(),
             message: message.to_string(),
             status: 400,
+            details: None,
         }
     }
 
@@ -23,6 +25,7 @@ impl ApiError {
             code: "UNAUTHORIZED".to_string(),
             message: message.to_string(),
             status: 401,
+            details: None,
         }
     }
 
@@ -31,6 +34,7 @@ impl ApiError {
             code: "FORBIDDEN".to_string(),
             message: message.to_string(),
             status: 403,
+            details: None,
         }
     }
 
@@ -39,6 +43,7 @@ impl ApiError {
             code: "NOT_FOUND".to_string(),
             message: format!("{} not found", resource),
             status: 404,
+            details: None,
         }
     }
 
@@ -47,6 +52,7 @@ impl ApiError {
             code: "INTERNAL_ERROR".to_string(),
             message: message.to_string(),
             status: 500,
+            details: None,
         }
     }
 
@@ -55,6 +61,7 @@ impl ApiError {
             code: "RATE_LIMITED".to_string(),
             message: format!("Too many requests. Retry after {} seconds.", retry_after),
             status: 429,
+            details: None,
         }
     }
 
@@ -63,6 +70,20 @@ impl ApiError {
             code: code.to_string(),
             message: message.to_string(),
             status: 409,
+            details: None,
+        }
+    }
+
+    pub fn payment_required(message: &str, quote: Option<impl serde::Serialize>) -> Self {
+        let details = quote
+            .and_then(|value| serde_json::to_value(value).ok())
+            .map(|value| serde_json::json!({ "quote": value }));
+
+        Self {
+            code: "PAYMENT_REQUIRED".to_string(),
+            message: message.to_string(),
+            status: 402,
+            details,
         }
     }
 }
@@ -79,12 +100,14 @@ impl ResponseError for ApiError {
             error: ErrorDetail {
                 code: self.code.clone(),
                 message: self.message.clone(),
+                details: self.details.clone(),
             },
         };
 
         match self.status {
             400 => HttpResponse::BadRequest().json(body),
             401 => HttpResponse::Unauthorized().json(body),
+            402 => HttpResponse::PaymentRequired().json(body),
             403 => HttpResponse::Forbidden().json(body),
             404 => HttpResponse::NotFound().json(body),
             409 => HttpResponse::Conflict().json(body),
@@ -103,6 +126,8 @@ struct ErrorResponse {
 struct ErrorDetail {
     code: String,
     message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<serde_json::Value>,
 }
 
 impl From<anyhow::Error> for ApiError {

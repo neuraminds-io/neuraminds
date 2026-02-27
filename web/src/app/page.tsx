@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { Flame, Clock } from 'lucide-react';
 import { Header, BottomNav } from '@/components/layout';
@@ -121,6 +122,25 @@ export default function HomePage() {
 
       {/* Main Content */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+        <section className="mb-6 border border-border bg-bg-primary p-4 sm:p-5">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold text-text-primary">Web4 Agentic Prediction Grid</h1>
+              <p className="text-sm text-text-secondary mt-1">
+                Discover autonomous agents, execute machine-native strategies, and settle outcomes on Base.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link href="/agents" className="h-9 px-3 border border-accent text-accent text-sm flex items-center">
+                Open Agent Grid
+              </Link>
+              <Link href="/docs/api" className="h-9 px-3 border border-border text-text-secondary text-sm flex items-center">
+                API
+              </Link>
+            </div>
+          </div>
+        </section>
+
         {/* Featured Banner - Kalshi style hero card */}
         {category === 'All' && (
           <section className="mb-8">

@@ -43,11 +43,7 @@ contract MarketCore is AccessControl, Pausable {
     event MarketCreated(uint256 indexed marketId, bytes32 indexed questionHash, uint64 closeTime, address resolver);
     event MarketResolved(uint256 indexed marketId, bool outcome, uint64 resolveTime, address resolver);
     event MarketMetadataSet(
-        uint256 indexed marketId,
-        string question,
-        string description,
-        string category,
-        string resolutionSource
+        uint256 indexed marketId, string question, string description, string category, string resolutionSource
     );
 
     constructor(address admin) {
@@ -97,7 +93,12 @@ contract MarketCore is AccessControl, Pausable {
     function getMarketMetadata(uint256 marketId)
         external
         view
-        returns (string memory question, string memory description, string memory category, string memory resolutionSource)
+        returns (
+            string memory question,
+            string memory description,
+            string memory category,
+            string memory resolutionSource
+        )
     {
         if (markets[marketId].resolver == address(0)) revert MarketNotFound();
         MarketMetadata storage metadata = marketMetadata[marketId];
@@ -128,7 +129,10 @@ contract MarketCore is AccessControl, Pausable {
         _unpause();
     }
 
-    function _createMarket(bytes32 questionHash, uint64 closeTime, address resolver) internal returns (uint256 marketId) {
+    function _createMarket(bytes32 questionHash, uint64 closeTime, address resolver)
+        internal
+        returns (uint256 marketId)
+    {
         if (resolver == address(0)) revert ZeroAddress();
         if (closeTime <= block.timestamp) revert InvalidCloseTime();
 
@@ -161,10 +165,7 @@ contract MarketCore is AccessControl, Pausable {
         }
 
         marketMetadata[marketId] = MarketMetadata({
-            question: question,
-            description: description,
-            category: category,
-            resolutionSource: resolutionSource
+            question: question, description: description, category: category, resolutionSource: resolutionSource
         });
 
         emit MarketMetadataSet(marketId, question, description, category, resolutionSource);

@@ -6,6 +6,8 @@ pub mod metrics;
 pub mod orderbook;
 pub mod redis;
 pub mod websocket;
+pub mod x402;
+pub mod xmtp_swarm;
 
 pub use database::DatabaseService;
 pub use evm_indexer::EvmIndexerService;

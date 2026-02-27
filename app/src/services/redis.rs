@@ -67,6 +67,25 @@ impl RedisService {
         Ok(())
     }
 
+    /// Push an item into a list and trim to max length.
+    /// Uses LPUSH so newest entries are returned first by LRANGE.
+    pub async fn list_push_with_trim(&self, key: &str, value: &str, max_len: u64) -> Result<()> {
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let _: i64 = conn.lpush(key, value).await?;
+        let trim_end = max_len.saturating_sub(1) as isize;
+        let _: () = conn.ltrim(key, 0, trim_end).await?;
+        Ok(())
+    }
+
+    /// Read a list range as raw strings.
+    pub async fn list_range_raw(&self, key: &str, start: u64, end: u64) -> Result<Vec<String>> {
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let start_idx = start as isize;
+        let end_idx = end as isize;
+        let values: Vec<String> = conn.lrange(key, start_idx, end_idx).await?;
+        Ok(values)
+    }
+
     /// Cache market data
     pub async fn cache_market_prices(
         &self,

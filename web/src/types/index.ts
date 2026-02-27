@@ -1,5 +1,6 @@
 export type MarketStatus = 'active' | 'paused' | 'closed' | 'resolved' | 'cancelled';
 export type Outcome = 'yes' | 'no';
+export type AgentStatus = 'ready' | 'cooldown' | 'inactive';
 export type OrderSide = 'buy' | 'sell';
 export type OrderStatus = 'open' | 'partially_filled' | 'filled' | 'cancelled' | 'expired';
 export type OrderType = 'limit' | 'market';
@@ -59,6 +60,31 @@ export interface Order {
   createdAt: string;
   updatedAt: string;
   expiresAt?: string;
+}
+
+export interface Agent {
+  id: string;
+  owner: string;
+  marketId: string;
+  isYes: boolean;
+  priceBps: number;
+  size: string;
+  cadence: number;
+  expiryWindow: number;
+  lastExecutedAt: string;
+  nextExecutionAt: string;
+  canExecute: boolean;
+  active: boolean;
+  status: AgentStatus;
+  strategy: string;
+  identityId?: string;
+  identityTier?: number;
+  identityActive?: boolean;
+  identityUpdatedAt?: string;
+  reputationScoreBps?: number;
+  reputationConfidenceBps?: number;
+  reputationEvents?: number;
+  reputationNotionalMicrousdc?: string;
 }
 
 export interface Position {
@@ -193,6 +219,14 @@ export interface MarketFilters {
 export interface OrderFilters {
   marketId?: string;
   status?: OrderStatus;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AgentFilters {
+  owner?: string;
+  marketId?: string;
+  active?: boolean;
   limit?: number;
   offset?: number;
 }

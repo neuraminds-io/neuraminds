@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::api::ApiError;
+use crate::services::x402::{self, X402Resource};
 use crate::AppState;
 
 const ERC20_TOTAL_SUPPLY_SELECTOR: &str = "0x18160ddd";
@@ -20,13 +21,18 @@ const ORDER_BOOK_PLACE_SELECTOR: &str = "0xa8dd6515";
 const ORDER_BOOK_CANCEL_SELECTOR: &str = "0x514fcac7";
 const ORDER_BOOK_CLAIM_SELECTOR: &str = "0x379607f5";
 const ORDER_BOOK_MATCH_SELECTOR: &str = "0xc6437097";
+const AGENT_RUNTIME_COUNT_SELECTOR: &str = "0xb7dc1284";
+const AGENT_RUNTIME_AGENTS_SELECTOR: &str = "0x513856c8";
 const AGENT_RUNTIME_CREATE_SELECTOR: &str = "0x325993ba";
 const AGENT_RUNTIME_EXECUTE_SELECTOR: &str = "0xe2a343a5";
+const ERC8004_IDENTITY_PROFILE_SELECTOR: &str = "0x9dd9d0fd";
+const ERC8004_REPUTATION_OF_SELECTOR: &str = "0xdb89c044";
 const ORDER_FILLED_TOPIC: &str =
     "0x5aac01386940f75e601757cfe5dc1d4ab2bac84f98d30664486114a8abb38a45";
 const MAX_MARKETS_PAGE_SIZE: u64 = 200;
 const MAX_ORDERBOOK_DEPTH: u64 = 100;
 const MAX_TRADES_PAGE_SIZE: u64 = 200;
+const MAX_AGENTS_PAGE_SIZE: u64 = 200;
 const ORDERBOOK_SCAN_WINDOW: u64 = 150;
 const TRADES_BLOCK_SCAN_WINDOW: u64 = 25_000;
 const MAX_MARKET_TEXT_LENGTH: usize = 2_048;
@@ -56,6 +62,15 @@ pub struct BaseTradesQuery {
     pub outcome: Option<String>,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
+}
+
+#[derive(Deserialize)]
+pub struct BaseAgentsQuery {
+    pub limit: Option<u64>,
+    pub offset: Option<u64>,
+    pub owner: Option<String>,
+    pub market_id: Option<u64>,
+    pub active: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -121,6 +136,69 @@ pub struct BaseTradesResponse {
     pub offset: u64,
     pub has_more: bool,
     pub source: String,
+}
+
+#[derive(Serialize)]
+pub struct BaseAgentsResponse {
+    pub agents: Vec<BaseAgentSnapshot>,
+    pub total: u64,
+    pub limit: u64,
+    pub offset: u64,
+    pub source: String,
+}
+
+#[derive(Serialize)]
+pub struct BaseIdentityResponse {
+    pub wallet: String,
+    pub identity_id: Option<String>,
+    pub tier: Option<u8>,
+    pub active: Option<bool>,
+    pub updated_at: Option<u64>,
+    pub source: String,
+}
+
+#[derive(Serialize)]
+pub struct BaseReputationResponse {
+    pub wallet: String,
+    pub score_bps: Option<u32>,
+    pub confidence_bps: Option<u32>,
+    pub events: Option<u64>,
+    pub notional_microusdc: Option<String>,
+    pub source: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct BaseAgentSnapshot {
+    pub id: String,
+    pub owner: String,
+    pub market_id: String,
+    pub is_yes: bool,
+    pub price_bps: u64,
+    pub size: String,
+    pub cadence: u64,
+    pub expiry_window: u64,
+    pub last_executed_at: u64,
+    pub next_execution_at: u64,
+    pub can_execute: bool,
+    pub active: bool,
+    pub status: String,
+    pub strategy: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity_tier: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity_active: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity_updated_at: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reputation_score_bps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reputation_confidence_bps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reputation_events: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reputation_notional_microusdc: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -224,6 +302,35 @@ struct BaseRawOrder {
     remaining: u64,
     expiry: u64,
     canceled: bool,
+}
+
+struct BaseRawAgent {
+    owner: String,
+    market_id: u64,
+    is_yes: bool,
+    price_bps: u64,
+    size: u128,
+    cadence: u64,
+    expiry_window: u64,
+    last_executed_at: u64,
+    active: bool,
+    strategy: String,
+}
+
+#[derive(Clone)]
+struct Erc8004Identity {
+    identity_id: u128,
+    tier: u8,
+    active: bool,
+    updated_at: u64,
+}
+
+#[derive(Clone)]
+struct Erc8004Reputation {
+    score_bps: u32,
+    confidence_bps: u32,
+    events: u64,
+    notional_microusdc: u128,
 }
 
 #[derive(Clone)]
@@ -345,7 +452,11 @@ pub async fn get_base_markets(
             MARKET_CORE_METADATA_SELECTOR,
             encode_u256_hex(index)
         );
-        if let Ok(payload) = state.evm_rpc.eth_call(market_core, &metadata_calldata).await {
+        if let Ok(payload) = state
+            .evm_rpc
+            .eth_call(market_core, &metadata_calldata)
+            .await
+        {
             if let Ok((question, description, category, resolution_source)) =
                 decode_market_metadata_tuple(&payload)
             {
@@ -368,8 +479,233 @@ pub async fn get_base_markets(
     }))
 }
 
+pub async fn get_base_agents(
+    state: web::Data<Arc<AppState>>,
+    query: web::Query<BaseAgentsQuery>,
+) -> Result<impl Responder, ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
+        return Err(ApiError::bad_request(
+            "EVM_DISABLED",
+            "EVM services are disabled",
+        ));
+    }
+
+    let agent_runtime = state.config.agent_runtime_address.trim();
+    if agent_runtime.is_empty() {
+        return Err(ApiError::bad_request(
+            "AGENT_RUNTIME_ADDRESS_NOT_CONFIGURED",
+            "AGENT_RUNTIME_ADDRESS must be configured for Base agents",
+        ));
+    }
+
+    if !is_valid_evm_address(agent_runtime) {
+        return Err(ApiError::bad_request(
+            "INVALID_AGENT_RUNTIME_ADDRESS",
+            "AGENT_RUNTIME_ADDRESS must be a valid 0x EVM address",
+        ));
+    }
+
+    let owner_filter = match query.owner.as_ref() {
+        Some(owner) if !owner.trim().is_empty() => Some(normalize_required_address(
+            owner.as_str(),
+            "INVALID_OWNER_ADDRESS",
+            "owner must be a valid 0x EVM address",
+        )?),
+        _ => None,
+    };
+    let market_filter = query.market_id;
+    let active_filter = query.active;
+
+    let total_hex = state
+        .evm_rpc
+        .eth_call(agent_runtime, AGENT_RUNTIME_COUNT_SELECTOR)
+        .await
+        .map_err(map_evm_rpc_error)?;
+    let total = parse_u64_hex(&total_hex)?;
+
+    let limit = query.limit.unwrap_or(50).min(MAX_AGENTS_PAGE_SIZE);
+    let offset = query.offset.unwrap_or(0);
+    if total == 0 {
+        return Ok(HttpResponse::Ok().json(BaseAgentsResponse {
+            agents: vec![],
+            total: 0,
+            limit,
+            offset,
+            source: "agent_runtime".to_string(),
+        }));
+    }
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| ApiError::internal("System time error"))?
+        .as_secs();
+
+    let mut filtered = Vec::new();
+    for index in (1..=total).rev() {
+        let calldata = format!(
+            "{}{}",
+            AGENT_RUNTIME_AGENTS_SELECTOR,
+            encode_u256_hex(index)
+        );
+        let slot = state
+            .evm_rpc
+            .eth_call(agent_runtime, &calldata)
+            .await
+            .map_err(map_evm_rpc_error)?;
+
+        let Some(snapshot) = decode_agent_snapshot(index, &slot, now)? else {
+            continue;
+        };
+
+        if let Some(owner) = owner_filter.as_ref() {
+            if &snapshot.owner != owner {
+                continue;
+            }
+        }
+        if let Some(market_id) = market_filter {
+            if snapshot.market_id != market_id.to_string() {
+                continue;
+            }
+        }
+        if let Some(active) = active_filter {
+            if snapshot.active != active {
+                continue;
+            }
+        }
+
+        let enriched = enrich_agent_with_erc8004(&state, snapshot).await;
+        filtered.push(enriched);
+    }
+
+    let total_filtered = filtered.len() as u64;
+    if total_filtered == 0 || offset >= total_filtered {
+        return Ok(HttpResponse::Ok().json(BaseAgentsResponse {
+            agents: vec![],
+            total: total_filtered,
+            limit,
+            offset,
+            source: "agent_runtime".to_string(),
+        }));
+    }
+
+    let end = (offset + limit).min(total_filtered) as usize;
+    let agents = filtered[offset as usize..end].to_vec();
+
+    Ok(HttpResponse::Ok().json(BaseAgentsResponse {
+        agents,
+        total: total_filtered,
+        limit,
+        offset,
+        source: "agent_runtime".to_string(),
+    }))
+}
+
+pub async fn get_base_agent(
+    state: web::Data<Arc<AppState>>,
+    path: web::Path<String>,
+) -> Result<impl Responder, ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
+        return Err(ApiError::bad_request(
+            "EVM_DISABLED",
+            "EVM services are disabled",
+        ));
+    }
+
+    let agent_runtime = state.config.agent_runtime_address.trim();
+    if agent_runtime.is_empty() {
+        return Err(ApiError::bad_request(
+            "AGENT_RUNTIME_ADDRESS_NOT_CONFIGURED",
+            "AGENT_RUNTIME_ADDRESS must be configured for Base agents",
+        ));
+    }
+
+    if !is_valid_evm_address(agent_runtime) {
+        return Err(ApiError::bad_request(
+            "INVALID_AGENT_RUNTIME_ADDRESS",
+            "AGENT_RUNTIME_ADDRESS must be a valid 0x EVM address",
+        ));
+    }
+
+    let agent_id_raw = path.into_inner();
+    let agent_id = agent_id_raw.parse::<u64>().map_err(|_| {
+        ApiError::bad_request("INVALID_AGENT_ID", "agent_id must be a positive integer")
+    })?;
+    if agent_id == 0 {
+        return Err(ApiError::bad_request(
+            "INVALID_AGENT_ID",
+            "agent_id must be greater than zero",
+        ));
+    }
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| ApiError::internal("System time error"))?
+        .as_secs();
+    let calldata = format!(
+        "{}{}",
+        AGENT_RUNTIME_AGENTS_SELECTOR,
+        encode_u256_hex(agent_id)
+    );
+    let slot = state
+        .evm_rpc
+        .eth_call(agent_runtime, &calldata)
+        .await
+        .map_err(map_evm_rpc_error)?;
+
+    let snapshot =
+        decode_agent_snapshot(agent_id, &slot, now)?.ok_or_else(|| ApiError::not_found("Agent"))?;
+    let snapshot = enrich_agent_with_erc8004(&state, snapshot).await;
+
+    Ok(HttpResponse::Ok().json(snapshot))
+}
+
+pub async fn get_base_identity(
+    state: web::Data<Arc<AppState>>,
+    path: web::Path<String>,
+) -> Result<impl Responder, ApiError> {
+    let wallet = normalize_required_address(
+        path.as_str(),
+        "INVALID_WALLET",
+        "wallet must be a valid 0x EVM address",
+    )?;
+    let identity = fetch_erc8004_identity(&state, wallet.as_str()).await?;
+
+    Ok(HttpResponse::Ok().json(BaseIdentityResponse {
+        wallet,
+        identity_id: identity.as_ref().map(|entry| entry.identity_id.to_string()),
+        tier: identity.as_ref().map(|entry| entry.tier),
+        active: identity.as_ref().map(|entry| entry.active),
+        updated_at: identity.as_ref().map(|entry| entry.updated_at),
+        source: "erc8004_identity_registry".to_string(),
+    }))
+}
+
+pub async fn get_base_reputation(
+    state: web::Data<Arc<AppState>>,
+    path: web::Path<String>,
+) -> Result<impl Responder, ApiError> {
+    let wallet = normalize_required_address(
+        path.as_str(),
+        "INVALID_WALLET",
+        "wallet must be a valid 0x EVM address",
+    )?;
+    let reputation = fetch_erc8004_reputation(&state, wallet.as_str()).await?;
+
+    Ok(HttpResponse::Ok().json(BaseReputationResponse {
+        wallet,
+        score_bps: reputation.as_ref().map(|entry| entry.score_bps),
+        confidence_bps: reputation.as_ref().map(|entry| entry.confidence_bps),
+        events: reputation.as_ref().map(|entry| entry.events),
+        notional_microusdc: reputation
+            .as_ref()
+            .map(|entry| entry.notional_microusdc.to_string()),
+        source: "erc8004_reputation_registry".to_string(),
+    }))
+}
+
 pub async fn get_base_orderbook(
     state: web::Data<Arc<AppState>>,
+    req: HttpRequest,
     path: web::Path<String>,
     query: web::Query<BaseOrderBookQuery>,
 ) -> Result<impl Responder, ApiError> {
@@ -379,6 +715,7 @@ pub async fn get_base_orderbook(
             "EVM services are disabled",
         ));
     }
+    x402::ensure_payment_for_request(&state, &req, X402Resource::OrderBook).await?;
 
     let market_id_raw = path.into_inner();
     let market_id = market_id_raw.parse::<u64>().map_err(|_| {
@@ -517,6 +854,7 @@ pub async fn get_base_orderbook(
 
 pub async fn get_base_trades(
     state: web::Data<Arc<AppState>>,
+    req: HttpRequest,
     path: web::Path<String>,
     query: web::Query<BaseTradesQuery>,
 ) -> Result<impl Responder, ApiError> {
@@ -526,6 +864,7 @@ pub async fn get_base_trades(
             "EVM services are disabled",
         ));
     }
+    x402::ensure_payment_for_request(&state, &req, X402Resource::Trades).await?;
 
     let market_id_raw = path.into_inner();
     let market_id = market_id_raw.parse::<u64>().map_err(|_| {
@@ -1135,7 +1474,11 @@ fn configured_address(address: &str, code: &str, message: &str) -> Result<String
     normalize_required_address(trimmed, code, message)
 }
 
-fn normalize_required_address(address: &str, code: &str, message: &str) -> Result<String, ApiError> {
+fn normalize_required_address(
+    address: &str,
+    code: &str,
+    message: &str,
+) -> Result<String, ApiError> {
     let trimmed = address.trim();
     if !is_valid_evm_address(trimmed) {
         return Err(ApiError::bad_request(code, message));
@@ -1186,6 +1529,23 @@ fn parse_u64_hex(value: &str) -> Result<u64, ApiError> {
     }
 
     u64::from_str_radix(normalized, 16).map_err(|_| ApiError::internal("Invalid RPC hex result"))
+}
+
+fn parse_u128_hex(value: &str) -> Result<u128, ApiError> {
+    let trimmed = value.trim_start_matches("0x");
+    if trimmed.is_empty() {
+        return Err(ApiError::internal("Invalid RPC hex result"));
+    }
+
+    let normalized = trimmed.trim_start_matches('0');
+    if normalized.is_empty() {
+        return Ok(0);
+    }
+    if normalized.len() > 32 {
+        return Err(ApiError::internal("RPC value out of range for u128"));
+    }
+
+    u128::from_str_radix(normalized, 16).map_err(|_| ApiError::internal("Invalid RPC hex result"))
 }
 
 fn parse_bool_word(word: &str) -> Result<bool, ApiError> {
@@ -1339,7 +1699,9 @@ fn word_at(data: &str, index: usize) -> Result<&str, ApiError> {
     Ok(&data[start..end])
 }
 
-fn decode_market_metadata_tuple(payload: &str) -> Result<(String, String, String, String), ApiError> {
+fn decode_market_metadata_tuple(
+    payload: &str,
+) -> Result<(String, String, String, String), ApiError> {
     Ok((
         decode_abi_string_at_offset(payload, word_at(payload, 0)?)?,
         decode_abi_string_at_offset(payload, word_at(payload, 1)?)?,
@@ -1417,6 +1779,185 @@ fn decode_market_snapshot(index: u64, slot: &str) -> Result<BaseMarketSnapshot, 
     })
 }
 
+fn decode_agent_snapshot(
+    index: u64,
+    slot: &str,
+    now: u64,
+) -> Result<Option<BaseAgentSnapshot>, ApiError> {
+    let Some(raw) = decode_agent_slot(slot)? else {
+        return Ok(None);
+    };
+
+    let next_execution_at = if raw.last_executed_at == 0 {
+        0
+    } else {
+        raw.last_executed_at.saturating_add(raw.cadence)
+    };
+    let can_execute = raw.active && (raw.last_executed_at == 0 || now >= next_execution_at);
+    let status = if !raw.active {
+        "inactive"
+    } else if can_execute {
+        "ready"
+    } else {
+        "cooldown"
+    };
+
+    Ok(Some(BaseAgentSnapshot {
+        id: index.to_string(),
+        owner: raw.owner,
+        market_id: raw.market_id.to_string(),
+        is_yes: raw.is_yes,
+        price_bps: raw.price_bps,
+        size: raw.size.to_string(),
+        cadence: raw.cadence,
+        expiry_window: raw.expiry_window,
+        last_executed_at: raw.last_executed_at,
+        next_execution_at,
+        can_execute,
+        active: raw.active,
+        status: status.to_string(),
+        strategy: raw.strategy,
+        identity_id: None,
+        identity_tier: None,
+        identity_active: None,
+        identity_updated_at: None,
+        reputation_score_bps: None,
+        reputation_confidence_bps: None,
+        reputation_events: None,
+        reputation_notional_microusdc: None,
+    }))
+}
+
+async fn enrich_agent_with_erc8004(
+    state: &Arc<AppState>,
+    mut snapshot: BaseAgentSnapshot,
+) -> BaseAgentSnapshot {
+    if let Ok(Some(identity)) = fetch_erc8004_identity(state, snapshot.owner.as_str()).await {
+        snapshot.identity_id = Some(identity.identity_id.to_string());
+        snapshot.identity_tier = Some(identity.tier);
+        snapshot.identity_active = Some(identity.active);
+        snapshot.identity_updated_at = Some(identity.updated_at);
+    }
+    if let Ok(Some(reputation)) = fetch_erc8004_reputation(state, snapshot.owner.as_str()).await {
+        snapshot.reputation_score_bps = Some(reputation.score_bps);
+        snapshot.reputation_confidence_bps = Some(reputation.confidence_bps);
+        snapshot.reputation_events = Some(reputation.events);
+        snapshot.reputation_notional_microusdc = Some(reputation.notional_microusdc.to_string());
+    }
+    snapshot
+}
+
+async fn fetch_erc8004_identity(
+    state: &Arc<AppState>,
+    wallet: &str,
+) -> Result<Option<Erc8004Identity>, ApiError> {
+    let registry = state.config.erc8004_identity_registry_address.trim();
+    if registry.is_empty() {
+        return Ok(None);
+    }
+    if !is_valid_evm_address(registry) {
+        return Err(ApiError::bad_request(
+            "INVALID_ERC8004_IDENTITY_REGISTRY",
+            "ERC8004_IDENTITY_REGISTRY_ADDRESS must be a valid 0x EVM address",
+        ));
+    }
+
+    let calldata = format!(
+        "{}{}",
+        ERC8004_IDENTITY_PROFILE_SELECTOR,
+        encode_address_word(wallet)?
+    );
+    let payload = state
+        .evm_rpc
+        .eth_call(registry, calldata.as_str())
+        .await
+        .map_err(map_evm_rpc_error)?;
+
+    let identity_id = parse_u128_hex(word_at(payload.as_str(), 0)?)?;
+    let tier = parse_u8_hex(word_at(payload.as_str(), 1)?)?;
+    let active = parse_bool_word(word_at(payload.as_str(), 2)?)?;
+    let updated_at = parse_u64_hex(word_at(payload.as_str(), 3)?)?;
+
+    if identity_id == 0 {
+        return Ok(None);
+    }
+
+    Ok(Some(Erc8004Identity {
+        identity_id,
+        tier,
+        active,
+        updated_at,
+    }))
+}
+
+async fn fetch_erc8004_reputation(
+    state: &Arc<AppState>,
+    wallet: &str,
+) -> Result<Option<Erc8004Reputation>, ApiError> {
+    let registry = state.config.erc8004_reputation_registry_address.trim();
+    if registry.is_empty() {
+        return Ok(None);
+    }
+    if !is_valid_evm_address(registry) {
+        return Err(ApiError::bad_request(
+            "INVALID_ERC8004_REPUTATION_REGISTRY",
+            "ERC8004_REPUTATION_REGISTRY_ADDRESS must be a valid 0x EVM address",
+        ));
+    }
+
+    let calldata = format!(
+        "{}{}",
+        ERC8004_REPUTATION_OF_SELECTOR,
+        encode_address_word(wallet)?
+    );
+    let payload = state
+        .evm_rpc
+        .eth_call(registry, calldata.as_str())
+        .await
+        .map_err(map_evm_rpc_error)?;
+
+    let score_raw = parse_u64_hex(word_at(payload.as_str(), 0)?)?;
+    let confidence_raw = parse_u64_hex(word_at(payload.as_str(), 1)?)?;
+    if score_raw > u32::MAX as u64 || confidence_raw > u32::MAX as u64 {
+        return Err(ApiError::internal("ERC8004 reputation value out of range"));
+    }
+    let score_bps = score_raw as u32;
+    let confidence_bps = confidence_raw as u32;
+    let events = parse_u64_hex(word_at(payload.as_str(), 2)?)?;
+    let notional_microusdc = parse_u128_hex(word_at(payload.as_str(), 3)?)?;
+
+    if events == 0 && notional_microusdc == 0 {
+        return Ok(None);
+    }
+
+    Ok(Some(Erc8004Reputation {
+        score_bps,
+        confidence_bps,
+        events,
+        notional_microusdc,
+    }))
+}
+
+fn decode_agent_slot(slot: &str) -> Result<Option<BaseRawAgent>, ApiError> {
+    let owner_word = word_at(slot, 0)?;
+    if owner_word.chars().all(|c| c == '0') {
+        return Ok(None);
+    }
+
+    Ok(Some(BaseRawAgent {
+        owner: format!("0x{}", &owner_word[24..]).to_ascii_lowercase(),
+        market_id: parse_u64_hex(word_at(slot, 1)?)?,
+        is_yes: parse_bool_word(word_at(slot, 2)?)?,
+        price_bps: parse_u64_hex(word_at(slot, 3)?)?,
+        size: parse_u128_hex(word_at(slot, 4)?)?,
+        cadence: parse_u64_hex(word_at(slot, 5)?)?,
+        expiry_window: parse_u64_hex(word_at(slot, 6)?)?,
+        last_executed_at: parse_u64_hex(word_at(slot, 7)?)?,
+        active: parse_bool_word(word_at(slot, 8)?)?,
+        strategy: decode_abi_string_at_offset(slot, word_at(slot, 9)?)?,
+    }))
+}
+
 fn decode_order_snapshot(slot: &str) -> Result<Option<BaseRawOrder>, ApiError> {
     let maker_word = word_at(slot, 0)?;
     if maker_word.chars().all(|c| c == '0') {
@@ -1483,6 +2024,17 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_u128_hex() {
+        assert_eq!(parse_u128_hex("0x0").unwrap(), 0);
+        assert_eq!(parse_u128_hex("0x2a").unwrap(), 42);
+        assert_eq!(
+            parse_u128_hex("0x000000000000000000000000000000000000000000000000000000000000ffff")
+                .unwrap(),
+            65_535
+        );
+    }
+
+    #[test]
     fn test_encode_u256_hex() {
         let encoded = encode_u256_hex(42);
         assert_eq!(encoded.len(), 64);
@@ -1508,7 +2060,9 @@ mod tests {
             encode_u256_hex_u128(128),
             encode_u256_hex_u128(128 + q.len() as u128 / 2),
             encode_u256_hex_u128(128 + q.len() as u128 / 2 + d.len() as u128 / 2),
-            encode_u256_hex_u128(128 + q.len() as u128 / 2 + d.len() as u128 / 2 + c.len() as u128 / 2),
+            encode_u256_hex_u128(
+                128 + q.len() as u128 / 2 + d.len() as u128 / 2 + c.len() as u128 / 2
+            ),
         );
         let payload = format!("0x{}{}{}{}{}", head, q, d, c, s);
         let decoded = decode_market_metadata_tuple(&payload).unwrap();
@@ -1544,6 +2098,48 @@ mod tests {
         );
         assert_eq!(decoded.status, "resolved");
         assert_eq!(decoded.outcome.as_deref(), Some("yes"));
+    }
+
+    #[test]
+    fn test_decode_agent_snapshot() {
+        let owner = "00000000000000000000000039e4939df3763e342db531a2a58867bc26a22b98";
+        let market_id = format!("{:064x}", 12u64);
+        let is_yes = format!("{:064x}", 1u64);
+        let price_bps = format!("{:064x}", 5500u64);
+        let size = format!("{:064x}", 100_000u128);
+        let cadence = format!("{:064x}", 30u64);
+        let expiry_window = format!("{:064x}", 1800u64);
+        let last_executed_at = format!("{:064x}", 100u64);
+        let active = format!("{:064x}", 1u64);
+        let strategy_offset = encode_u256_hex_u128((32 * 10) as u128);
+        let strategy = encode_dynamic_string_tail("momentum-v1");
+
+        let payload = format!(
+            "0x{}{}{}{}{}{}{}{}{}{}{}",
+            owner,
+            market_id,
+            is_yes,
+            price_bps,
+            size,
+            cadence,
+            expiry_window,
+            last_executed_at,
+            active,
+            strategy_offset,
+            strategy
+        );
+
+        let decoded = decode_agent_snapshot(5, &payload, 120).unwrap().unwrap();
+        assert_eq!(decoded.id, "5");
+        assert_eq!(decoded.owner, "0x39e4939df3763e342db531a2a58867bc26a22b98");
+        assert_eq!(decoded.market_id, "12");
+        assert!(decoded.is_yes);
+        assert_eq!(decoded.price_bps, 5500);
+        assert_eq!(decoded.size, "100000");
+        assert_eq!(decoded.next_execution_at, 130);
+        assert_eq!(decoded.status, "cooldown");
+        assert!(!decoded.can_execute);
+        assert_eq!(decoded.strategy, "momentum-v1");
     }
 
     #[test]

@@ -6,14 +6,13 @@ import {Pausable} from "openzeppelin-contracts/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
 interface IOrderBookAgent {
-    function placeOrderFor(
-        address maker,
-        uint256 marketId,
-        bool isYes,
-        uint128 priceBps,
-        uint128 size,
-        uint64 expiry
-    ) external returns (uint256 orderId);
+    function placeOrderFor(address maker, uint256 marketId, bool isYes, uint128 priceBps, uint128 size, uint64 expiry)
+        external
+        returns (uint256 orderId);
+}
+
+interface IAgentIdentityRegistry {
+    function registerFor(address owner, string calldata agentURI) external returns (uint256 agentId);
 }
 
 contract AgentRuntime is AccessControl, Pausable, ReentrancyGuard {
@@ -37,8 +36,10 @@ contract AgentRuntime is AccessControl, Pausable, ReentrancyGuard {
 
     uint256 public agentCount;
     mapping(uint256 => Agent) public agents;
+    mapping(uint256 => uint256) public agentIdentityId;
 
     IOrderBookAgent public immutable orderBook;
+    IAgentIdentityRegistry public identityRegistry;
 
     error ZeroAddress();
     error NotOwner();
@@ -46,6 +47,8 @@ contract AgentRuntime is AccessControl, Pausable, ReentrancyGuard {
     error AgentNotFound();
     error AgentInactive();
     error ExecutionTooEarly();
+    error IdentityRegistryNotConfigured();
+    error IdentityAlreadyRegistered();
 
     event AgentCreated(
         uint256 indexed agentId,
@@ -69,12 +72,10 @@ contract AgentRuntime is AccessControl, Pausable, ReentrancyGuard {
     );
     event AgentDeactivated(uint256 indexed agentId);
     event AgentExecuted(
-        uint256 indexed agentId,
-        uint256 indexed orderId,
-        address indexed executor,
-        uint64 executedAt,
-        uint64 expiry
+        uint256 indexed agentId, uint256 indexed orderId, address indexed executor, uint64 executedAt, uint64 expiry
     );
+    event IdentityRegistrySet(address indexed identityRegistry);
+    event AgentIdentityLinked(uint256 indexed agentId, uint256 indexed identityId, address indexed owner);
 
     constructor(address admin, address orderBookAddress) {
         if (admin == address(0) || orderBookAddress == address(0)) revert ZeroAddress();
@@ -150,6 +151,29 @@ contract AgentRuntime is AccessControl, Pausable, ReentrancyGuard {
         emit AgentDeactivated(agentId);
     }
 
+    function setIdentityRegistry(address registry) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (registry == address(0)) revert ZeroAddress();
+        identityRegistry = IAgentIdentityRegistry(registry);
+        emit IdentityRegistrySet(registry);
+    }
+
+    function registerAgentIdentity(uint256 agentId, string calldata agentURI)
+        external
+        whenNotPaused
+        returns (uint256 identityId)
+    {
+        Agent storage agent = agents[agentId];
+        if (agent.owner == address(0)) revert AgentNotFound();
+        if (agent.owner != msg.sender) revert NotOwner();
+        if (address(identityRegistry) == address(0)) revert IdentityRegistryNotConfigured();
+        if (agentIdentityId[agentId] != 0) revert IdentityAlreadyRegistered();
+
+        identityId = identityRegistry.registerFor(agent.owner, agentURI);
+        agentIdentityId[agentId] = identityId;
+
+        emit AgentIdentityLinked(agentId, identityId, agent.owner);
+    }
+
     function executeAgent(uint256 agentId) external nonReentrant whenNotPaused returns (uint256 orderId) {
         Agent storage agent = agents[agentId];
         if (agent.owner == address(0)) revert AgentNotFound();
@@ -162,14 +186,7 @@ contract AgentRuntime is AccessControl, Pausable, ReentrancyGuard {
         }
 
         uint64 expiry = nowTs + agent.expiryWindow;
-        orderId = orderBook.placeOrderFor(
-            agent.owner,
-            agent.marketId,
-            agent.isYes,
-            agent.priceBps,
-            agent.size,
-            expiry
-        );
+        orderId = orderBook.placeOrderFor(agent.owner, agent.marketId, agent.isYes, agent.priceBps, agent.size, expiry);
 
         agent.lastExecutedAt = nowTs;
         emit AgentExecuted(agentId, orderId, msg.sender, nowTs, expiry);

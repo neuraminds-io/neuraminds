@@ -17,6 +17,24 @@ pub struct RpcLog {
     pub data: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RpcTransaction {
+    pub hash: String,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub input: String,
+    pub value: String,
+    pub block_number: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RpcTransactionReceipt {
+    pub status: Option<String>,
+    pub block_number: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct JsonRpcResponse {
     result: Option<serde_json::Value>,
@@ -99,6 +117,38 @@ impl EvmRpcService {
             .as_str()
             .map(|v| v.to_string())
             .ok_or_else(|| anyhow!("Invalid eth_sendRawTransaction response"))
+    }
+
+    pub async fn eth_get_transaction_by_hash(
+        &self,
+        tx_hash: &str,
+    ) -> Result<Option<RpcTransaction>> {
+        let value = self
+            .rpc_value_call("eth_getTransactionByHash", serde_json::json!([tx_hash]))
+            .await?;
+        if value.is_null() {
+            return Ok(None);
+        }
+
+        let tx = serde_json::from_value(value)
+            .map_err(|e| anyhow!("Invalid eth_getTransactionByHash payload: {}", e))?;
+        Ok(Some(tx))
+    }
+
+    pub async fn eth_get_transaction_receipt(
+        &self,
+        tx_hash: &str,
+    ) -> Result<Option<RpcTransactionReceipt>> {
+        let value = self
+            .rpc_value_call("eth_getTransactionReceipt", serde_json::json!([tx_hash]))
+            .await?;
+        if value.is_null() {
+            return Ok(None);
+        }
+
+        let receipt = serde_json::from_value(value)
+            .map_err(|e| anyhow!("Invalid eth_getTransactionReceipt payload: {}", e))?;
+        Ok(Some(receipt))
     }
 
     async fn rpc_value_call(

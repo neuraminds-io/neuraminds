@@ -203,7 +203,10 @@ pub async fn deposit(
             } else {
                 "pending"
             };
-            let tx_signature = body.tx_signature.as_ref().map(|sig| sig.to_ascii_lowercase());
+            let tx_signature = body
+                .tx_signature
+                .as_ref()
+                .map(|sig| sig.to_ascii_lowercase());
 
             record_transaction(
                 &state,

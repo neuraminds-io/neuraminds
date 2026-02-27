@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 
 const navLinks = [
   { href: '/markets', label: 'Markets' },
+  { href: '/agents', label: 'Agents' },
   { href: '/portfolio', label: 'Portfolio' },
   { href: '/api', label: 'API' },
 ];
@@ -88,7 +89,7 @@ export function Header() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
               <input
                 type="text"
-                placeholder="Search markets or profiles..."
+                placeholder="Search markets, agents, profiles..."
                 className={cn(
                   'w-full h-9 pl-9 pr-4  text-sm',
                   'bg-bg-secondary border border-border',

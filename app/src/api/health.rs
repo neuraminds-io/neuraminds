@@ -163,7 +163,8 @@ fn determine_overall_status(
         return HealthStatus::Degraded;
     }
 
-    if evm_enabled && (base.status == HealthStatus::Degraded || base.status == HealthStatus::Unhealthy)
+    if evm_enabled
+        && (base.status == HealthStatus::Degraded || base.status == HealthStatus::Unhealthy)
     {
         return HealthStatus::Degraded;
     }

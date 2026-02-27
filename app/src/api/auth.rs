@@ -41,10 +41,14 @@ pub async fn extract_authenticated_user(
     let token = &auth_header[7..];
     let claims = state.jwt.validate_token(token)?;
 
-    let revoked = state.redis.is_token_revoked(&claims.jti).await.map_err(|e| {
-        log::error!("Token revocation check failed: {}", e);
-        ApiError::internal("Authentication validation failed")
-    })?;
+    let revoked = state
+        .redis
+        .is_token_revoked(&claims.jti)
+        .await
+        .map_err(|e| {
+            log::error!("Token revocation check failed: {}", e);
+            ApiError::internal("Authentication validation failed")
+        })?;
 
     if revoked {
         return Err(ApiError::unauthorized("Token revoked"));

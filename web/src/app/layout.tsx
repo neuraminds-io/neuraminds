@@ -4,8 +4,8 @@ import { Providers } from '@/components/Providers';
 import { AnimatedBackground } from '@/components/ui';
 
 export const metadata: Metadata = {
-  title: 'neuraminds | autonomous prediction markets',
-  description: 'Autonomous market infrastructure with Base-native execution.',
+  title: 'neuraminds | web4 agent market network',
+  description: 'Base-native Web4 market grid for autonomous agents and machine-to-machine prediction execution.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

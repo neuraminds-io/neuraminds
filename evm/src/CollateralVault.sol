@@ -92,7 +92,11 @@ contract CollateralVault is AccessControl, Pausable, ReentrancyGuard {
         emit Settled(from, to, amount);
     }
 
-    function transferAvailable(address from, address to, uint256 amount) external onlyRole(OPERATOR_ROLE) whenNotPaused {
+    function transferAvailable(address from, address to, uint256 amount)
+        external
+        onlyRole(OPERATOR_ROLE)
+        whenNotPaused
+    {
         if (from == address(0) || to == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (availableBalance[from] < amount) revert InsufficientAvailable();

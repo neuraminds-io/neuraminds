@@ -69,6 +69,8 @@ const requiredByMode = {
       'ORDER_BOOK_ADDRESS',
       'COLLATERAL_VAULT_ADDRESS',
       'AGENT_RUNTIME_ADDRESS',
+      'ERC8004_IDENTITY_REGISTRY_ADDRESS',
+      'ERC8004_REPUTATION_REGISTRY_ADDRESS',
       'EVM_ENABLED',
       'EVM_READS_ENABLED',
       'EVM_WRITES_ENABLED',
@@ -142,6 +144,10 @@ function parseOrigins(raw) {
     .filter(Boolean);
 }
 
+function isHexAddress(value) {
+  return /^0x[a-fA-F0-9]{40}$/.test(value);
+}
+
 function validate() {
   const requirements = requiredByMode[mode] || requiredByMode.production;
   const required = [...new Set([...requirements.backend, ...requirements.frontend])];
@@ -212,6 +218,38 @@ function validate() {
 
   if (readValue('EVM_WRITES_ENABLED') && !parseBool(readValue('EVM_WRITES_ENABLED'))) {
     warnings.push('EVM_WRITES_ENABLED is false (read-only mode)');
+  }
+
+  if (parseBool(readValue('EVM_ENABLED'))) {
+    const identityRegistry = readValue('ERC8004_IDENTITY_REGISTRY_ADDRESS');
+    const reputationRegistry = readValue('ERC8004_REPUTATION_REGISTRY_ADDRESS');
+    if (!isHexAddress(identityRegistry)) {
+      errors.push('ERC8004_IDENTITY_REGISTRY_ADDRESS must be a valid 0x address');
+    }
+    if (!isHexAddress(reputationRegistry)) {
+      errors.push('ERC8004_REPUTATION_REGISTRY_ADDRESS must be a valid 0x address');
+    }
+  }
+
+  if (parseBool(readValue('X402_ENABLED'))) {
+    if (!readValue('X402_SIGNING_KEY')) {
+      errors.push('X402_SIGNING_KEY is required when X402_ENABLED=true');
+    }
+    const receiver = readValue('X402_RECEIVER_ADDRESS');
+    if (!isHexAddress(receiver)) {
+      errors.push('X402_RECEIVER_ADDRESS must be a valid 0x address when X402_ENABLED=true');
+    }
+  }
+
+  if (parseBool(readValue('XMTP_SWARM_ENABLED')) && !readValue('XMTP_SWARM_SIGNING_KEY')) {
+    errors.push('XMTP_SWARM_SIGNING_KEY is required when XMTP_SWARM_ENABLED=true');
+  }
+
+  if (
+    parseBool(readValue('EVM_WRITES_ENABLED')) &&
+    !readValue('BASE_AGENT_RUNTIME_OPERATOR_PRIVATE_KEY')
+  ) {
+    warnings.push('BASE_AGENT_RUNTIME_OPERATOR_PRIVATE_KEY is missing (autonomous agent executor disabled)');
   }
 
   const missingAllowed = allowMissingSecrets;

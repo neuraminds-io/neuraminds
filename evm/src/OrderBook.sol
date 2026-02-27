@@ -9,7 +9,14 @@ interface IMarketCoreRead {
     function markets(uint256 marketId)
         external
         view
-        returns (bytes32 questionHash, uint64 closeTime, uint64 resolveTime, address resolver, bool resolved, bool outcome);
+        returns (
+            bytes32 questionHash,
+            uint64 closeTime,
+            uint64 resolveTime,
+            address resolver,
+            bool resolved,
+            bool outcome
+        );
 }
 
 interface ICollateralVault {
@@ -116,14 +123,12 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
         orderId = _placeOrder(msg.sender, marketId, isYes, priceBps, size, expiry);
     }
 
-    function placeOrderFor(
-        address maker,
-        uint256 marketId,
-        bool isYes,
-        uint128 priceBps,
-        uint128 size,
-        uint64 expiry
-    ) external onlyRole(AGENT_RUNTIME_ROLE) whenNotPaused returns (uint256 orderId) {
+    function placeOrderFor(address maker, uint256 marketId, bool isYes, uint128 priceBps, uint128 size, uint64 expiry)
+        external
+        onlyRole(AGENT_RUNTIME_ROLE)
+        whenNotPaused
+        returns (uint256 orderId)
+    {
         if (maker == address(0)) revert ZeroAddress();
         orderId = _placeOrder(maker, marketId, isYes, priceBps, size, expiry);
     }
@@ -194,7 +199,7 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
         if (position.claimed) revert AlreadyClaimed();
         if (position.yesShares == 0 && position.noShares == 0) revert NoPosition();
 
-        (, , , , bool resolved, bool outcome) = marketCore.markets(marketId);
+        (,,,, bool resolved, bool outcome) = marketCore.markets(marketId);
         if (!resolved) revert MarketNotResolved();
 
         uint256 winningShares = outcome ? position.yesShares : position.noShares;
@@ -222,7 +227,7 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
         if (position.claimed) return 0;
         if (position.yesShares == 0 && position.noShares == 0) return 0;
 
-        (, , , , bool resolved, bool outcome) = marketCore.markets(marketId);
+        (,,,, bool resolved, bool outcome) = marketCore.markets(marketId);
         if (!resolved) return 0;
 
         uint256 winningShares = outcome ? position.yesShares : position.noShares;

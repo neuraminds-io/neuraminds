@@ -1,4 +1,6 @@
 import type {
+  Agent,
+  AgentFilters,
   Market,
   Order,
   Position,
@@ -95,6 +97,38 @@ interface BaseTradesResponse {
   has_more: boolean;
 }
 
+interface BaseAgentSnapshot {
+  id: string;
+  owner: string;
+  market_id: string;
+  is_yes: boolean;
+  price_bps: number;
+  size: string;
+  cadence: number;
+  expiry_window: number;
+  last_executed_at: number;
+  next_execution_at: number;
+  can_execute: boolean;
+  active: boolean;
+  status: Agent['status'];
+  strategy: string;
+  identity_id?: string;
+  identity_tier?: number;
+  identity_active?: boolean;
+  identity_updated_at?: number;
+  reputation_score_bps?: number;
+  reputation_confidence_bps?: number;
+  reputation_events?: number;
+  reputation_notional_microusdc?: string;
+}
+
+interface BaseAgentsResponse {
+  agents: BaseAgentSnapshot[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface PreparedEvmWriteTx {
   chain_id: number;
   from?: string;
@@ -133,6 +167,13 @@ function toIsoString(value: unknown): string {
 function fromUnixSeconds(value: number | undefined): string {
   if (!value || !Number.isFinite(value) || value <= 0) {
     return new Date().toISOString();
+  }
+  return new Date(value * 1000).toISOString();
+}
+
+function fromUnixSecondsOptional(value: number | undefined): string {
+  if (!value || !Number.isFinite(value) || value <= 0) {
+    return '';
   }
   return new Date(value * 1000).toISOString();
 }
@@ -253,6 +294,41 @@ function mapBaseTradeToTrade(snapshot: BaseTradeSnapshot): Trade {
     seller: '',
     txSignature: snapshot.tx_hash,
     createdAt: snapshot.created_at,
+  };
+}
+
+function mapBaseAgentToAgent(snapshot: BaseAgentSnapshot): Agent {
+  return {
+    id: snapshot.id,
+    owner: snapshot.owner,
+    marketId: snapshot.market_id,
+    isYes: snapshot.is_yes,
+    priceBps: toNumber(snapshot.price_bps),
+    size: String(snapshot.size ?? '0'),
+    cadence: toNumber(snapshot.cadence),
+    expiryWindow: toNumber(snapshot.expiry_window),
+    lastExecutedAt: fromUnixSecondsOptional(snapshot.last_executed_at),
+    nextExecutionAt: fromUnixSecondsOptional(snapshot.next_execution_at),
+    canExecute: Boolean(snapshot.can_execute),
+    active: Boolean(snapshot.active),
+    status: snapshot.status ?? 'inactive',
+    strategy: String(snapshot.strategy ?? ''),
+    identityId: snapshot.identity_id ? String(snapshot.identity_id) : undefined,
+    identityTier: typeof snapshot.identity_tier === 'number' ? snapshot.identity_tier : undefined,
+    identityActive: typeof snapshot.identity_active === 'boolean' ? snapshot.identity_active : undefined,
+    identityUpdatedAt: typeof snapshot.identity_updated_at === 'number'
+      ? fromUnixSecondsOptional(snapshot.identity_updated_at)
+      : undefined,
+    reputationScoreBps:
+      typeof snapshot.reputation_score_bps === 'number' ? snapshot.reputation_score_bps : undefined,
+    reputationConfidenceBps:
+      typeof snapshot.reputation_confidence_bps === 'number'
+        ? snapshot.reputation_confidence_bps
+        : undefined,
+    reputationEvents: typeof snapshot.reputation_events === 'number' ? snapshot.reputation_events : undefined,
+    reputationNotionalMicrousdc: snapshot.reputation_notional_microusdc
+      ? String(snapshot.reputation_notional_microusdc)
+      : undefined,
   };
 }
 
@@ -574,6 +650,38 @@ class ApiClient {
     }
 
     return market;
+  }
+
+  async getBaseAgents(filters?: AgentFilters): Promise<PaginatedResponse<Agent>> {
+    const query = this.buildQuery({
+      limit: filters?.limit,
+      offset: filters?.offset,
+      owner: filters?.owner,
+      market_id: filters?.marketId,
+      active: filters?.active,
+    });
+    const response = await this.request<BaseAgentsResponse>(`/evm/agents${query}`);
+    const data = (response.agents ?? []).map(mapBaseAgentToAgent);
+    const total = toNumber(response.total, data.length);
+    const limit = toNumber(response.limit, filters?.limit ?? data.length);
+    const offset = toNumber(response.offset, filters?.offset ?? 0);
+
+    return {
+      data,
+      total,
+      limit,
+      offset,
+      hasMore: offset + limit < total,
+    };
+  }
+
+  async getBaseAgent(id: string): Promise<Agent> {
+    const parsedId = Number(id);
+    if (!Number.isInteger(parsedId) || parsedId < 1) {
+      throw new ApiError(404, 'Agent not found');
+    }
+    const response = await this.request<BaseAgentSnapshot>(`/evm/agents/${parsedId}`);
+    return mapBaseAgentToAgent(response);
   }
 
   async getBaseTokenState(): Promise<BaseTokenState> {

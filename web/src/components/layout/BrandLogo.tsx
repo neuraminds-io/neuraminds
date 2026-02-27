@@ -8,7 +8,7 @@ export function BrandLogo() {
           <span className="brandmark-dot brandmark-dot-orange" />
         </span>
       </span>
-      <span className="brandmark-sub">AGENTIC PREDICTION MARKET</span>
+      <span className="brandmark-sub">WEB4 AGENT MARKET GRID</span>
     </span>
   );
 }

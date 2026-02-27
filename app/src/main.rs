@@ -278,8 +278,31 @@ async fn main() -> std::io::Result<()> {
                             .route("/logout", web::post().to(api::auth::logout)),
                     )
                     .service(
+                        web::scope("/payments").service(
+                            web::scope("/x402")
+                                .route("/quote", web::get().to(api::payments::get_x402_quote))
+                                .route(
+                                    "/verify",
+                                    web::post().to(api::payments::verify_x402_payment),
+                                ),
+                        ),
+                    )
+                    .service(
                         web::scope("/evm")
                             .route("/markets", web::get().to(api::evm::get_base_markets))
+                            .route("/agents", web::get().to(api::evm::get_base_agents))
+                            .route(
+                                "/agents/{agent_id}",
+                                web::get().to(api::evm::get_base_agent),
+                            )
+                            .route(
+                                "/identity/{wallet}",
+                                web::get().to(api::evm::get_base_identity),
+                            )
+                            .route(
+                                "/reputation/{wallet}",
+                                web::get().to(api::evm::get_base_reputation),
+                            )
                             .route(
                                 "/markets/{market_id}/orderbook",
                                 web::get().to(api::evm::get_base_orderbook),
@@ -322,7 +345,35 @@ async fn main() -> std::io::Result<()> {
                                         "/agents/execute",
                                         web::post().to(api::evm::prepare_execute_agent_write),
                                     )
-                                    .route("/relay", web::post().to(api::evm::relay_raw_transaction)),
+                                    .route(
+                                        "/relay",
+                                        web::post().to(api::evm::relay_raw_transaction),
+                                    ),
+                            ),
+                    )
+                    .service(
+                        web::scope("/web4")
+                            .route(
+                                "/capabilities",
+                                web::get().to(api::web4::get_web4_capabilities),
+                            )
+                            .route("/mcp", web::get().to(api::web4::get_mcp_manifest))
+                            .route("/mcp", web::post().to(api::web4::handle_mcp_jsonrpc))
+                            .route("/agent-card", web::get().to(api::web4::get_agent_card))
+                            .service(
+                                web::scope("/xmtp")
+                                    .route(
+                                        "/health",
+                                        web::get().to(api::web4::get_xmtp_swarm_health),
+                                    )
+                                    .route(
+                                        "/swarm/send",
+                                        web::post().to(api::web4::send_xmtp_swarm_message),
+                                    )
+                                    .route(
+                                        "/swarm/{swarm_id}/messages",
+                                        web::get().to(api::web4::list_xmtp_swarm_messages),
+                                    ),
                             ),
                     ),
             )

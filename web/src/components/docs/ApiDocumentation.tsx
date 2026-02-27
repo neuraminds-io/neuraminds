@@ -173,6 +173,172 @@ const API_DOCS: EndpointGroup[] = [
     ],
   },
   {
+    name: 'Web4',
+    description: 'Agent discovery and protocol capability surfaces',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/web4/capabilities',
+        summary: 'Get Web4 capability status',
+        auth: false,
+        response: {
+          example: `{
+  "project": "neuraminds",
+  "mode": "web4-agent-market-network",
+  "chain": { "name": "base", "id": 8453 },
+  "protocols": [
+    { "id": "mcp-manifest", "status": "implemented" },
+    { "id": "a2a-agent-card", "status": "implemented" }
+  ]
+}`,
+        },
+      },
+      {
+        method: 'GET',
+        path: '/web4/mcp',
+        summary: 'Get MCP manifest',
+        auth: false,
+        description: 'MCP-compatible tool/resource/prompt manifest mapped to NeuraMinds APIs.',
+        response: {
+          example: `{
+  "name": "neuraminds",
+  "tools": [
+    { "name": "getMarkets", "http": { "method": "GET", "path": "/evm/markets" } },
+    { "name": "getAgents", "http": { "method": "GET", "path": "/evm/agents" } }
+  ],
+  "resources": [
+    { "name": "agents", "uri": "https://api.neuraminds.ai/v1/evm/agents?active=true" }
+  ]
+}`,
+        },
+      },
+      {
+        method: 'POST',
+        path: '/web4/mcp',
+        summary: 'Call MCP JSON-RPC methods',
+        auth: false,
+        description: 'JSON-RPC transport for initialize, tools, resources, and prompts.',
+        body: {
+          schema: 'McpJsonRpcRequest',
+          example: `{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}`,
+        },
+        response: {
+          example: `{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      { "name": "getMarkets" },
+      { "name": "getAgents" }
+    ]
+  }
+}`,
+        },
+      },
+      {
+        method: 'GET',
+        path: '/web4/agent-card',
+        summary: 'Get A2A-style agent card',
+        auth: false,
+        response: {
+          example: `{
+  "schema": "a2a-agent-card/v1",
+  "name": "NeuraMinds Base Agent Network",
+  "actions": [
+    { "name": "list_markets", "method": "GET", "url": "https://api.neuraminds.ai/v1/evm/markets" },
+    { "name": "prepare_execute_agent", "method": "POST", "url": "https://api.neuraminds.ai/v1/evm/write/agents/execute" }
+  ]
+}`,
+        },
+      },
+      {
+        method: 'GET',
+        path: '/evm/agents',
+        summary: 'List runtime agents',
+        auth: false,
+        params: [
+          { name: 'limit', type: 'integer', required: false, description: 'Results per page (max: 200)' },
+          { name: 'offset', type: 'integer', required: false, description: 'Pagination offset' },
+          { name: 'owner', type: 'string', required: false, description: 'Filter by owner wallet address' },
+          { name: 'market_id', type: 'integer', required: false, description: 'Filter by market id' },
+          { name: 'active', type: 'boolean', required: false, description: 'Filter active status' },
+        ],
+        response: {
+          example: `{
+  "agents": [
+    {
+      "id": "12",
+      "market_id": "7",
+      "identity_tier": 42,
+      "reputation_score_bps": 7100,
+      "status": "ready",
+      "can_execute": true
+    }
+  ],
+  "total": 1
+}`,
+        },
+      },
+      {
+        method: 'GET',
+        path: '/web4/xmtp/health',
+        summary: 'Get XMTP swarm runtime health',
+        auth: false,
+        response: {
+          example: `{
+  "enabled": true,
+  "topic_prefix": "neuraminds/base/swarm",
+  "max_messages": 500
+}`,
+        },
+      },
+      {
+        method: 'POST',
+        path: '/web4/xmtp/swarm/send',
+        summary: 'Send signed XMTP swarm message',
+        auth: false,
+        body: {
+          schema: 'SwarmSendRequest',
+          example: `{
+  "swarm_id": "alpha",
+  "sender": "0xabc123...",
+  "message": "rebalance now",
+  "signature": "<signed payload>"
+}`,
+        },
+      },
+    ],
+  },
+  {
+    name: 'Payments',
+    description: 'x402 premium data payment flow',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/payments/x402/quote',
+        summary: 'Get x402 payment quote',
+        auth: false,
+        params: [
+          { name: 'resource', type: 'string', required: false, description: 'orderbook | trades | mcp_tool_call' },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/payments/x402/verify',
+        summary: 'Verify x402 proof',
+        auth: false,
+        params: [
+          { name: 'resource', type: 'string', required: false, description: 'orderbook | trades | mcp_tool_call' },
+        ],
+      },
+    ],
+  },
+  {
     name: 'Orders',
     description: 'Order placement and management',
     endpoints: [
