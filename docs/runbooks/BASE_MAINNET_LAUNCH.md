@@ -49,6 +49,7 @@ All must be true before mainnet:
 - `COLLATERAL_TOKEN_BASE_MAINNET`
 - `COLLATERAL_TOKEN_BASE_SEPOLIA`
 - `BASESCAN_API_KEY` (recommended for verification)
+- `DX_TERMINAL_VAULT_ADDRESS` (or `DX_TERMINAL_OWNER_ADDRESS` + DX API access) for strict readiness DX snapshot gate
 
 ### 3.2 Backend
 
@@ -218,6 +219,28 @@ node scripts/synthetic-monitor.mjs \
   --chain-mode base
 npm run launch:summary
 ```
+
+### 6.7 End-to-end onchain smoke (mainnet)
+
+Run a full create/trade/match/resolve/claim loop with small size:
+
+```bash
+npm run base:smoke:mainnet
+```
+
+Dry-run planning mode (no tx broadcast):
+
+```bash
+npm run base:smoke:mainnet:dry
+```
+
+Required smoke keys:
+- `BASE_SMOKE_ADMIN_PRIVATE_KEY`
+- `BASE_SMOKE_YES_TRADER_PRIVATE_KEY`
+- `BASE_SMOKE_NO_TRADER_PRIVATE_KEY` (optional; defaults to yes trader key)
+
+Output:
+- `docs/reports/base-mainnet-smoke-report.json`
 
 ## 7. Production Acceptance Criteria
 

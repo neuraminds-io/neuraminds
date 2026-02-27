@@ -22,6 +22,8 @@
     "base:wallets:status": "bash scripts/base-wallet-status.sh --network both",
     "base:fund:sepolia": "bash scripts/base-distribute-funds.sh --network sepolia",
     "base:fund:mainnet": "bash scripts/base-distribute-funds.sh --network mainnet",
+    "base:smoke:mainnet": "bash scripts/base-mainnet-smoke.sh --network mainnet",
+    "base:smoke:mainnet:dry": "bash scripts/base-mainnet-smoke.sh --network mainnet --dry-run",
     "dx:help": "bash scripts/dx-terminal-pro.sh help",
     "dx:vault": "bash scripts/dx-terminal-pro.sh vault",
     "dx:positions": "bash scripts/dx-terminal-pro.sh positions",
