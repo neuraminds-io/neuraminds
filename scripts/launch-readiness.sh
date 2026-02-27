@@ -14,6 +14,7 @@ SKIP_DX_SNAPSHOT=0
 REQUIRE_DX_SNAPSHOT=0
 DX_SNAPSHOT_OUT="docs/reports/dx-terminal-snapshot.json"
 DX_SNAPSHOT_CAPTURED=0
+REQUIRE_DX_SNAPSHOT_EXPLICIT=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -43,6 +44,7 @@ for arg in "$@"; do
       ;;
     --require-dx-snapshot)
       REQUIRE_DX_SNAPSHOT=1
+      REQUIRE_DX_SNAPSHOT_EXPLICIT=1
       ;;
     --dx-snapshot-out=*)
       DX_SNAPSHOT_OUT="${arg#*=}"
@@ -54,6 +56,10 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+if [[ "${STRICT}" -eq 1 && "${SKIP_DX_SNAPSHOT}" -eq 0 && "${REQUIRE_DX_SNAPSHOT_EXPLICIT}" -eq 0 ]]; then
+  REQUIRE_DX_SNAPSHOT=1
+fi
 
 echo "launch readiness starting"
 echo "mode=${MODE}"
@@ -117,23 +123,13 @@ if [[ "${RUN_WEB_E2E}" -eq 1 ]]; then
 fi
 
 if [[ "${SKIP_DX_SNAPSHOT}" -eq 0 ]]; then
-  SHOULD_CAPTURE_DX=0
-  if [[ -n "${DX_TERMINAL_VAULT_ADDRESS:-}" || -n "${DX_TERMINAL_OWNER_ADDRESS:-}" || -n "${DX_TERMINAL_PRIVATE_KEY:-}" ]]; then
-    SHOULD_CAPTURE_DX=1
-  fi
-
-  if [[ "${SHOULD_CAPTURE_DX}" -eq 1 ]]; then
-    (
-      cd "${ROOT_DIR}"
-      bash scripts/dx-terminal-pro.sh snapshot "${DX_SNAPSHOT_OUT}"
-    ) && DX_SNAPSHOT_CAPTURED=1 || {
-      echo "dx snapshot capture failed"
-      if [[ "${REQUIRE_DX_SNAPSHOT}" -eq 1 ]]; then
-        exit 1
-      fi
-    }
+  if (
+    cd "${ROOT_DIR}"
+    bash scripts/dx-terminal-pro.sh snapshot "${DX_SNAPSHOT_OUT}"
+  ); then
+    DX_SNAPSHOT_CAPTURED=1
   else
-    echo "dx snapshot skipped (set DX_TERMINAL_VAULT_ADDRESS or DX_TERMINAL_OWNER_ADDRESS or DX_TERMINAL_PRIVATE_KEY to enable)"
+    echo "dx snapshot capture failed"
     if [[ "${REQUIRE_DX_SNAPSHOT}" -eq 1 ]]; then
       exit 1
     fi

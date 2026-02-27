@@ -15,6 +15,9 @@ Strict mode (includes frontend build + backend cargo check through production ga
 npm run launch:readiness:strict
 ```
 
+`launch:readiness:strict` now requires DX snapshot capture by default.
+Use `--skip-dx-snapshot` only for local debug runs.
+
 Optional local timeout override for strict checks:
 
 ```bash
@@ -76,6 +79,8 @@ Base launch runbook:
 ```bash
 npm run launch:e2e
 ```
+
+`launch:e2e` now runs strict readiness + strict production gates.
 
 Generated artifacts:
 - `docs/reports/launch-config-report.json`

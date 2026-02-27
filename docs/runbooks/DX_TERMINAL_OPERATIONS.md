@@ -57,7 +57,7 @@ Integrated launch flow:
 npm run launch:readiness:strict:dx
 ```
 
-`launch-readiness.sh` now auto-captures DX snapshots when DX env is present. Use:
+`launch-readiness.sh` now runs DX snapshot capture in every readiness run unless skipped. In strict mode, DX snapshot is required by default. Use:
 
 - `--require-dx-snapshot` to fail if snapshot cannot be captured.
 - `--skip-dx-snapshot` to disable DX capture.
