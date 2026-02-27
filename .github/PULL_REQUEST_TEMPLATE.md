@@ -14,7 +14,7 @@ Brief description of changes.
 ## Testing
 
 - [ ] Unit tests pass (`cargo test`)
-- [ ] Integration tests pass (`anchor test`)
+- [ ] Contract tests pass (`forge test`)
 - [ ] Manual testing completed
 
 ## Security Checklist

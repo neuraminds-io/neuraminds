@@ -145,7 +145,6 @@ pub struct MetricsService {
     request_latency: Histogram,
     order_latency: Histogram,
     trade_latency: Histogram,
-    solana_rpc_latency: Histogram,
     database_latency: Histogram,
 }
 
@@ -163,7 +162,6 @@ impl MetricsService {
             request_latency: Histogram::new(),
             order_latency: Histogram::new(),
             trade_latency: Histogram::new(),
-            solana_rpc_latency: Histogram::new(),
             database_latency: Histogram::new(),
         }
     }
@@ -214,11 +212,6 @@ impl MetricsService {
         self.trade_latency.observe(latency_ms);
     }
 
-    /// Record Solana RPC call latency
-    pub fn observe_solana_rpc_latency(&self, latency_ms: f64) {
-        self.solana_rpc_latency.observe(latency_ms);
-    }
-
     /// Record database query latency
     pub fn observe_database_latency(&self, latency_ms: f64) {
         self.database_latency.observe(latency_ms);
@@ -230,7 +223,6 @@ impl MetricsService {
             request: self.request_latency.get_stats(),
             order: self.order_latency.get_stats(),
             trade: self.trade_latency.get_stats(),
-            solana_rpc: self.solana_rpc_latency.get_stats(),
             database: self.database_latency.get_stats(),
         }
     }
@@ -321,10 +313,6 @@ impl MetricsService {
             "polyguard_trade_duration_ms",
             "Trade execution duration in milliseconds",
         ));
-        output.push_str(&self.solana_rpc_latency.export_prometheus(
-            "polyguard_solana_rpc_duration_ms",
-            "Solana RPC call duration in milliseconds",
-        ));
         output.push_str(&self.database_latency.export_prometheus(
             "polyguard_database_duration_ms",
             "Database query duration in milliseconds",
@@ -373,7 +361,6 @@ pub struct LatencyMetrics {
     pub request: HistogramStats,
     pub order: HistogramStats,
     pub trade: HistogramStats,
-    pub solana_rpc: HistogramStats,
     pub database: HistogramStats,
 }
 
@@ -391,7 +378,6 @@ pub struct SystemHealth {
 pub struct HealthChecks {
     pub database: ComponentHealth,
     pub redis: ComponentHealth,
-    pub solana: ComponentHealth,
     pub base: ComponentHealth,
 }
 
@@ -599,14 +585,12 @@ mod tests {
         metrics.observe_request_latency(20.0);
         metrics.observe_order_latency(5.0);
         metrics.observe_trade_latency(100.0);
-        metrics.observe_solana_rpc_latency(50.0);
         metrics.observe_database_latency(2.0);
 
         let latency = metrics.get_latency_stats();
         assert_eq!(latency.request.count, 2);
         assert_eq!(latency.order.count, 1);
         assert_eq!(latency.trade.count, 1);
-        assert_eq!(latency.solana_rpc.count, 1);
         assert_eq!(latency.database.count, 1);
     }
 

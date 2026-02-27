@@ -8,13 +8,13 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 lazy_static! {
-    static ref SOLANA_ADDRESS_REGEX: Regex = Regex::new(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$").unwrap();
+    static ref EVM_ADDRESS_REGEX: Regex = Regex::new(r"^0x[0-9a-fA-F]{40}$").unwrap();
     static ref MARKET_ID_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9\-_]{1,64}$").unwrap();
     static ref UUID_REGEX: Regex = Regex::new(
         r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
     )
     .unwrap();
-    static ref TX_SIGNATURE_REGEX: Regex = Regex::new(r"^[1-9A-HJ-NP-Za-km-z]{87,88}$").unwrap();
+    static ref TX_SIGNATURE_REGEX: Regex = Regex::new(r"^0x[0-9a-fA-F]{64}$").unwrap();
 }
 
 pub mod limits {
@@ -37,10 +37,10 @@ pub fn validate_wallet_address(address: &str) -> Result<(), ApiError> {
             "Wallet address cannot be empty",
         ));
     }
-    if !SOLANA_ADDRESS_REGEX.is_match(address) {
+    if !EVM_ADDRESS_REGEX.is_match(address) {
         return Err(ApiError::bad_request(
             "INVALID_WALLET",
-            "Invalid Solana wallet address format",
+            "Invalid EVM wallet address format",
         ));
     }
     Ok(())
@@ -253,13 +253,13 @@ mod tests {
     #[test]
     fn test_validate_wallet_address() {
         // Valid addresses
-        assert!(validate_wallet_address("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU").is_ok());
-        assert!(validate_wallet_address("11111111111111111111111111111111").is_ok());
+        assert!(validate_wallet_address("0x71C7656EC7ab88b098defB751B7401B5f6d8976F").is_ok());
+        assert!(validate_wallet_address("0xA0b86991c6218b36c1d19d4a2e9Eb0cE3606eb48").is_ok());
 
         // Invalid addresses
         assert!(validate_wallet_address("").is_err());
         assert!(validate_wallet_address("short").is_err());
-        assert!(validate_wallet_address("0xInvalidEthAddress").is_err());
+        assert!(validate_wallet_address("0xInvalidEvmAddress").is_err());
         assert!(validate_wallet_address("contains spaces here").is_err());
     }
 
@@ -379,8 +379,8 @@ mod tests {
 
     #[test]
     fn test_validate_tx_signature() {
-        // Valid signature (88 chars, base58)
-        let valid_sig = "5wHu1qwD7q3EoP7ixmsYLqSzSj3sA5xgKi1qKe9mYJ1qKe9mYJ1qKe9mYJ1qKe9mYJ1qKe9mYJ1qKe9mYJ1qKe9m";
+        let valid_sig =
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         assert!(validate_tx_signature(valid_sig).is_ok());
 
         // Invalid signatures

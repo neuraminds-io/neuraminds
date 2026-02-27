@@ -11,8 +11,11 @@ services:
       - DATABASE_URL=postgres://polyguard:polyguard@postgres:5432/polyguard
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-development-secret-change-in-production}
-      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-https://api.devnet.solana.com}
-      - SOLANA_ENABLED=${SOLANA_ENABLED:-false}
+      - EVM_ENABLED=${EVM_ENABLED:-true}
+      - EVM_READS_ENABLED=${EVM_READS_ENABLED:-true}
+      - EVM_WRITES_ENABLED=${EVM_WRITES_ENABLED:-true}
+      - BASE_RPC_URL=${BASE_RPC_URL:-https://mainnet.base.org}
+      - BASE_CHAIN_ID=${BASE_CHAIN_ID:-8453}
       - RUST_LOG=info
     depends_on:
       postgres:

@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
 
 const withPWA = require('next-pwa')({
   dest: 'public',
@@ -10,6 +11,7 @@ const withPWA = require('next-pwa')({
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  outputFileTracingRoot: path.join(__dirname, '..'),
 
   images: {
     // Modern formats for better compression

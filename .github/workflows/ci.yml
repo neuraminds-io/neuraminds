@@ -150,8 +150,8 @@ jobs:
           DATABASE_URL: postgres://polyguard:polyguard@localhost:5432/polyguard_test
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: test-secret-key-for-ci
-          SOLANA_RPC_URL: https://api.devnet.solana.com
-          SOLANA_ENABLED: "false"
+          EVM_ENABLED: "true"
+          EVM_READS_ENABLED: "true"
         run: cargo test --release
 
   build-image:

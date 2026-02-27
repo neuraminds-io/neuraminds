@@ -79,16 +79,18 @@ spec:
                 secretKeyRef:
                   name: polyguard-secrets
                   key: jwt-secret
-            - name: SOLANA_RPC_URL
+            - name: BASE_RPC_URL
               valueFrom:
                 configMapKeyRef:
                   name: polyguard-config
-                  key: solana-rpc-url
-            - name: KEEPER_KEYPAIR
+                  key: base-rpc-url
+            - name: BASE_CHAIN_ID
               valueFrom:
-                secretKeyRef:
-                  name: polyguard-secrets
-                  key: keeper-keypair
+                configMapKeyRef:
+                  name: polyguard-config
+                  key: base-chain-id
+            - name: EVM_ENABLED
+              value: "true"
 
           resources:
             requests:
@@ -111,7 +113,7 @@ spec:
           # Readiness probe - is the pod ready to receive traffic?
           readinessProbe:
             httpGet:
-              path: /health/deep
+              path: /health/detailed
               port: http
             initialDelaySeconds: 5
             periodSeconds: 5
@@ -209,16 +211,18 @@ spec:
                 secretKeyRef:
                   name: polyguard-secrets
                   key: jwt-secret
-            - name: SOLANA_RPC_URL
+            - name: BASE_RPC_URL
               valueFrom:
                 configMapKeyRef:
                   name: polyguard-config
-                  key: solana-rpc-url
-            - name: KEEPER_KEYPAIR
+                  key: base-rpc-url
+            - name: BASE_CHAIN_ID
               valueFrom:
-                secretKeyRef:
-                  name: polyguard-secrets
-                  key: keeper-keypair
+                configMapKeyRef:
+                  name: polyguard-config
+                  key: base-chain-id
+            - name: EVM_ENABLED
+              value: "true"
 
           resources:
             requests:
@@ -239,7 +243,7 @@ spec:
 
           readinessProbe:
             httpGet:
-              path: /health/deep
+              path: /health/detailed
               port: http
             initialDelaySeconds: 5
             periodSeconds: 5

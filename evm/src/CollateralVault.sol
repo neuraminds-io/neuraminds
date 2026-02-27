@@ -28,6 +28,7 @@ contract CollateralVault is AccessControl, Pausable, ReentrancyGuard {
     event Locked(address indexed user, uint256 amount);
     event Unlocked(address indexed user, uint256 amount);
     event Settled(address indexed from, address indexed to, uint256 amount);
+    event AvailableTransferred(address indexed from, address indexed to, uint256 amount);
 
     constructor(address admin, address collateralToken) {
         if (admin == address(0) || collateralToken == address(0)) revert ZeroAddress();
@@ -89,6 +90,17 @@ contract CollateralVault is AccessControl, Pausable, ReentrancyGuard {
         availableBalance[to] += amount;
 
         emit Settled(from, to, amount);
+    }
+
+    function transferAvailable(address from, address to, uint256 amount) external onlyRole(OPERATOR_ROLE) whenNotPaused {
+        if (from == address(0) || to == address(0)) revert ZeroAddress();
+        if (amount == 0) revert InvalidAmount();
+        if (availableBalance[from] < amount) revert InsufficientAvailable();
+
+        availableBalance[from] -= amount;
+        availableBalance[to] += amount;
+
+        emit AvailableTransferred(from, to, amount);
     }
 
     function pause() external onlyRole(PAUSER_ROLE) {

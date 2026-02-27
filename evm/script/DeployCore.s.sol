@@ -6,6 +6,7 @@ import {NeuraToken} from "../src/NeuraToken.sol";
 import {MarketCore} from "../src/MarketCore.sol";
 import {OrderBook} from "../src/OrderBook.sol";
 import {CollateralVault} from "../src/CollateralVault.sol";
+import {AgentRuntime} from "../src/AgentRuntime.sol";
 
 contract DeployCoreScript is Script {
     function run() external {
@@ -23,14 +24,20 @@ contract DeployCoreScript is Script {
         if (collateralToken == address(0)) {
             collateralToken = address(token);
         }
-        OrderBook orderBook = new OrderBook(admin, address(marketCore), collateralToken);
+
         CollateralVault collateralVault = new CollateralVault(admin, collateralToken);
+        OrderBook orderBook = new OrderBook(admin, address(marketCore), address(collateralVault));
+        AgentRuntime agentRuntime = new AgentRuntime(admin, address(orderBook));
+
+        collateralVault.grantRole(collateralVault.OPERATOR_ROLE(), address(orderBook));
+        orderBook.grantRole(orderBook.AGENT_RUNTIME_ROLE(), address(agentRuntime));
 
         vm.stopBroadcast();
 
         console2.log("NeuraToken:", address(token));
         console2.log("MarketCore:", address(marketCore));
-        console2.log("OrderBook:", address(orderBook));
         console2.log("CollateralVault:", address(collateralVault));
+        console2.log("OrderBook:", address(orderBook));
+        console2.log("AgentRuntime:", address(agentRuntime));
     }
 }

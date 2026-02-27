@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { waitForTransactionReceipt } from '@wagmi/core';
-import { useConfig, usePublicClient, useWriteContract } from 'wagmi';
+import { useConfig, usePublicClient, useWalletClient } from 'wagmi';
 
 import { api } from '@/lib/api';
 import { ORDER_BOOK_ABI, ORDER_BOOK_ADDRESS, assertContractAddress } from '@/lib/contracts';
@@ -117,25 +117,32 @@ export function useClaimWinnings() {
   const queryClient = useQueryClient();
   const baseWallet = useBaseWallet();
   const config = useConfig();
-  const { writeContractAsync } = useWriteContract();
+  const { data: walletClient } = useWalletClient();
 
   return useMutation({
     mutationFn: async (marketId: string) => {
-      const orderBookAddress = assertContractAddress(
-        ORDER_BOOK_ADDRESS,
-        'NEXT_PUBLIC_ORDER_BOOK_ADDRESS'
-      );
-
       if (!baseWallet.address || !baseWallet.isConnected) {
         throw new Error('Connect your wallet before claiming');
       }
+      if (!walletClient) {
+        throw new Error('Wallet client unavailable');
+      }
+
+      const parsedMarketId = Number(marketId);
+      if (!Number.isInteger(parsedMarketId) || parsedMarketId < 1) {
+        throw new Error('Invalid market id');
+      }
 
       await baseWallet.ensureBaseChain();
-      const hash = await writeContractAsync({
-        address: orderBookAddress,
-        abi: ORDER_BOOK_ABI,
-        functionName: 'claim',
-        args: [BigInt(marketId)],
+      const prepared = await api.prepareBaseClaim({
+        from: baseWallet.address,
+        marketId: parsedMarketId,
+      });
+      const hash = await walletClient.sendTransaction({
+        account: baseWallet.address as `0x${string}`,
+        to: prepared.to as `0x${string}`,
+        data: prepared.data,
+        value: BigInt(prepared.value),
       });
 
       const receipt = await waitForTransactionReceipt(config, { hash });

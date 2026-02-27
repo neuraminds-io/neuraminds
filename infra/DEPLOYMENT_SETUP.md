@@ -56,7 +56,7 @@ cat ~/.kube/production-config | base64 -w 0 > production-kubeconfig.b64
 
 1. Create deployer keypair (if not exists):
 ```bash
-solana-keygen new --outfile mainnet-deployer.json
+cast wallet new --json > base-mainnet-deployer.json
 ```
 
 2. Fund the deployer with at least 5 SOL for program deployment
@@ -151,7 +151,7 @@ kubectl rollout history deployment/polyguard-api-blue -n polyguard-production
 
 ```bash
 # Verify deployment
-solana program show <PROGRAM_ID> --url mainnet-beta
+cast code <CONTRACT_ADDRESS> --rpc-url https://mainnet.base.org
 ```
 
 ## Emergency Procedures

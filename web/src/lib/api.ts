@@ -28,6 +28,7 @@ import type {
   PublicProfile,
   ProfileActivity,
 } from '@/types';
+import { CURATED_MARKETS_BY_ID } from '@/lib/curatedMarkets';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/v1';
 
@@ -41,6 +42,10 @@ export interface BaseTokenState {
 interface BaseMarketSnapshot {
   id: string;
   question_hash: string;
+  question: string;
+  description: string;
+  category: string;
+  resolution_source: string;
   resolver: string;
   close_time: number;
   resolve_time: number;
@@ -88,6 +93,20 @@ interface BaseTradesResponse {
   limit: number;
   offset: number;
   has_more: boolean;
+}
+
+export interface PreparedEvmWriteTx {
+  chain_id: number;
+  from?: string;
+  to: string;
+  data: `0x${string}`;
+  value: `0x${string}`;
+  method: string;
+}
+
+export interface RelayRawTxResponse {
+  chain_id: number;
+  tx_hash: string;
 }
 
 class ApiError extends Error {
@@ -163,6 +182,7 @@ function normalizeMarket(raw: Record<string, unknown>): Market {
 }
 
 function mapBaseSnapshotToMarket(snapshot: BaseMarketSnapshot): Market {
+  const curated = CURATED_MARKETS_BY_ID[Number(snapshot.id)];
   const resolvedOutcome = snapshot.outcome === 'yes' || snapshot.outcome === 'no'
     ? snapshot.outcome
     : undefined;
@@ -172,13 +192,17 @@ function mapBaseSnapshotToMarket(snapshot: BaseMarketSnapshot): Market {
 
   const tradingEnd = fromUnixSeconds(snapshot.close_time);
   const resolutionDeadline = fromUnixSeconds(snapshot.resolve_time || snapshot.close_time);
+  const question = snapshot.question?.trim() || curated?.question || `Base market #${snapshot.id}`;
+  const description = snapshot.description?.trim()
+    || (curated ? `Outcomes: ${curated.outcomes}. Context: ${curated.rationale}` : `Question hash: ${snapshot.question_hash}`);
+  const category = snapshot.category?.trim() || curated?.category || 'base';
 
   return {
     id: snapshot.id,
     address: `base-market-${snapshot.id}`,
-    question: `Base market #${snapshot.id}`,
-    description: `Question hash: ${snapshot.question_hash}`,
-    category: 'base',
+    question,
+    description,
+    category,
     status: normalizeMarketStatus(snapshot.status),
     yesPrice,
     noPrice,
@@ -554,6 +578,100 @@ class ApiClient {
 
   async getBaseTokenState(): Promise<BaseTokenState> {
     return this.request('/evm/token/state');
+  }
+
+  async prepareBaseCreateMarket(data: {
+    from?: string;
+    question: string;
+    description?: string;
+    category?: string;
+    resolutionSource?: string;
+    closeTime: number;
+    resolver: string;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/markets/create', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBasePlaceOrder(data: {
+    from?: string;
+    marketId: number;
+    outcome: Outcome;
+    priceBps: number;
+    size: string;
+    expiry: number;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/orders/place', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBaseCancelOrder(data: {
+    from?: string;
+    orderId: number;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/orders/cancel', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBaseClaim(data: {
+    from?: string;
+    marketId: number;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/positions/claim', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBaseMatchOrders(data: {
+    from?: string;
+    firstOrderId: number;
+    secondOrderId: number;
+    fillSize: string;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/orders/match', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBaseCreateAgent(data: {
+    from?: string;
+    marketId: number;
+    isYes: boolean;
+    priceBps: number;
+    size: string;
+    cadence: number;
+    expiryWindow: number;
+    strategy: string;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/agents/create', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBaseExecuteAgent(data: {
+    from?: string;
+    agentId: number;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/agents/execute', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async relayBaseRawTransaction(rawTx: string): Promise<RelayRawTxResponse> {
+    return this.request('/evm/write/relay', {
+      method: 'POST',
+      body: JSON.stringify({ rawTx }),
+    });
   }
 
   async getDepositAddress(): Promise<DepositAddress> {

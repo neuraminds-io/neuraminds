@@ -9,6 +9,7 @@ Launch NeuralMinds on Base with production programs only:
 - `MarketCore`
 - `OrderBook`
 - `CollateralVault`
+- `AgentRuntime`
 
 Native token launch is out of scope for this runbook. If token support is required at launch, use the externally launched token address in config.
 
@@ -39,8 +40,8 @@ All must be true before mainnet:
 - `BASE_MARKET_CREATOR`
 - `BASE_PAUSER`
 - `BASE_RESOLVER`
-- `BASE_MATCHER`
 - `BASE_OPERATOR`
+- `BASE_AGENT_RUNTIME_OPERATOR` (optional)
 - `BOOTSTRAP_ADMIN`
 - `TIMELOCK_MIN_DELAY` (recommended)
 - `TIMELOCK_PROPOSER` (recommended)
@@ -64,6 +65,7 @@ All must be true before mainnet:
 - `MARKET_CORE_ADDRESS`
 - `ORDER_BOOK_ADDRESS`
 - `COLLATERAL_VAULT_ADDRESS`
+- `AGENT_RUNTIME_ADDRESS`
 - `DATABASE_URL`
 - `REDIS_URL`
 - `JWT_SECRET`
@@ -120,7 +122,7 @@ npm run base:fund:mainnet
 If needed, override defaults:
 
 ```bash
-bash scripts/base-distribute-funds.sh --network mainnet --eth-deployer 0.005 --eth-pauser 0.002 --eth-resolver 0.002 --eth-matcher 0.002 --usdc-operator 425
+bash scripts/base-distribute-funds.sh --network mainnet --eth-deployer 0.005 --eth-pauser 0.002 --eth-resolver 0.002 --eth-operator 0.002 --usdc-operator 425
 ```
 
 ## 5. Sepolia Rehearsal (Mandatory)

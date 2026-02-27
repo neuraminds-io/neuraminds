@@ -1,7 +1,7 @@
 use actix_cors::Cors;
 use actix_governor::{Governor, GovernorConfigBuilder};
 use actix_web::{http::header, middleware as actix_middleware, web, App, HttpServer};
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use log::{info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -16,13 +16,12 @@ use api::JwtService;
 use config::AppConfig;
 use services::{
     DatabaseService, EvmIndexerService, EvmRpcService, MetricsService, OrderBookService,
-    ReconciliationConfig, ReconciliationService, RedisService, SolanaService, WebSocketHub,
+    RedisService, WebSocketHub,
 };
 
 pub struct AppState {
     pub config: AppConfig,
     pub db: DatabaseService,
-    pub solana: SolanaService,
     pub evm_rpc: EvmRpcService,
     pub evm_indexer: EvmIndexerService,
     pub orderbook: OrderBookService,
@@ -30,22 +29,17 @@ pub struct AppState {
     pub jwt: JwtService,
     pub metrics: MetricsService,
     pub ws_hub: WebSocketHub,
-    pub reconciliation: Arc<ReconciliationService>,
     pub is_shutting_down: Arc<AtomicBool>,
 }
 
-/// Graceful shutdown handler
 async fn graceful_shutdown(state: Arc<AppState>) {
-    // Wait for shutdown signal
     tokio::signal::ctrl_c()
         .await
         .expect("Failed to install CTRL+C handler");
     info!("Shutdown signal received, initiating graceful shutdown...");
 
-    // Set shutdown flag
     state.is_shutting_down.store(true, Ordering::SeqCst);
 
-    // Give in-flight requests time to complete
     info!("Waiting for in-flight requests to complete...");
     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
@@ -64,13 +58,9 @@ async fn main() -> std::io::Result<()> {
 
     info!("Initializing services...");
 
-    // Initialize services
     let db = DatabaseService::new(&config.database_url)
         .await
         .expect("Failed to connect to database");
-
-    let solana = SolanaService::new(&config.solana_rpc_url, &config.keeper_keypair_path)
-        .expect("Failed to initialize Solana service");
 
     let redis = RedisService::new(&config.redis_url)
         .await
@@ -80,7 +70,6 @@ async fn main() -> std::io::Result<()> {
 
     let orderbook = OrderBookService::new();
 
-    // Restore order book from database
     match db.load_orderbook_entries().await {
         Ok(entries) => {
             let count = entries.len();
@@ -98,33 +87,12 @@ async fn main() -> std::io::Result<()> {
     }
 
     let jwt = JwtService::new(&config.jwt_secret);
-
     let metrics = MetricsService::new();
-
     let ws_hub = WebSocketHub::new();
-
-    // Initialize reconciliation service for DB-blockchain consistency
-    let reconciliation_config = ReconciliationConfig::default();
-    let reconciliation = Arc::new(ReconciliationService::new(
-        &config.solana_rpc_url,
-        db.pool().clone(),
-        solana.market_program_id(),
-        solana.orderbook_program_id(),
-        reconciliation_config,
-    ));
-
-    // Start background reconciliation
-    if !config.is_development {
-        info!("Starting background reconciliation service");
-        reconciliation.clone().start_background_reconciliation();
-    } else {
-        info!("Skipping reconciliation in development mode");
-    }
 
     let app_state = Arc::new(AppState {
         config: config.clone(),
         db,
-        solana,
         evm_rpc,
         evm_indexer: evm_indexer.clone(),
         orderbook,
@@ -132,7 +100,6 @@ async fn main() -> std::io::Result<()> {
         jwt,
         metrics,
         ws_hub,
-        reconciliation,
         is_shutting_down: Arc::new(AtomicBool::new(false)),
     });
 
@@ -172,7 +139,6 @@ async fn main() -> std::io::Result<()> {
         info!("EVM indexer disabled by config toggles");
     }
 
-    // Spawn graceful shutdown handler
     let shutdown_state = app_state.clone();
     tokio::spawn(async move {
         graceful_shutdown(shutdown_state).await;
@@ -180,7 +146,6 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting HTTP server on {}", bind_addr);
 
-    // SECURITY: Configure rate limiting - 60 requests per minute per IP
     let governor_conf = GovernorConfigBuilder::default()
         .per_second(1)
         .burst_size(60)
@@ -190,7 +155,6 @@ async fn main() -> std::io::Result<()> {
     let config_clone = config.clone();
 
     HttpServer::new(move || {
-        // SECURITY: Build CORS configuration based on environment
         let cors = if config_clone.is_development {
             warn!("CORS: Development mode - allowing all origins");
             Cors::default()
@@ -203,7 +167,6 @@ async fn main() -> std::io::Result<()> {
                 ])
                 .max_age(3600)
         } else {
-            // Production: Only allow specific origins
             let mut cors = Cors::default()
                 .allowed_methods(vec!["GET", "POST", "DELETE", "OPTIONS"])
                 .allowed_headers(vec![
@@ -223,14 +186,11 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .app_data(web::Data::new(app_state.clone()))
-            // SECURITY: Add rate limiting
             .wrap(Governor::new(&governor_conf))
-            // SECURITY: Geo-blocking (only in production)
             .wrap(crate::middleware::GeoBlock::new(
                 !config_clone.is_development,
             ))
             .wrap(cors)
-            // SECURITY: Add security headers
             .wrap(
                 actix_middleware::DefaultHeaders::new()
                     .add(("X-Content-Type-Options", "nosniff"))
@@ -243,30 +203,22 @@ async fn main() -> std::io::Result<()> {
                     )),
             )
             .wrap(actix_middleware::Compress::default())
-            // Structured access log (replaces default Logger)
             .wrap(crate::middleware::AccessLog)
-            // Request tracing with unique IDs
             .wrap(crate::middleware::RequestIdMiddleware)
-            // SECURITY: Limit request body size to 4KB for JSON
             .app_data(web::JsonConfig::default().limit(4096))
-            // Health check
             .route("/health", web::get().to(api::health::health_check))
             .route(
                 "/health/detailed",
                 web::get().to(api::health::health_detailed),
             )
-            // Metrics endpoints
             .route("/metrics", web::get().to(api::health::get_metrics))
             .route(
                 "/metrics/prometheus",
                 web::get().to(api::health::get_metrics_prometheus),
             )
-            // WebSocket endpoint
             .route("/ws", web::get().to(api::ws_handler))
-            // API v1 routes
             .service(
                 web::scope("/v1")
-                    // Markets
                     .service(
                         web::scope("/markets")
                             .route("", web::get().to(api::markets::list_markets))
@@ -281,7 +233,6 @@ async fn main() -> std::io::Result<()> {
                                 web::get().to(api::markets::get_trades),
                             ),
                     )
-                    // Orders
                     .service(
                         web::scope("/orders")
                             .route("", web::get().to(api::orders::list_orders))
@@ -289,7 +240,6 @@ async fn main() -> std::io::Result<()> {
                             .route("/{order_id}", web::get().to(api::orders::get_order))
                             .route("/{order_id}", web::delete().to(api::orders::cancel_order)),
                     )
-                    // Positions
                     .service(
                         web::scope("/positions")
                             .route("", web::get().to(api::positions::list_positions))
@@ -299,13 +249,11 @@ async fn main() -> std::io::Result<()> {
                                 web::post().to(api::positions::claim_winnings),
                             ),
                     )
-                    // User
                     .service(
                         web::scope("/user")
                             .route("/profile", web::get().to(api::user::get_profile))
                             .route("/transactions", web::get().to(api::user::get_transactions)),
                     )
-                    // Wallet
                     .service(
                         web::scope("/wallet")
                             .route("/balance", web::get().to(api::wallet::get_balance))
@@ -316,12 +264,10 @@ async fn main() -> std::io::Result<()> {
                             .route("/deposit", web::post().to(api::wallet::deposit))
                             .route("/withdraw", web::post().to(api::wallet::withdraw)),
                     )
-                    // Webhooks (no auth, signature verified)
                     .route(
                         "/webhooks/blindfold",
                         web::post().to(api::wallet::blindfold_webhook),
                     )
-                    // Authentication
                     .service(
                         web::scope("/auth")
                             .route("/nonce", web::get().to(api::auth::get_nonce))
@@ -345,6 +291,38 @@ async fn main() -> std::io::Result<()> {
                             .route(
                                 "/token/state",
                                 web::get().to(api::evm::get_neura_token_state),
+                            )
+                            .service(
+                                web::scope("/write")
+                                    .route(
+                                        "/markets/create",
+                                        web::post().to(api::evm::prepare_create_market_write),
+                                    )
+                                    .route(
+                                        "/orders/place",
+                                        web::post().to(api::evm::prepare_place_order_write),
+                                    )
+                                    .route(
+                                        "/orders/cancel",
+                                        web::post().to(api::evm::prepare_cancel_order_write),
+                                    )
+                                    .route(
+                                        "/orders/match",
+                                        web::post().to(api::evm::prepare_match_orders_write),
+                                    )
+                                    .route(
+                                        "/positions/claim",
+                                        web::post().to(api::evm::prepare_claim_write),
+                                    )
+                                    .route(
+                                        "/agents/create",
+                                        web::post().to(api::evm::prepare_create_agent_write),
+                                    )
+                                    .route(
+                                        "/agents/execute",
+                                        web::post().to(api::evm::prepare_execute_agent_write),
+                                    )
+                                    .route("/relay", web::post().to(api::evm::relay_raw_transaction)),
                             ),
                     ),
             )

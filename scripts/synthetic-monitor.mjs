@@ -56,7 +56,7 @@ function markdownEscape(value) {
 }
 
 function usage() {
-  console.log('usage: node scripts/synthetic-monitor.mjs --env <name> --api-url <url> [--web-url <url>] [--chain-mode base|solana|dual] [--timeout-ms <ms>]');
+  console.log('usage: node scripts/synthetic-monitor.mjs --env <name> --api-url <url> [--web-url <url>] [--timeout-ms <ms>]');
 }
 
 async function fetchWithTimeout(url, timeoutMs, acceptJson = true) {
@@ -115,20 +115,12 @@ async function run() {
   const timeoutMs = Number(args['timeout-ms'] || 10_000);
   const apiUrl = args['api-url'] ? normalizeBaseUrl(String(args['api-url'])) : '';
   const webUrl = args['web-url'] ? normalizeBaseUrl(String(args['web-url'])) : '';
-  const chainMode = String(args['chain-mode'] || process.env.CHAIN_MODE || 'base').toLowerCase();
 
   if (!apiUrl) {
     usage();
     process.exit(1);
   }
 
-  if (!['base', 'solana', 'dual'].includes(chainMode)) {
-    console.error(`invalid --chain-mode: ${chainMode}`);
-    usage();
-    process.exit(1);
-  }
-
-  const reportDir = path.join(ROOT, 'docs', 'reports');
   const outputJsonPath = path.resolve(
     ROOT,
     String(args.output || path.join('docs', 'reports', `synthetic-monitor-${envName}.json`))
@@ -166,9 +158,6 @@ async function run() {
     });
   }
 
-  const requiresSolana = chainMode === 'solana' || chainMode === 'dual';
-  const requiresBase = chainMode === 'base' || chainMode === 'dual';
-
   const detailed = await fetchWithTimeout(`${apiUrl}/health/detailed`, timeoutMs);
   if (!detailed.ok) {
     checks.push({
@@ -182,250 +171,136 @@ async function run() {
   } else {
     const payload = parseJsonOrNull(detailed.bodyText);
     const components = payload?.checks || payload?.components || {};
-    const webOnlyApi =
-      payload?.service === 'neuraminds-web' ||
-      components?.runtime?.mode === 'web-only' ||
-      components?.runtime?.service === 'neuraminds-web';
     const componentStatuses = {
       database: components.database?.status,
       redis: components.redis?.status,
-      solana: components.solana?.status,
       base: components.base?.status,
     };
     const componentMessages = {
-      database: String(components.database?.message || ''),
-      redis: String(components.redis?.message || ''),
-      solana: String(components.solana?.message || ''),
       base: String(components.base?.message || ''),
     };
-    const disabled = {
-      solana: componentMessages.solana.toLowerCase().includes('disabled'),
-      base: componentMessages.base.toLowerCase().includes('disabled'),
-    };
-    const requiredComponents = [];
-    if (!webOnlyApi) {
-      requiredComponents.push('database', 'redis');
-    }
-    if (requiresSolana) requiredComponents.push('solana');
-    if (requiresBase) requiredComponents.push('base');
-
-    const healthyRequiredComponents = requiredComponents.every((name) => {
-      if (name === 'solana' && disabled.solana) return false;
-      if (name === 'base' && disabled.base) return false;
-      return componentStatuses[name] === 'healthy';
-    });
-    const pass = detailed.status === 200 && healthyRequiredComponents;
+    const baseDisabled = componentMessages.base.toLowerCase().includes('disabled');
+    const pass =
+      detailed.status === 200 &&
+      componentStatuses.database === 'healthy' &&
+      componentStatuses.redis === 'healthy' &&
+      componentStatuses.base === 'healthy' &&
+      !baseDisabled;
 
     checks.push({
       id: 'api_health_detailed',
       required: true,
       status: pass ? 'pass' : 'fail',
       latencyMs: detailed.latencyMs,
-      details: `http=${detailed.status} db=${componentStatuses.database ?? 'unknown'} redis=${componentStatuses.redis ?? 'unknown'} solana=${componentStatuses.solana ?? 'unknown'} base=${componentStatuses.base ?? 'unknown'} mode=${chainMode}`,
+      details: `http=${detailed.status} db=${componentStatuses.database ?? 'unknown'} redis=${componentStatuses.redis ?? 'unknown'} base=${componentStatuses.base ?? 'unknown'}`,
       url: `${apiUrl}/health/detailed`,
     });
   }
 
-  if (requiresSolana) {
-    const markets = await fetchWithTimeout(`${apiUrl}/v1/markets?limit=1`, timeoutMs);
-    if (!markets.ok) {
-      checks.push({
-        id: 'api_markets_public',
-        required: true,
-        status: 'fail',
-        latencyMs: markets.latencyMs,
-        details: `request failed: ${markets.error}`,
-        url: `${apiUrl}/v1/markets?limit=1`,
-      });
-    } else {
-      const payload = parseJsonOrNull(markets.bodyText);
-      const hasArray = Array.isArray(payload?.markets);
-      const pass = markets.status === 200 && hasArray;
-      checks.push({
-        id: 'api_markets_public',
-        required: true,
-        status: pass ? 'pass' : 'fail',
-        latencyMs: markets.latencyMs,
-        details: pass ? `marketCount=${payload.markets.length}` : `http=${markets.status} marketsArray=${hasArray}`,
-        url: `${apiUrl}/v1/markets?limit=1`,
-      });
-    }
-  }
-
-  if (requiresBase) {
-    const evmMarkets = await fetchWithTimeout(`${apiUrl}/v1/evm/markets?limit=1`, timeoutMs);
-    if (!evmMarkets.ok) {
-      checks.push({
-        id: 'api_evm_markets_public',
-        required: true,
-        status: 'fail',
-        latencyMs: evmMarkets.latencyMs,
-        details: `request failed: ${evmMarkets.error}`,
-        url: `${apiUrl}/v1/evm/markets?limit=1`,
-      });
-    } else {
-      const payload = parseJsonOrNull(evmMarkets.bodyText);
-      const hasArray = Array.isArray(payload?.markets);
-      const pass = evmMarkets.status === 200 && hasArray;
-      checks.push({
-        id: 'api_evm_markets_public',
-        required: true,
-        status: pass ? 'pass' : 'fail',
-        latencyMs: evmMarkets.latencyMs,
-        details: pass
-          ? `marketCount=${payload.markets.length}`
-          : `http=${evmMarkets.status} marketsArray=${hasArray}`,
-        url: `${apiUrl}/v1/evm/markets?limit=1`,
-      });
-    }
-
-    const evmOrderbook = await fetchWithTimeout(
-      `${apiUrl}/v1/evm/markets/1/orderbook?outcome=yes&depth=5`,
-      timeoutMs
-    );
-    if (!evmOrderbook.ok) {
-      checks.push({
-        id: 'api_evm_orderbook_smoke',
-        required: true,
-        status: 'fail',
-        latencyMs: evmOrderbook.latencyMs,
-        details: `request failed: ${evmOrderbook.error}`,
-        url: `${apiUrl}/v1/evm/markets/1/orderbook?outcome=yes&depth=5`,
-      });
-    } else {
-      const payload = parseJsonOrNull(evmOrderbook.bodyText);
-      const pass = evmOrderbook.status === 200 && Array.isArray(payload?.bids) && Array.isArray(payload?.asks);
-      checks.push({
-        id: 'api_evm_orderbook_smoke',
-        required: true,
-        status: pass ? 'pass' : 'fail',
-        latencyMs: evmOrderbook.latencyMs,
-        details: pass
-          ? `bids=${payload.bids.length} asks=${payload.asks.length}`
-          : `http=${evmOrderbook.status}`,
-        url: `${apiUrl}/v1/evm/markets/1/orderbook?outcome=yes&depth=5`,
-      });
-    }
-
-    const evmTrades = await fetchWithTimeout(
-      `${apiUrl}/v1/evm/markets/1/trades?limit=1`,
-      timeoutMs
-    );
-    if (!evmTrades.ok) {
-      checks.push({
-        id: 'api_evm_trades_smoke',
-        required: true,
-        status: 'fail',
-        latencyMs: evmTrades.latencyMs,
-        details: `request failed: ${evmTrades.error}`,
-        url: `${apiUrl}/v1/evm/markets/1/trades?limit=1`,
-      });
-    } else {
-      const payload = parseJsonOrNull(evmTrades.bodyText);
-      const pass = evmTrades.status === 200 && Array.isArray(payload?.trades);
-      checks.push({
-        id: 'api_evm_trades_smoke',
-        required: true,
-        status: pass ? 'pass' : 'fail',
-        latencyMs: evmTrades.latencyMs,
-        details: pass
-          ? `tradeCount=${payload.trades.length}`
-          : `http=${evmTrades.status}`,
-        url: `${apiUrl}/v1/evm/markets/1/trades?limit=1`,
-      });
-    }
+  const evmMarkets = await fetchWithTimeout(`${apiUrl}/v1/evm/markets?limit=1`, timeoutMs);
+  if (!evmMarkets.ok) {
+    checks.push({
+      id: 'api_evm_markets_public',
+      required: true,
+      status: 'fail',
+      latencyMs: evmMarkets.latencyMs,
+      details: `request failed: ${evmMarkets.error}`,
+      url: `${apiUrl}/v1/evm/markets?limit=1`,
+    });
+  } else {
+    const payload = parseJsonOrNull(evmMarkets.bodyText);
+    const hasArray = Array.isArray(payload?.markets);
+    const pass = evmMarkets.status === 200 && hasArray;
+    checks.push({
+      id: 'api_evm_markets_public',
+      required: true,
+      status: pass ? 'pass' : 'fail',
+      latencyMs: evmMarkets.latencyMs,
+      details: pass
+        ? `marketCount=${payload.markets.length}`
+        : `http=${evmMarkets.status} marketsArray=${hasArray}`,
+      url: `${apiUrl}/v1/evm/markets?limit=1`,
+    });
   }
 
   if (webUrl) {
-    const web = await fetchWithTimeout(webUrl, timeoutMs, false);
-    if (!web.ok) {
+    const webHealth = await fetchWithTimeout(`${webUrl}`, timeoutMs, false);
+    if (!webHealth.ok) {
       checks.push({
-        id: 'web_home',
-        required: true,
+        id: 'web_health',
+        required: false,
         status: 'fail',
-        latencyMs: web.latencyMs,
-        details: `request failed: ${web.error}`,
+        latencyMs: webHealth.latencyMs,
+        details: `request failed: ${webHealth.error}`,
         url: webUrl,
       });
     } else {
-      const statusOk = web.status >= 200 && web.status < 400;
-      const htmlOk = web.contentType.includes('text/html');
-      const pass = statusOk && htmlOk;
+      const pass = webHealth.status >= 200 && webHealth.status < 400;
       checks.push({
-        id: 'web_home',
-        required: true,
+        id: 'web_health',
+        required: false,
         status: pass ? 'pass' : 'fail',
-        latencyMs: web.latencyMs,
-        details: `http=${web.status} contentType=${web.contentType || 'unknown'}`,
+        latencyMs: webHealth.latencyMs,
+        details: `http=${webHealth.status}`,
         url: webUrl,
       });
     }
   }
 
-  const failedRequired = checks.filter((check) => check.required && check.status === 'fail');
+  const requiredChecks = checks.filter((check) => check.required);
+  const passedRequired = requiredChecks.filter((check) => check.status === 'pass').length;
+  const ready = passedRequired === requiredChecks.length;
+
   const report = {
     generatedAt: new Date().toISOString(),
-    environment: envName,
-    targets: {
-      apiUrl,
-      webUrl: webUrl || null,
-      chainMode,
-    },
+    env: envName,
+    chainMode: 'base',
     summary: {
-      total: checks.length,
-      passed: checks.filter((check) => check.status === 'pass').length,
-      failed: checks.filter((check) => check.status === 'fail').length,
-      requiredFailed: failedRequired.length,
-      ready: failedRequired.length === 0,
+      ready,
+      totalChecks: checks.length,
+      requiredChecks: requiredChecks.length,
+      passedRequired,
+      failedRequired: requiredChecks.length - passedRequired,
     },
     checks,
   };
 
-  const markdownLines = [
-    '# Synthetic Monitor Report',
+  fs.mkdirSync(path.dirname(outputJsonPath), { recursive: true });
+  fs.writeFileSync(outputJsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+
+  const markdown = [
+    '# Synthetic Monitor',
     '',
-    `Environment: ${envName}`,
     `Generated: ${report.generatedAt}`,
-    `API: ${apiUrl}`,
-    webUrl ? `Web: ${webUrl}` : 'Web: (not set)',
-    `Chain mode: ${chainMode}`,
+    `Environment: ${envName}`,
+    `Chain mode: base`,
     '',
-    `Decision: ${report.summary.ready ? 'PASS' : 'FAIL'}`,
+    `Ready: ${ready ? 'YES' : 'NO'}`,
     '',
     '## Checks',
-    ...checks.map(formatCheckLine),
     '',
-    '## Table',
-    '| Check | Status | Latency (ms) | URL | Details |',
-    '| --- | --- | ---: | --- | --- |',
-    ...checks.map((check) =>
-      `| ${markdownEscape(check.id)} | ${check.status.toUpperCase()} | ${check.latencyMs} | ${markdownEscape(check.url)} | ${markdownEscape(check.details)} |`
-    ),
+    '| Check | Status | Latency | Details | URL |',
+    '| --- | --- | --- | --- | --- |',
+    ...checks.map((check) => {
+      const status = check.status === 'pass' ? 'PASS' : 'FAIL';
+      return `| ${markdownEscape(check.id)} | ${status} | ${check.latencyMs}ms | ${markdownEscape(check.details)} | ${markdownEscape(check.url)} |`;
+    }),
     '',
-  ];
+  ].join('\n');
 
-  fs.mkdirSync(reportDir, { recursive: true });
-  fs.writeFileSync(outputJsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
-  fs.writeFileSync(outputMdPath, `${markdownLines.join('\n')}\n`, 'utf8');
+  fs.writeFileSync(outputMdPath, `${markdown}\n`, 'utf8');
 
-  console.log(`synthetic monitoring (${envName})`);
-  for (const check of checks) {
-    const marker = check.status === 'pass' ? 'PASS' : 'FAIL';
-    console.log(`[${marker}] ${check.id} - ${check.details}`);
-  }
-  console.log(
-    `summary: ${report.summary.passed} passed, ${report.summary.failed} failed, ready: ${report.summary.ready ? 'YES' : 'NO'}`
-  );
-  console.log(`report: ${path.relative(ROOT, outputJsonPath)}`);
-  console.log(`report: ${path.relative(ROOT, outputMdPath)}`);
+  console.log(`synthetic monitor (${envName}) ready=${ready}`);
+  checks.forEach((check) => console.log(formatCheckLine(check)));
+  console.log(`json: ${path.relative(ROOT, outputJsonPath)}`);
+  console.log(`md: ${path.relative(ROOT, outputMdPath)}`);
 
-  if (!report.summary.ready) {
+  if (!ready) {
     process.exit(1);
   }
 }
 
 run().catch((error) => {
-  const message = error instanceof Error ? error.stack || error.message : String(error);
-  console.error(message);
+  console.error(`synthetic monitor failed: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 });

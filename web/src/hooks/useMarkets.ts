@@ -12,8 +12,11 @@ export function useMarkets(filters?: MarketFilters) {
       });
 
       let data = [...response.data];
-      if (filters?.category && filters.category.toLowerCase() !== 'base') {
-        data = [];
+      const requestedCategory = filters?.category?.toLowerCase();
+      if (requestedCategory) {
+        data = data.filter(
+          (market) => market.category.toLowerCase() === requestedCategory
+        );
       }
 
       if (filters?.sort === 'volume') {
@@ -22,15 +25,18 @@ export function useMarkets(filters?: MarketFilters) {
         data.sort((a, b) => new Date(a.tradingEnd).getTime() - new Date(b.tradingEnd).getTime());
       }
 
+      const filteredTotal = data.length;
+      const offset = filters?.offset || 0;
+      const limit = filters?.limit || 50;
+      const paged = data.slice(offset, offset + limit);
+
       return {
         ...response,
-        data,
-        total: filters?.category && filters.category.toLowerCase() !== 'base'
-          ? 0
-          : response.total,
-        hasMore: filters?.category && filters.category.toLowerCase() !== 'base'
-          ? false
-          : response.hasMore,
+        data: paged,
+        total: filteredTotal,
+        limit,
+        offset,
+        hasMore: offset + limit < filteredTotal,
       };
     },
     retry: 1,

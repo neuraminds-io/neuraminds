@@ -1,65 +1,45 @@
 {
-  "generatedAt": "2026-02-26T18:38:59.208Z",
-  "environment": "staging",
-  "targets": {
-    "apiUrl": "https://neuraminds-web-base-staging-v4.onrender.com",
-    "webUrl": "https://neuraminds-web-base-staging-v4.onrender.com",
-    "chainMode": "base"
-  },
+  "generatedAt": "2026-02-27T00:25:12.807Z",
+  "env": "staging",
+  "chainMode": "base",
   "summary": {
-    "total": 6,
-    "passed": 6,
-    "failed": 0,
-    "requiredFailed": 0,
-    "ready": true
+    "ready": true,
+    "totalChecks": 4,
+    "requiredChecks": 3,
+    "passedRequired": 3,
+    "failedRequired": 0
   },
   "checks": [
     {
       "id": "api_health",
       "required": true,
       "status": "pass",
-      "latencyMs": 291,
+      "latencyMs": 348,
       "details": "status=healthy",
-      "url": "https://neuraminds-web-base-staging-v4.onrender.com/health"
+      "url": "https://neuraminds-api-base-staging-v1.onrender.com/health"
     },
     {
       "id": "api_health_detailed",
       "required": true,
       "status": "pass",
-      "latencyMs": 587,
-      "details": "http=200 db=unknown redis=unknown solana=unknown base=healthy mode=base",
-      "url": "https://neuraminds-web-base-staging-v4.onrender.com/health/detailed"
+      "latencyMs": 293,
+      "details": "http=200 db=healthy redis=healthy base=healthy",
+      "url": "https://neuraminds-api-base-staging-v1.onrender.com/health/detailed"
     },
     {
       "id": "api_evm_markets_public",
       "required": true,
       "status": "pass",
-      "latencyMs": 275,
-      "details": "marketCount=1",
-      "url": "https://neuraminds-web-base-staging-v4.onrender.com/v1/evm/markets?limit=1"
+      "latencyMs": 234,
+      "details": "marketCount=0",
+      "url": "https://neuraminds-api-base-staging-v1.onrender.com/v1/evm/markets?limit=1"
     },
     {
-      "id": "api_evm_orderbook_smoke",
-      "required": true,
+      "id": "web_health",
+      "required": false,
       "status": "pass",
-      "latencyMs": 213,
-      "details": "bids=0 asks=0",
-      "url": "https://neuraminds-web-base-staging-v4.onrender.com/v1/evm/markets/1/orderbook?outcome=yes&depth=5"
-    },
-    {
-      "id": "api_evm_trades_smoke",
-      "required": true,
-      "status": "pass",
-      "latencyMs": 329,
-      "details": "tradeCount=0",
-      "url": "https://neuraminds-web-base-staging-v4.onrender.com/v1/evm/markets/1/trades?limit=1"
-    },
-    {
-      "id": "web_home",
-      "required": true,
-      "status": "pass",
-      "latencyMs": 233,
-      "details": "http=200 contentType=text/html; charset=utf-8",
+      "latencyMs": 541,
+      "details": "http=200",
       "url": "https://neuraminds-web-base-staging-v4.onrender.com"
     }
   ]

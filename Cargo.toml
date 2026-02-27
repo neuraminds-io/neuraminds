@@ -1,8 +1,5 @@
 [workspace]
 members = [
-    "programs/polyguard-market",
-    "programs/polyguard-orderbook",
-    "programs/polyguard-privacy",
     "app"
 ]
 resolver = "2"
@@ -21,4 +18,3 @@ opt-level = 3
 [profile.release.build-override]
 opt-level = 3
 incremental = false
-

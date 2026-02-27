@@ -30,21 +30,16 @@ pub const TOKEN_AUDIENCE: &str = "polyguard-api";
 pub const TOKEN_ISSUER: &str = "polyguard";
 
 /// User roles for RBAC
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum UserRole {
     /// Regular user - can trade and manage their own orders/positions
+    #[default]
     User,
     /// Keeper - can settle trades and manage order book
     Keeper,
     /// Admin - full access to all operations
     Admin,
-}
-
-impl Default for UserRole {
-    fn default() -> Self {
-        UserRole::User
-    }
 }
 
 /// Token expiration times
@@ -223,8 +218,10 @@ impl JwtService {
         })?;
 
         // Include kid in header for key identification during validation
-        let mut header = Header::default();
-        header.kid = Some(primary_kid);
+        let header = Header {
+            kid: Some(primary_kid),
+            ..Header::default()
+        };
 
         encode(&header, &claims, &signing_key.encoding_key).map_err(|e| {
             log::error!("Failed to generate JWT: {}", e);

@@ -77,6 +77,17 @@ contract CollateralVaultTest is Test {
         assertEq(vault.availableBalance(bob), 120e6);
     }
 
+    function test_transferAvailableMovesBalance() external {
+        vm.prank(alice);
+        vault.deposit(150e6);
+
+        vm.prank(operator);
+        vault.transferAvailable(alice, bob, 55e6);
+
+        assertEq(vault.availableBalance(alice), 95e6);
+        assertEq(vault.availableBalance(bob), 55e6);
+    }
+
     function test_onlyOperatorCanLock() external {
         vm.prank(alice);
         vault.deposit(100e6);

@@ -3,11 +3,12 @@ import { readBaseOrderbook, toApiErrorPayload } from '@/lib/server/baseReadApi';
 
 export async function GET(
   request: NextRequest,
-  context: { params: { marketId: string } }
+  context: { params: Promise<{ marketId: string }> }
 ) {
   try {
+    const { marketId } = await context.params;
     return NextResponse.json(
-      await readBaseOrderbook(context.params.marketId, request.nextUrl.searchParams)
+      await readBaseOrderbook(marketId, request.nextUrl.searchParams)
     );
   } catch (error) {
     const mapped = toApiErrorPayload(error);

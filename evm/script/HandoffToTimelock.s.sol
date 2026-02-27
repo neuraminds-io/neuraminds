@@ -20,23 +20,27 @@ contract HandoffToTimelockScript is Script {
         address marketCore = vm.envAddress("MARKET_CORE_ADDRESS");
         address orderBook = vm.envAddress("ORDER_BOOK_ADDRESS");
         address collateralVault = vm.envAddress("COLLATERAL_VAULT_ADDRESS");
+        address agentRuntime = vm.envAddress("AGENT_RUNTIME_ADDRESS");
 
         if (admin == address(0)) revert ZeroAddress("BASE_ADMIN");
         if (timelock == address(0)) revert ZeroAddress("TIMELOCK_ADDRESS");
         if (marketCore == address(0)) revert ZeroAddress("MARKET_CORE_ADDRESS");
         if (orderBook == address(0)) revert ZeroAddress("ORDER_BOOK_ADDRESS");
         if (collateralVault == address(0)) revert ZeroAddress("COLLATERAL_VAULT_ADDRESS");
+        if (agentRuntime == address(0)) revert ZeroAddress("AGENT_RUNTIME_ADDRESS");
 
         vm.startBroadcast();
         _handoffAdmin(IAccessControlLike(marketCore), admin, timelock);
         _handoffAdmin(IAccessControlLike(orderBook), admin, timelock);
         _handoffAdmin(IAccessControlLike(collateralVault), admin, timelock);
+        _handoffAdmin(IAccessControlLike(agentRuntime), admin, timelock);
         vm.stopBroadcast();
 
         console2.log("timelock handoff completed");
         console2.log("marketCore:", marketCore);
         console2.log("orderBook:", orderBook);
         console2.log("collateralVault:", collateralVault);
+        console2.log("agentRuntime:", agentRuntime);
         console2.log("timelock:", timelock);
     }
 

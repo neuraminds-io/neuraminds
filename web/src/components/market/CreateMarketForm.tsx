@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { waitForTransactionReceipt } from '@wagmi/core';
-import { parseEventLogs, keccak256, stringToBytes } from 'viem';
-import { useConfig, useWriteContract } from 'wagmi';
+import { parseEventLogs } from 'viem';
+import { useConfig, useWalletClient } from 'wagmi';
 import { useBaseWallet } from '@/hooks/useBaseWallet';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { MARKET_CORE_ABI, MARKET_CORE_ADDRESS, MARKET_CREATED_EVENT_ABI, assertContractAddress } from '@/lib/contracts';
+import { api } from '@/lib/api';
+import { MARKET_CREATED_EVENT_ABI } from '@/lib/contracts';
 import { cn } from '@/lib/utils';
 
 interface CreateMarketFormProps {
@@ -36,7 +37,7 @@ const RESOLUTION_SOURCES = [
 export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
   const baseWallet = useBaseWallet();
   const config = useConfig();
-  const { writeContractAsync } = useWriteContract();
+  const { data: walletClient } = useWalletClient();
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -130,11 +131,10 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
 
     try {
       await baseWallet.ensureBaseChain();
+      if (!walletClient) {
+        throw new Error('Wallet client unavailable');
+      }
 
-      const marketCoreAddress = assertContractAddress(
-        MARKET_CORE_ADDRESS,
-        'NEXT_PUBLIC_MARKET_CORE_ADDRESS'
-      );
       const closeTimeSeconds = BigInt(
         Math.floor(new Date(`${tradingEndDate}T${tradingEndTime}:00Z`).getTime() / 1000)
       );
@@ -142,13 +142,21 @@ export function CreateMarketForm({ onSuccess }: CreateMarketFormProps) {
         throw new Error('Trading end date must be in the future');
       }
 
-      const questionHash = keccak256(stringToBytes(question.trim().toLowerCase()));
       const resolver = baseWallet.address as `0x${string}`;
-      const txHash = await writeContractAsync({
-        address: marketCoreAddress,
-        abi: MARKET_CORE_ABI,
-        functionName: 'createMarket',
-        args: [questionHash, closeTimeSeconds, resolver],
+      const prepared = await api.prepareBaseCreateMarket({
+        from: baseWallet.address,
+        question: question.trim(),
+        description: description.trim(),
+        category,
+        resolutionSource: resolutionSource === 'custom' ? customSource.trim() : resolutionSource,
+        closeTime: Number(closeTimeSeconds),
+        resolver,
+      });
+      const txHash = await walletClient.sendTransaction({
+        account: baseWallet.address as `0x${string}`,
+        to: prepared.to as `0x${string}`,
+        data: prepared.data,
+        value: BigInt(prepared.value),
       });
 
       const receipt = await waitForTransactionReceipt(config, { hash: txHash });

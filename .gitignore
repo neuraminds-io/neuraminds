@@ -6,8 +6,7 @@ Cargo.lock
 # Project-specific
 CLAUDE.md
 
-# Anchor
-.anchor/
+# Local ledgers
 test-ledger/
 
 # Node

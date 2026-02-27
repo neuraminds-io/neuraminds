@@ -9,6 +9,8 @@ contract MarketCore is AccessControl, Pausable {
     bytes32 public constant RESOLVER_ROLE = keccak256("RESOLVER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
+    uint256 private constant MAX_TEXT_LENGTH = 2048;
+
     struct Market {
         bytes32 questionHash;
         uint64 closeTime;
@@ -18,8 +20,16 @@ contract MarketCore is AccessControl, Pausable {
         bool outcome;
     }
 
+    struct MarketMetadata {
+        string question;
+        string description;
+        string category;
+        string resolutionSource;
+    }
+
     uint256 public marketCount;
     mapping(uint256 => Market) public markets;
+    mapping(uint256 => MarketMetadata) private marketMetadata;
 
     error ZeroAddress();
     error InvalidCloseTime();
@@ -27,9 +37,18 @@ contract MarketCore is AccessControl, Pausable {
     error MarketNotClosed();
     error MarketAlreadyResolved();
     error NotDesignatedResolver();
+    error EmptyQuestion();
+    error TextTooLong();
 
     event MarketCreated(uint256 indexed marketId, bytes32 indexed questionHash, uint64 closeTime, address resolver);
     event MarketResolved(uint256 indexed marketId, bool outcome, uint64 resolveTime, address resolver);
+    event MarketMetadataSet(
+        uint256 indexed marketId,
+        string question,
+        string description,
+        string category,
+        string resolutionSource
+    );
 
     constructor(address admin) {
         if (admin == address(0)) revert ZeroAddress();
@@ -46,20 +65,43 @@ contract MarketCore is AccessControl, Pausable {
         whenNotPaused
         returns (uint256 marketId)
     {
-        if (resolver == address(0)) revert ZeroAddress();
-        if (closeTime <= block.timestamp) revert InvalidCloseTime();
+        marketId = _createMarket(questionHash, closeTime, resolver);
+    }
 
-        marketId = ++marketCount;
-        markets[marketId] = Market({
-            questionHash: questionHash,
-            closeTime: closeTime,
-            resolveTime: 0,
-            resolver: resolver,
-            resolved: false,
-            outcome: false
-        });
+    function createMarketRich(
+        string calldata question,
+        string calldata description,
+        string calldata category,
+        string calldata resolutionSource,
+        uint64 closeTime,
+        address resolver
+    ) external onlyRole(MARKET_CREATOR_ROLE) whenNotPaused returns (uint256 marketId) {
+        if (bytes(question).length == 0) revert EmptyQuestion();
 
-        emit MarketCreated(marketId, questionHash, closeTime, resolver);
+        bytes32 questionHash = keccak256(bytes(question));
+        marketId = _createMarket(questionHash, closeTime, resolver);
+        _setMarketMetadata(marketId, question, description, category, resolutionSource);
+    }
+
+    function setMarketMetadata(
+        uint256 marketId,
+        string calldata question,
+        string calldata description,
+        string calldata category,
+        string calldata resolutionSource
+    ) external onlyRole(MARKET_CREATOR_ROLE) whenNotPaused {
+        if (markets[marketId].resolver == address(0)) revert MarketNotFound();
+        _setMarketMetadata(marketId, question, description, category, resolutionSource);
+    }
+
+    function getMarketMetadata(uint256 marketId)
+        external
+        view
+        returns (string memory question, string memory description, string memory category, string memory resolutionSource)
+    {
+        if (markets[marketId].resolver == address(0)) revert MarketNotFound();
+        MarketMetadata storage metadata = marketMetadata[marketId];
+        return (metadata.question, metadata.description, metadata.category, metadata.resolutionSource);
     }
 
     function resolveMarket(uint256 marketId, bool outcome) external onlyRole(RESOLVER_ROLE) whenNotPaused {
@@ -84,5 +126,47 @@ contract MarketCore is AccessControl, Pausable {
 
     function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
+    }
+
+    function _createMarket(bytes32 questionHash, uint64 closeTime, address resolver) internal returns (uint256 marketId) {
+        if (resolver == address(0)) revert ZeroAddress();
+        if (closeTime <= block.timestamp) revert InvalidCloseTime();
+
+        marketId = ++marketCount;
+        markets[marketId] = Market({
+            questionHash: questionHash,
+            closeTime: closeTime,
+            resolveTime: 0,
+            resolver: resolver,
+            resolved: false,
+            outcome: false
+        });
+
+        emit MarketCreated(marketId, questionHash, closeTime, resolver);
+    }
+
+    function _setMarketMetadata(
+        uint256 marketId,
+        string calldata question,
+        string calldata description,
+        string calldata category,
+        string calldata resolutionSource
+    ) internal {
+        if (bytes(question).length == 0) revert EmptyQuestion();
+        if (
+            bytes(question).length > MAX_TEXT_LENGTH || bytes(description).length > MAX_TEXT_LENGTH
+                || bytes(category).length > MAX_TEXT_LENGTH || bytes(resolutionSource).length > MAX_TEXT_LENGTH
+        ) {
+            revert TextTooLong();
+        }
+
+        marketMetadata[marketId] = MarketMetadata({
+            question: question,
+            description: description,
+            category: category,
+            resolutionSource: resolutionSource
+        });
+
+        emit MarketMetadataSet(marketId, question, description, category, resolutionSource);
     }
 }

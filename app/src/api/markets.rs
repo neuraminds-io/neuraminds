@@ -1,5 +1,6 @@
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use chrono::Utc;
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 use super::auth::extract_jwt_user;
@@ -12,14 +13,19 @@ use crate::models::{
 };
 use crate::AppState;
 
-fn ensure_legacy_market_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
-    if !state.config.legacy_reads_enabled {
+fn ensure_market_read_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
         return Err(ApiError::bad_request(
-            "BASE_MARKET_PATH_NOT_AVAILABLE",
-            "Use /v1/evm/markets endpoints in Base mode",
+            "EVM_READ_PATH_DISABLED",
+            "EVM market read path is disabled",
         ));
     }
     Ok(())
+}
+
+fn derive_market_address(market_id: &str) -> String {
+    let digest = Sha256::digest(market_id.as_bytes());
+    format!("0x{}", hex::encode(&digest[..20]))
 }
 
 /// List all markets with filtering
@@ -27,7 +33,7 @@ pub async fn list_markets(
     state: web::Data<Arc<AppState>>,
     query: web::Query<ListMarketsQuery>,
 ) -> Result<impl Responder, ApiError> {
-    ensure_legacy_market_mode(&state)?;
+    ensure_market_read_mode(&state)?;
 
     let status = query.status.as_ref().map(|s| match s.as_str() {
         "active" => MarketStatus::Active,
@@ -60,7 +66,7 @@ pub async fn get_market(
     state: web::Data<Arc<AppState>>,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
-    ensure_legacy_market_mode(&state)?;
+    ensure_market_read_mode(&state)?;
 
     let market_id = path.into_inner();
 
@@ -82,10 +88,10 @@ pub async fn create_market(
     state: web::Data<Arc<AppState>>,
     body: web::Json<CreateMarketRequest>,
 ) -> Result<impl Responder, ApiError> {
-    if !state.config.legacy_writes_enabled {
+    if !state.config.evm_enabled || !state.config.evm_writes_enabled {
         return Err(ApiError::bad_request(
-            "LEGACY_WRITE_PATH_DISABLED",
-            "Legacy market write path is disabled",
+            "EVM_WRITE_PATH_DISABLED",
+            "EVM market write path is disabled",
         ));
     }
 
@@ -121,12 +127,9 @@ pub async fn create_market(
 
     let now = Utc::now();
 
-    // Derive market PDA
-    let (market_pda, _bump) = state.solana.derive_market_pda(&body.market_id);
-
     let market = Market {
         id: body.market_id.clone(),
-        address: market_pda.to_string(),
+        address: derive_market_address(&body.market_id),
         question: body.question.clone(),
         description: body.description.clone(),
         category: body.category.clone(),
@@ -150,9 +153,6 @@ pub async fn create_market(
         resolved_at: None,
     };
 
-    // In production: submit on-chain transaction first
-    // let tx_sig = state.solana.create_market(&body).await?;
-
     // Save to database
     state
         .db
@@ -169,7 +169,7 @@ pub async fn get_orderbook(
     path: web::Path<String>,
     query: web::Query<OrderBookQuery>,
 ) -> Result<impl Responder, ApiError> {
-    ensure_legacy_market_mode(&state)?;
+    ensure_market_read_mode(&state)?;
 
     let market_id = path.into_inner();
     let outcome = match query.outcome.as_deref().unwrap_or("yes") {
@@ -212,7 +212,7 @@ pub async fn get_trades(
     path: web::Path<String>,
     query: web::Query<ListTradesQuery>,
 ) -> Result<impl Responder, ApiError> {
-    ensure_legacy_market_mode(&state)?;
+    ensure_market_read_mode(&state)?;
 
     let market_id = path.into_inner();
     let outcome = query.outcome.as_ref().map(|o| match o.as_str() {

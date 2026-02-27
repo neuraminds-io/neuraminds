@@ -33,15 +33,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Optional: Local Solana validator for testing
-  # solana:
-  #   image: solanalabs/solana:v1.18.0
-  #   container_name: polyguard-solana
-  #   command: solana-test-validator --reset
-  #   ports:
-  #     - "8899:8899"
-  #     - "8900:8900"
-
 volumes:
   postgres_data:
   redis_data:

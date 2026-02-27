@@ -13,8 +13,8 @@ ALLOW_NON_ADMIN_SIGNER=0
 ETH_DEPLOYER=""
 ETH_PAUSER=""
 ETH_RESOLVER=""
-ETH_MATCHER=""
 ETH_OPERATOR=""
+ETH_AGENT_RUNTIME_OPERATOR=""
 USDC_OPERATOR="0"
 
 usage() {
@@ -27,8 +27,8 @@ Options:
   --eth-deployer <amount>       ETH for deployer wallet
   --eth-pauser <amount>         ETH for pauser wallet
   --eth-resolver <amount>       ETH for resolver wallet
-  --eth-matcher <amount>        ETH for matcher wallet
   --eth-operator <amount>       ETH for operator wallet
+  --eth-agent-runtime-operator <amount> ETH for optional agent runtime operator wallet
   --usdc-operator <amount>      USDC for operator wallet (decimals=6)
   --allow-non-admin-signer      Skip strict signer == BASE_ADMIN check
   --dry-run                     Print planned transactions only
@@ -85,20 +85,20 @@ while [[ $# -gt 0 ]]; do
       ETH_RESOLVER="${1#*=}"
       shift
       ;;
-    --eth-matcher)
-      ETH_MATCHER="${2:-}"
-      shift 2
-      ;;
-    --eth-matcher=*)
-      ETH_MATCHER="${1#*=}"
-      shift
-      ;;
     --eth-operator)
       ETH_OPERATOR="${2:-}"
       shift 2
       ;;
     --eth-operator=*)
       ETH_OPERATOR="${1#*=}"
+      shift
+      ;;
+    --eth-agent-runtime-operator)
+      ETH_AGENT_RUNTIME_OPERATOR="${2:-}"
+      shift 2
+      ;;
+    --eth-agent-runtime-operator=*)
+      ETH_AGENT_RUNTIME_OPERATOR="${1#*=}"
       shift
       ;;
     --usdc-operator)
@@ -168,10 +168,10 @@ fi
 BASE_DEPLOYER="${BASE_DEPLOYER:-}"
 BASE_PAUSER="${BASE_PAUSER:-}"
 BASE_RESOLVER="${BASE_RESOLVER:-}"
-BASE_MATCHER="${BASE_MATCHER:-}"
 BASE_OPERATOR="${BASE_OPERATOR:-}"
+BASE_AGENT_RUNTIME_OPERATOR="${BASE_AGENT_RUNTIME_OPERATOR:-}"
 
-if [[ -z "$BASE_DEPLOYER" || -z "$BASE_PAUSER" || -z "$BASE_RESOLVER" || -z "$BASE_MATCHER" || -z "$BASE_OPERATOR" ]]; then
+if [[ -z "$BASE_DEPLOYER" || -z "$BASE_PAUSER" || -z "$BASE_RESOLVER" || -z "$BASE_OPERATOR" ]]; then
   echo "One or more role addresses are missing. Check keys/base-role-wallets.local or .env." >&2
   exit 1
 fi
@@ -182,16 +182,16 @@ if [[ "$NETWORK" == "sepolia" ]]; then
   ETH_DEPLOYER="${ETH_DEPLOYER:-0.02}"
   ETH_PAUSER="${ETH_PAUSER:-0.005}"
   ETH_RESOLVER="${ETH_RESOLVER:-0.005}"
-  ETH_MATCHER="${ETH_MATCHER:-0.005}"
   ETH_OPERATOR="${ETH_OPERATOR:-0}"
+  ETH_AGENT_RUNTIME_OPERATOR="${ETH_AGENT_RUNTIME_OPERATOR:-0}"
 else
   RPC_URL="${BASE_RPC_URL:-https://mainnet.base.org}"
   COLLATERAL_TOKEN="${COLLATERAL_TOKEN_BASE_MAINNET:-$ZERO_ADDR}"
   ETH_DEPLOYER="${ETH_DEPLOYER:-0.003}"
   ETH_PAUSER="${ETH_PAUSER:-0.0015}"
   ETH_RESOLVER="${ETH_RESOLVER:-0.0015}"
-  ETH_MATCHER="${ETH_MATCHER:-0.0015}"
   ETH_OPERATOR="${ETH_OPERATOR:-0}"
+  ETH_AGENT_RUNTIME_OPERATOR="${ETH_AGENT_RUNTIME_OPERATOR:-0}"
 fi
 
 if [[ "${COLLATERAL_TOKEN_ADDRESS:-$ZERO_ADDR}" != "$ZERO_ADDR" ]]; then
@@ -252,8 +252,8 @@ TRANSFER_ETH=()
 queue_send_eth "deployer" "$BASE_DEPLOYER" "$ETH_DEPLOYER"
 queue_send_eth "pauser" "$BASE_PAUSER" "$ETH_PAUSER"
 queue_send_eth "resolver" "$BASE_RESOLVER" "$ETH_RESOLVER"
-queue_send_eth "matcher" "$BASE_MATCHER" "$ETH_MATCHER"
 queue_send_eth "operator" "$BASE_OPERATOR" "$ETH_OPERATOR"
+queue_send_eth "agent_runtime_operator" "$BASE_AGENT_RUNTIME_OPERATOR" "$ETH_AGENT_RUNTIME_OPERATOR"
 
 SIGNER_BALANCE_WEI="$(cast balance --rpc-url "$RPC_URL" "$SIGNER_ADDRESS")"
 

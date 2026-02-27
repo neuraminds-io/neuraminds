@@ -11,7 +11,8 @@ configMapGenerator:
   - name: polyguard-config
     behavior: merge
     literals:
-      - solana-rpc-url=https://api.devnet.solana.com
+      - base-rpc-url=https://sepolia.base.org
+      - base-chain-id=84532
       - environment=staging
       - log-level=debug
 

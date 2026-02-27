@@ -5,11 +5,12 @@
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
-    "test": "anchor test",
+    "test": "echo \"No root tests configured\"",
     "launch:config": "node scripts/validate-launch-config.mjs --mode=production --write-report",
     "launch:config:soft": "node scripts/validate-launch-config.mjs --mode=production --allow-missing-secrets --write-report",
     "launch:readiness": "bash scripts/launch-readiness.sh --mode=production --allow-missing-secrets",
     "launch:readiness:strict": "bash scripts/launch-readiness.sh --strict --mode=production --allow-missing-secrets",
+    "launch:readiness:strict:dx": "bash scripts/launch-readiness.sh --strict --mode=production --allow-missing-secrets --require-dx-snapshot",
     "launch:summary": "node scripts/generate-launch-summary.mjs",
     "launch:e2e": "npm run launch:readiness && npm run production:gates",
     "synthetic:check": "node scripts/synthetic-monitor.mjs",
@@ -21,6 +22,14 @@
     "base:wallets:status": "bash scripts/base-wallet-status.sh --network both",
     "base:fund:sepolia": "bash scripts/base-distribute-funds.sh --network sepolia",
     "base:fund:mainnet": "bash scripts/base-distribute-funds.sh --network mainnet",
+    "dx:help": "bash scripts/dx-terminal-pro.sh help",
+    "dx:vault": "bash scripts/dx-terminal-pro.sh vault",
+    "dx:positions": "bash scripts/dx-terminal-pro.sh positions",
+    "dx:swaps": "bash scripts/dx-terminal-pro.sh swaps 50",
+    "dx:logs": "bash scripts/dx-terminal-pro.sh logs 50",
+    "dx:strategies": "bash scripts/dx-terminal-pro.sh strategies true",
+    "dx:leaderboard": "bash scripts/dx-terminal-pro.sh leaderboard 25",
+    "dx:snapshot": "bash scripts/dx-terminal-pro.sh snapshot",
     "evm:build": "forge build --root evm",
     "evm:test": "forge test --root evm",
     "evm:fmt": "forge fmt --root evm",
@@ -35,21 +44,9 @@
     "evm:deploy:programs:sepolia:run": "bash scripts/base-deploy-programs.sh --network sepolia",
     "evm:deploy:programs:mainnet:run": "bash scripts/base-deploy-programs.sh --network mainnet"
   },
-  "dependencies": {
-    "@coral-xyz/anchor": "^0.31.1",
-    "@solana/spl-token": "^0.4.0",
-    "@solana/web3.js": "^1.95.0",
-    "next-pwa": "^5.6.0",
-    "tweetnacl": "^1.0.3"
-  },
   "devDependencies": {
-    "@types/bn.js": "^5.1.5",
-    "@types/chai": "^4.3.16",
-    "@types/mocha": "^10.0.7",
-    "chai": "^4.4.1",
-    "mocha": "^10.6.0",
     "prettier": "^3.3.2",
-    "ts-mocha": "^10.0.0",
+    "prettier-plugin-solidity": "^2.2.1",
     "typescript": "^5.5.3"
   }
 }

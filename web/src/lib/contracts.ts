@@ -19,6 +19,20 @@ export const MARKET_CORE_ABI = [
   },
   {
     type: 'function',
+    name: 'createMarketRich',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'question', type: 'string' },
+      { name: 'description', type: 'string' },
+      { name: 'category', type: 'string' },
+      { name: 'resolutionSource', type: 'string' },
+      { name: 'closeTime', type: 'uint64' },
+      { name: 'resolver', type: 'address' },
+    ],
+    outputs: [{ name: 'marketId', type: 'uint256' }],
+  },
+  {
+    type: 'function',
     name: 'marketCount',
     stateMutability: 'view',
     inputs: [],
@@ -36,6 +50,18 @@ export const MARKET_CORE_ABI = [
       { name: 'resolver', type: 'address' },
       { name: 'resolved', type: 'bool' },
       { name: 'outcome', type: 'bool' },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'getMarketMetadata',
+    stateMutability: 'view',
+    inputs: [{ name: 'marketId', type: 'uint256' }],
+    outputs: [
+      { name: 'question', type: 'string' },
+      { name: 'description', type: 'string' },
+      { name: 'category', type: 'string' },
+      { name: 'resolutionSource', type: 'string' },
     ],
   },
 ] as const;

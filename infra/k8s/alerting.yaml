@@ -147,42 +147,6 @@ spec:
             summary: "Redis memory usage high"
             description: "Redis memory usage is {{ $value | humanizePercentage }}"
 
-    # Solana/Blockchain Alerts
-    - name: polyguard.solana
-      rules:
-        - alert: PolyguardSolanaRPCDown
-          expr: |
-            polyguard_health_solana{job="polyguard-api"} != 1
-          for: 2m
-          labels:
-            severity: warning
-            service: polyguard-solana
-          annotations:
-            summary: "Solana RPC health check failing"
-            description: "Solana RPC is unhealthy or unreachable"
-
-        - alert: PolyguardKeeperLowBalance
-          expr: |
-            polyguard_keeper_balance_sol < 1
-          for: 5m
-          labels:
-            severity: warning
-            service: polyguard-keeper
-          annotations:
-            summary: "Keeper wallet balance low"
-            description: "Keeper balance is {{ $value }} SOL"
-
-        - alert: PolyguardKeeperCriticalBalance
-          expr: |
-            polyguard_keeper_balance_sol < 0.1
-          for: 1m
-          labels:
-            severity: critical
-            service: polyguard-keeper
-          annotations:
-            summary: "Keeper wallet balance critical"
-            description: "Keeper balance is {{ $value }} SOL - settlements may fail"
-
     # Business Metrics Alerts
     - name: polyguard.business
       rules:

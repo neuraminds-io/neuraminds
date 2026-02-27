@@ -69,10 +69,8 @@ where
             let latency_ms = elapsed.as_secs_f64() * 1000.0;
 
             // Skip health check noise
-            if path == "/health" || path == "/health/deep" {
-                if status == 200 {
-                    return Ok(res);
-                }
+            if (path == "/health" || path == "/health/detailed") && status == 200 {
+                return Ok(res);
             }
 
             let level = if status >= 500 {

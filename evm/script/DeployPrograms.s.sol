@@ -5,6 +5,7 @@ import {Script, console2} from "forge-std/Script.sol";
 import {MarketCore} from "../src/MarketCore.sol";
 import {OrderBook} from "../src/OrderBook.sol";
 import {CollateralVault} from "../src/CollateralVault.sol";
+import {AgentRuntime} from "../src/AgentRuntime.sol";
 
 interface IAccessControlLike {
     function grantRole(bytes32 role, address account) external;
@@ -27,8 +28,8 @@ contract DeployProgramsScript is Script {
         address pauser = _envAddressOr("BASE_PAUSER", admin);
         address resolver = _envAddressOr("BASE_RESOLVER", admin);
         address marketCreator = _envAddressOr("BASE_MARKET_CREATOR", admin);
-        address matcher = _envAddressOr("BASE_MATCHER", admin);
         address operator = _envAddressOr("BASE_OPERATOR", admin);
+        address runtimeOperator = _envAddressOr("BASE_AGENT_RUNTIME_OPERATOR", address(0));
 
         address collateralToken = _resolveCollateralToken();
         if (collateralToken == address(0)) revert MissingCollateralToken();
@@ -36,12 +37,14 @@ contract DeployProgramsScript is Script {
         vm.startBroadcast();
 
         MarketCore marketCore = new MarketCore(bootstrapAdmin);
-        OrderBook orderBook = new OrderBook(bootstrapAdmin, address(marketCore), collateralToken);
         CollateralVault collateralVault = new CollateralVault(bootstrapAdmin, collateralToken);
+        OrderBook orderBook = new OrderBook(bootstrapAdmin, address(marketCore), address(collateralVault));
+        AgentRuntime agentRuntime = new AgentRuntime(bootstrapAdmin, address(orderBook));
 
         _configureMarketCore(marketCore, bootstrapAdmin, admin, marketCreator, resolver, pauser);
-        _configureOrderBook(orderBook, bootstrapAdmin, admin, matcher, pauser);
-        _configureCollateralVault(collateralVault, bootstrapAdmin, admin, operator, pauser);
+        _configureCollateralVault(collateralVault, bootstrapAdmin, admin, operator, pauser, address(orderBook));
+        _configureOrderBook(orderBook, bootstrapAdmin, admin, pauser, address(agentRuntime), runtimeOperator);
+        _configureAgentRuntime(agentRuntime, bootstrapAdmin, admin, pauser);
 
         vm.stopBroadcast();
 
@@ -49,14 +52,15 @@ contract DeployProgramsScript is Script {
         console2.log("admin:", admin);
         console2.log("bootstrapAdmin:", bootstrapAdmin);
         console2.log("MarketCore:", address(marketCore));
-        console2.log("OrderBook:", address(orderBook));
         console2.log("CollateralVault:", address(collateralVault));
+        console2.log("OrderBook:", address(orderBook));
+        console2.log("AgentRuntime:", address(agentRuntime));
         console2.log("collateralToken:", collateralToken);
         console2.log("marketCreator:", marketCreator);
         console2.log("resolver:", resolver);
-        console2.log("matcher:", matcher);
         console2.log("operator:", operator);
         console2.log("pauser:", pauser);
+        console2.log("runtimeOperator:", runtimeOperator);
     }
 
     function _configureMarketCore(
@@ -86,18 +90,22 @@ contract DeployProgramsScript is Script {
         OrderBook orderBook,
         address bootstrapAdmin,
         address admin,
-        address matcher,
-        address pauser
+        address pauser,
+        address agentRuntime,
+        address runtimeOperator
     ) internal {
         bytes32 defaultAdminRole = orderBook.DEFAULT_ADMIN_ROLE();
 
-        _grantRoleIfMissing(IAccessControlLike(address(orderBook)), orderBook.MATCHER_ROLE(), matcher);
         _grantRoleIfMissing(IAccessControlLike(address(orderBook)), orderBook.PAUSER_ROLE(), pauser);
+        _grantRoleIfMissing(IAccessControlLike(address(orderBook)), orderBook.AGENT_RUNTIME_ROLE(), agentRuntime);
+        if (runtimeOperator != address(0)) {
+            _grantRoleIfMissing(IAccessControlLike(address(orderBook)), orderBook.AGENT_RUNTIME_ROLE(), runtimeOperator);
+        }
 
         if (bootstrapAdmin != admin) {
             _grantRoleIfMissing(IAccessControlLike(address(orderBook)), defaultAdminRole, admin);
-            _revokeRoleIfPresent(IAccessControlLike(address(orderBook)), orderBook.MATCHER_ROLE(), bootstrapAdmin);
             _revokeRoleIfPresent(IAccessControlLike(address(orderBook)), orderBook.PAUSER_ROLE(), bootstrapAdmin);
+            _revokeRoleIfPresent(IAccessControlLike(address(orderBook)), orderBook.AGENT_RUNTIME_ROLE(), bootstrapAdmin);
             _revokeRoleIfPresent(IAccessControlLike(address(orderBook)), defaultAdminRole, bootstrapAdmin);
         }
     }
@@ -107,11 +115,13 @@ contract DeployProgramsScript is Script {
         address bootstrapAdmin,
         address admin,
         address operator,
-        address pauser
+        address pauser,
+        address orderBook
     ) internal {
         bytes32 defaultAdminRole = collateralVault.DEFAULT_ADMIN_ROLE();
 
         _grantRoleIfMissing(IAccessControlLike(address(collateralVault)), collateralVault.OPERATOR_ROLE(), operator);
+        _grantRoleIfMissing(IAccessControlLike(address(collateralVault)), collateralVault.OPERATOR_ROLE(), orderBook);
         _grantRoleIfMissing(IAccessControlLike(address(collateralVault)), collateralVault.PAUSER_ROLE(), pauser);
 
         if (bootstrapAdmin != admin) {
@@ -119,6 +129,23 @@ contract DeployProgramsScript is Script {
             _revokeRoleIfPresent(IAccessControlLike(address(collateralVault)), collateralVault.OPERATOR_ROLE(), bootstrapAdmin);
             _revokeRoleIfPresent(IAccessControlLike(address(collateralVault)), collateralVault.PAUSER_ROLE(), bootstrapAdmin);
             _revokeRoleIfPresent(IAccessControlLike(address(collateralVault)), defaultAdminRole, bootstrapAdmin);
+        }
+    }
+
+    function _configureAgentRuntime(
+        AgentRuntime agentRuntime,
+        address bootstrapAdmin,
+        address admin,
+        address pauser
+    ) internal {
+        bytes32 defaultAdminRole = agentRuntime.DEFAULT_ADMIN_ROLE();
+
+        _grantRoleIfMissing(IAccessControlLike(address(agentRuntime)), agentRuntime.PAUSER_ROLE(), pauser);
+
+        if (bootstrapAdmin != admin) {
+            _grantRoleIfMissing(IAccessControlLike(address(agentRuntime)), defaultAdminRole, admin);
+            _revokeRoleIfPresent(IAccessControlLike(address(agentRuntime)), agentRuntime.PAUSER_ROLE(), bootstrapAdmin);
+            _revokeRoleIfPresent(IAccessControlLike(address(agentRuntime)), defaultAdminRole, bootstrapAdmin);
         }
     }
 

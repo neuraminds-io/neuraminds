@@ -84,8 +84,8 @@ BASE_DEPLOYER="${BASE_DEPLOYER:-}"
 BASE_MARKET_CREATOR="${BASE_MARKET_CREATOR:-}"
 BASE_PAUSER="${BASE_PAUSER:-}"
 BASE_RESOLVER="${BASE_RESOLVER:-}"
-BASE_MATCHER="${BASE_MATCHER:-}"
 BASE_OPERATOR="${BASE_OPERATOR:-}"
+BASE_AGENT_RUNTIME_OPERATOR="${BASE_AGENT_RUNTIME_OPERATOR:-}"
 
 if [[ -z "$BASE_DEPLOYER" && -f "$ROOT_DIR/keys/base-role-wallets.local" ]]; then
   BASE_DEPLOYER="$(awk -F= '/^BASE_DEPLOYER=/{print $2}' "$ROOT_DIR/keys/base-role-wallets.local" | tail -n 1 || true)"
@@ -109,8 +109,8 @@ add_wallet "deployer" "$BASE_DEPLOYER"
 add_wallet "market_creator" "$BASE_MARKET_CREATOR"
 add_wallet "pauser" "$BASE_PAUSER"
 add_wallet "resolver" "$BASE_RESOLVER"
-add_wallet "matcher" "$BASE_MATCHER"
 add_wallet "operator" "$BASE_OPERATOR"
+add_wallet "agent_runtime_operator" "$BASE_AGENT_RUNTIME_OPERATOR"
 
 if [[ ${#WALLET_ADDRESSES[@]} -eq 0 ]]; then
   echo "No wallet addresses found in environment." >&2

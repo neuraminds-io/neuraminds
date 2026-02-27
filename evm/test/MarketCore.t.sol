@@ -38,6 +38,42 @@ contract MarketCoreTest is Test {
         assertEq(resolved, false);
     }
 
+    function test_createMarketRichStoresMetadata() external {
+        uint64 closeTime = uint64(block.timestamp + 12 hours);
+        string memory question = "Will Base TPS exceed 1k by Q3 2026?";
+        string memory description = "Resolution based on official Base metrics dashboard.";
+        string memory category = "base";
+        string memory resolutionSource = "https://base.org";
+
+        vm.prank(creator);
+        uint256 marketId =
+            marketCore.createMarketRich(question, description, category, resolutionSource, closeTime, resolver);
+
+        (bytes32 storedHash, uint64 storedCloseTime,, address storedResolver, bool resolved,) =
+            marketCore.markets(marketId);
+        assertEq(storedHash, keccak256(bytes(question)));
+        assertEq(storedCloseTime, closeTime);
+        assertEq(storedResolver, resolver);
+        assertEq(resolved, false);
+
+        (
+            string memory storedQuestion,
+            string memory storedDescription,
+            string memory storedCategory,
+            string memory storedResolutionSource
+        ) = marketCore.getMarketMetadata(marketId);
+        assertEq(storedQuestion, question);
+        assertEq(storedDescription, description);
+        assertEq(storedCategory, category);
+        assertEq(storedResolutionSource, resolutionSource);
+    }
+
+    function test_setMarketMetadataRequiresExistingMarket() external {
+        vm.prank(creator);
+        vm.expectRevert(MarketCore.MarketNotFound.selector);
+        marketCore.setMarketMetadata(999, "q?", "d", "c", "s");
+    }
+
     function test_onlyCreatorCanCreate() external {
         vm.prank(outsider);
         vm.expectRevert();

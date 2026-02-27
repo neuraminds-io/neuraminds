@@ -4,9 +4,7 @@ pub mod evm_rpc;
 pub mod logging;
 pub mod metrics;
 pub mod orderbook;
-pub mod reconciliation;
 pub mod redis;
-pub mod solana;
 pub mod websocket;
 
 pub use database::DatabaseService;
@@ -14,7 +12,5 @@ pub use evm_indexer::EvmIndexerService;
 pub use evm_rpc::EvmRpcService;
 pub use metrics::{ComponentHealth, HealthChecks, HealthStatus, MetricsService, SystemHealth};
 pub use orderbook::OrderBookService;
-pub use reconciliation::{ReconciliationConfig, ReconciliationService};
 pub use redis::RedisService;
-pub use solana::SolanaService;
 pub use websocket::WebSocketHub;

@@ -104,7 +104,15 @@ export interface TradingAgentOptions {
   walletClient: WalletClient;
   marketCoreAddress: Address;
   orderBookAddress: Address;
+  evmWriteApiUrl?: string;
   config: TradingAgentConfig;
+}
+
+interface PreparedEvmWriteTx {
+  chain_id: number;
+  to: Address;
+  data: Hex;
+  value: Hex;
 }
 
 export class TradingAgent {
@@ -114,24 +122,42 @@ export class TradingAgent {
   private status = AgentStatus.Paused;
   private pollHandle: ReturnType<typeof setInterval> | null = null;
   private tradesCount = 0n;
+  private writeApiUrl: string;
 
   constructor(private readonly options: TradingAgentOptions) {
     this.riskManager = new RiskManager(options.config);
+    this.writeApiUrl = (options.evmWriteApiUrl || 'http://localhost:8080/v1').replace(/\/$/, '');
   }
 
   setStrategy(strategy: Strategy): void {
     this.strategy = strategy;
   }
 
-  async createMarket(questionHash: Hex, closeTime: bigint, resolver: Address): Promise<{ marketId: bigint; txHash: Hex }> {
+  async createMarket(params: {
+    question: string;
+    closeTime: bigint;
+    resolver: Address;
+    description?: string;
+    category?: string;
+    resolutionSource?: string;
+  }): Promise<{ marketId: bigint; txHash: Hex }> {
     const account = this.requireAccount();
-    const txHash = await this.options.walletClient.writeContract({
+    const prepared = await this.callWriteApi<PreparedEvmWriteTx>('/evm/write/markets/create', {
+      from: account,
+      question: params.question,
+      description: params.description || '',
+      category: params.category || '',
+      resolutionSource: params.resolutionSource || '',
+      closeTime: Number(params.closeTime),
+      resolver: params.resolver,
+    });
+
+    const txHash = await this.options.walletClient.sendTransaction({
       account,
       chain: this.options.walletClient.chain,
-      address: this.options.marketCoreAddress,
-      abi: MARKET_CORE_ABI,
-      functionName: 'createMarket',
-      args: [questionHash, closeTime, resolver],
+      to: prepared.to,
+      data: prepared.data,
+      value: BigInt(prepared.value),
     });
 
     const receipt = await this.options.publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -161,19 +187,20 @@ export class TradingAgent {
 
     const account = this.requireAccount();
     try {
-      const txHash = await this.options.walletClient.writeContract({
+      const prepared = await this.callWriteApi<PreparedEvmWriteTx>('/evm/write/orders/place', {
+        from: account,
+        marketId: Number(order.marketId),
+        outcome: order.outcome === Outcome.Yes ? 'yes' : 'no',
+        priceBps: order.priceBps,
+        size: order.quantity.toString(),
+        expiry: Math.floor(Date.now() / 1000) + (order.expirySeconds || 24 * 60 * 60),
+      });
+      const txHash = await this.options.walletClient.sendTransaction({
         account,
         chain: this.options.walletClient.chain,
-        address: this.options.orderBookAddress,
-        abi: ORDER_BOOK_ABI,
-        functionName: 'placeOrder',
-        args: [
-          order.marketId,
-          order.outcome === Outcome.Yes,
-          BigInt(order.priceBps),
-          order.quantity,
-          BigInt(Math.floor(Date.now() / 1000) + (order.expirySeconds || 24 * 60 * 60)),
-        ],
+        to: prepared.to,
+        data: prepared.data,
+        value: BigInt(prepared.value),
       });
 
       const receipt = await this.options.publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -207,13 +234,16 @@ export class TradingAgent {
 
   async cancelOrder(orderId: bigint): Promise<Hex> {
     const account = this.requireAccount();
-    const txHash = await this.options.walletClient.writeContract({
+    const prepared = await this.callWriteApi<PreparedEvmWriteTx>('/evm/write/orders/cancel', {
+      from: account,
+      orderId: Number(orderId),
+    });
+    const txHash = await this.options.walletClient.sendTransaction({
       account,
       chain: this.options.walletClient.chain,
-      address: this.options.orderBookAddress,
-      abi: ORDER_BOOK_ABI,
-      functionName: 'cancelOrder',
-      args: [orderId],
+      to: prepared.to,
+      data: prepared.data,
+      value: BigInt(prepared.value),
     });
     await this.options.publicClient.waitForTransactionReceipt({ hash: txHash });
     return txHash;
@@ -221,13 +251,16 @@ export class TradingAgent {
 
   async claim(marketId: bigint): Promise<Hex> {
     const account = this.requireAccount();
-    const txHash = await this.options.walletClient.writeContract({
+    const prepared = await this.callWriteApi<PreparedEvmWriteTx>('/evm/write/positions/claim', {
+      from: account,
+      marketId: Number(marketId),
+    });
+    const txHash = await this.options.walletClient.sendTransaction({
       account,
       chain: this.options.walletClient.chain,
-      address: this.options.orderBookAddress,
-      abi: ORDER_BOOK_ABI,
-      functionName: 'claim',
-      args: [marketId],
+      to: prepared.to,
+      data: prepared.data,
+      value: BigInt(prepared.value),
     });
     await this.options.publicClient.waitForTransactionReceipt({ hash: txHash });
     return txHash;
@@ -305,6 +338,25 @@ export class TradingAgent {
       throw new Error('walletClient account is required');
     }
     return account;
+  }
+
+  private async callWriteApi<T>(path: string, payload: unknown): Promise<T> {
+    const fetchImpl = (globalThis as unknown as { fetch?: (url: string, init: unknown) => Promise<{ ok: boolean; status: number; text: () => Promise<string>; json: () => Promise<T> }> }).fetch;
+    if (!fetchImpl) {
+      throw new Error('Global fetch is required for SDK write API calls');
+    }
+
+    const response = await fetchImpl(`${this.writeApiUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Write API request failed (${response.status}): ${text}`);
+    }
+    return response.json();
   }
 }
 

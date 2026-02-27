@@ -11,7 +11,8 @@ configMapGenerator:
   - name: polyguard-config
     behavior: merge
     literals:
-      - solana-rpc-url=https://api.mainnet-beta.solana.com
+      - base-rpc-url=https://mainnet.base.org
+      - base-chain-id=8453
       - environment=production
       - log-level=info
 

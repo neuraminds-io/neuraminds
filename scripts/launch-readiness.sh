@@ -10,6 +10,10 @@ API_URL=""
 WEB_URL=""
 CHAIN_MODE="${CHAIN_MODE:-base}"
 RUN_WEB_E2E=0
+SKIP_DX_SNAPSHOT=0
+REQUIRE_DX_SNAPSHOT=0
+DX_SNAPSHOT_OUT="docs/reports/dx-terminal-snapshot.json"
+DX_SNAPSHOT_CAPTURED=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -34,9 +38,18 @@ for arg in "$@"; do
     --run-web-e2e)
       RUN_WEB_E2E=1
       ;;
+    --skip-dx-snapshot)
+      SKIP_DX_SNAPSHOT=1
+      ;;
+    --require-dx-snapshot)
+      REQUIRE_DX_SNAPSHOT=1
+      ;;
+    --dx-snapshot-out=*)
+      DX_SNAPSHOT_OUT="${arg#*=}"
+      ;;
     *)
       echo "Unknown flag: $arg"
-      echo "Usage: scripts/launch-readiness.sh [--strict] [--mode=production|staging|development] [--allow-missing-secrets] [--api-url=<url>] [--web-url=<url>] [--chain-mode=base|solana|dual] [--run-web-e2e]"
+      echo "Usage: scripts/launch-readiness.sh [--strict] [--mode=production|staging|development] [--allow-missing-secrets] [--api-url=<url>] [--web-url=<url>] [--chain-mode=base] [--run-web-e2e] [--skip-dx-snapshot] [--require-dx-snapshot] [--dx-snapshot-out=<path>]"
       exit 1
       ;;
   esac
@@ -48,6 +61,9 @@ echo "strict=${STRICT}"
 echo "allow_missing_secrets=${ALLOW_MISSING_SECRETS}"
 echo "chain_mode=${CHAIN_MODE}"
 echo "run_web_e2e=${RUN_WEB_E2E}"
+echo "skip_dx_snapshot=${SKIP_DX_SNAPSHOT}"
+echo "require_dx_snapshot=${REQUIRE_DX_SNAPSHOT}"
+echo "dx_snapshot_out=${DX_SNAPSHOT_OUT}"
 echo "api_url=${API_URL:-<not set>}"
 echo "web_url=${WEB_URL:-<not set>}"
 echo ""
@@ -94,14 +110,36 @@ if [[ "${RUN_WEB_E2E}" -eq 1 ]]; then
     exit 1
   fi
 
-  if [[ "${CHAIN_MODE}" == "solana" ]]; then
-    echo "web e2e smoke skipped: --chain-mode=solana"
-  else
+  (
+    cd "${ROOT_DIR}"
+    node scripts/base-sepolia-web-smoke.mjs --api-url "${API_URL}" --web-url "${WEB_URL}"
+  )
+fi
+
+if [[ "${SKIP_DX_SNAPSHOT}" -eq 0 ]]; then
+  SHOULD_CAPTURE_DX=0
+  if [[ -n "${DX_TERMINAL_VAULT_ADDRESS:-}" || -n "${DX_TERMINAL_OWNER_ADDRESS:-}" || -n "${DX_TERMINAL_PRIVATE_KEY:-}" ]]; then
+    SHOULD_CAPTURE_DX=1
+  fi
+
+  if [[ "${SHOULD_CAPTURE_DX}" -eq 1 ]]; then
     (
       cd "${ROOT_DIR}"
-      node scripts/base-sepolia-web-smoke.mjs --api-url "${API_URL}" --web-url "${WEB_URL}"
-    )
+      bash scripts/dx-terminal-pro.sh snapshot "${DX_SNAPSHOT_OUT}"
+    ) && DX_SNAPSHOT_CAPTURED=1 || {
+      echo "dx snapshot capture failed"
+      if [[ "${REQUIRE_DX_SNAPSHOT}" -eq 1 ]]; then
+        exit 1
+      fi
+    }
+  else
+    echo "dx snapshot skipped (set DX_TERMINAL_VAULT_ADDRESS or DX_TERMINAL_OWNER_ADDRESS or DX_TERMINAL_PRIVATE_KEY to enable)"
+    if [[ "${REQUIRE_DX_SNAPSHOT}" -eq 1 ]]; then
+      exit 1
+    fi
   fi
+else
+  echo "dx snapshot skipped (--skip-dx-snapshot)"
 fi
 
 echo ""
@@ -115,6 +153,9 @@ if [[ -n "${API_URL}" ]]; then
 fi
 if [[ "${RUN_WEB_E2E}" -eq 1 ]]; then
   echo "- web/playwright-report/index.html"
+fi
+if [[ "${DX_SNAPSHOT_CAPTURED}" -eq 1 ]]; then
+  echo "- ${DX_SNAPSHOT_OUT}"
 fi
 
 (

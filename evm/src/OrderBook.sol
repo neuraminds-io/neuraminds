@@ -2,8 +2,6 @@
 pragma solidity 0.8.24;
 
 import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessControl.sol";
-import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Pausable} from "openzeppelin-contracts/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
@@ -14,11 +12,15 @@ interface IMarketCoreRead {
         returns (bytes32 questionHash, uint64 closeTime, uint64 resolveTime, address resolver, bool resolved, bool outcome);
 }
 
-contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
-    using SafeERC20 for IERC20;
+interface ICollateralVault {
+    function lock(address user, uint256 amount) external;
+    function settle(address from, address to, uint256 amount) external;
+    function transferAvailable(address from, address to, uint256 amount) external;
+}
 
-    bytes32 public constant MATCHER_ROLE = keccak256("MATCHER_ROLE");
+contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant AGENT_RUNTIME_ROLE = keccak256("AGENT_RUNTIME_ROLE");
 
     uint256 public constant MIN_PRICE_BPS = 1;
     uint256 public constant MAX_PRICE_BPS = 9_999;
@@ -52,8 +54,8 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
     mapping(uint256 => mapping(address => Position)) public positions;
     mapping(uint256 => MarketPool) public marketPools;
 
-    IERC20 public immutable collateral;
     IMarketCoreRead public immutable marketCore;
+    ICollateralVault public immutable collateralVault;
 
     error ZeroAddress();
     error InvalidPrice();
@@ -94,16 +96,16 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
     );
     event Claimed(uint256 indexed marketId, address indexed user, bool outcome, uint256 payout, uint256 shares);
 
-    constructor(address admin, address marketCoreAddress, address collateralToken) {
-        if (admin == address(0) || marketCoreAddress == address(0) || collateralToken == address(0)) {
+    constructor(address admin, address marketCoreAddress, address collateralVaultAddress) {
+        if (admin == address(0) || marketCoreAddress == address(0) || collateralVaultAddress == address(0)) {
             revert ZeroAddress();
         }
 
         marketCore = IMarketCoreRead(marketCoreAddress);
-        collateral = IERC20(collateralToken);
+        collateralVault = ICollateralVault(collateralVaultAddress);
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        _grantRole(MATCHER_ROLE, admin);
         _grantRole(PAUSER_ROLE, admin);
+        _grantRole(AGENT_RUNTIME_ROLE, admin);
     }
 
     function placeOrder(uint256 marketId, bool isYes, uint128 priceBps, uint128 size, uint64 expiry)
@@ -111,28 +113,23 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
         whenNotPaused
         returns (uint256 orderId)
     {
-        if (priceBps < MIN_PRICE_BPS || priceBps > MAX_PRICE_BPS) revert InvalidPrice();
-        if (size == 0) revert InvalidSize();
-        if (expiry <= block.timestamp) revert InvalidExpiry();
+        orderId = _placeOrder(msg.sender, marketId, isYes, priceBps, size, expiry);
+    }
 
-        orderId = ++orderCount;
-        orders[orderId] = Order({
-            maker: msg.sender,
-            marketId: marketId,
-            isYes: isYes,
-            priceBps: priceBps,
-            size: size,
-            remaining: size,
-            expiry: expiry,
-            canceled: false
-        });
-
-        emit OrderPlaced(orderId, msg.sender, marketId, isYes, priceBps, size, expiry);
+    function placeOrderFor(
+        address maker,
+        uint256 marketId,
+        bool isYes,
+        uint128 priceBps,
+        uint128 size,
+        uint64 expiry
+    ) external onlyRole(AGENT_RUNTIME_ROLE) whenNotPaused returns (uint256 orderId) {
+        if (maker == address(0)) revert ZeroAddress();
+        orderId = _placeOrder(maker, marketId, isYes, priceBps, size, expiry);
     }
 
     function matchOrders(uint256 firstOrderId, uint256 secondOrderId, uint128 fillSize)
         external
-        onlyRole(MATCHER_ROLE)
         whenNotPaused
         nonReentrant
     {
@@ -155,8 +152,10 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
         yesOrder.remaining -= fillSize;
         noOrder.remaining -= fillSize;
 
-        collateral.safeTransferFrom(yesOrder.maker, address(this), fillSize);
-        collateral.safeTransferFrom(noOrder.maker, address(this), fillSize);
+        collateralVault.lock(yesOrder.maker, fillSize);
+        collateralVault.lock(noOrder.maker, fillSize);
+        collateralVault.settle(yesOrder.maker, address(this), fillSize);
+        collateralVault.settle(noOrder.maker, address(this), fillSize);
 
         positions[yesOrder.marketId][yesOrder.maker].yesShares += fillSize;
         positions[yesOrder.marketId][noOrder.maker].noShares += fillSize;
@@ -168,7 +167,12 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
         emit OrderFilled(firstOrderId, fillSize, first.remaining, msg.sender);
         emit OrderFilled(secondOrderId, fillSize, second.remaining, msg.sender);
         emit OrdersMatched(
-            yesOrder.marketId, first.isYes ? firstOrderId : secondOrderId, first.isYes ? secondOrderId : firstOrderId, fillSize, yesOrder.priceBps, noOrder.priceBps
+            yesOrder.marketId,
+            first.isYes ? firstOrderId : secondOrderId,
+            first.isYes ? secondOrderId : firstOrderId,
+            fillSize,
+            yesOrder.priceBps,
+            noOrder.priceBps
         );
     }
 
@@ -183,14 +187,6 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
 
         order.canceled = true;
         emit OrderCanceled(orderId, msg.sender);
-    }
-
-    function fillOrder(uint256 orderId, uint128 fillSize) external onlyRole(MATCHER_ROLE) whenNotPaused {
-        Order storage order = orders[orderId];
-        _assertOrderFillable(order, fillSize);
-
-        order.remaining -= fillSize;
-        emit OrderFilled(orderId, fillSize, order.remaining, msg.sender);
     }
 
     function claim(uint256 marketId) external whenNotPaused nonReentrant returns (uint256 payout) {
@@ -215,7 +211,7 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
         position.noShares = 0;
         position.claimed = true;
 
-        collateral.safeTransfer(msg.sender, payout);
+        collateralVault.transferAvailable(address(this), msg.sender, payout);
         emit Claimed(marketId, msg.sender, outcome, payout, winningShares);
     }
 
@@ -231,6 +227,29 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
 
         uint256 winningShares = outcome ? position.yesShares : position.noShares;
         return winningShares * 2;
+    }
+
+    function _placeOrder(address maker, uint256 marketId, bool isYes, uint128 priceBps, uint128 size, uint64 expiry)
+        internal
+        returns (uint256 orderId)
+    {
+        if (priceBps < MIN_PRICE_BPS || priceBps > MAX_PRICE_BPS) revert InvalidPrice();
+        if (size == 0) revert InvalidSize();
+        if (expiry <= block.timestamp) revert InvalidExpiry();
+
+        orderId = ++orderCount;
+        orders[orderId] = Order({
+            maker: maker,
+            marketId: marketId,
+            isYes: isYes,
+            priceBps: priceBps,
+            size: size,
+            remaining: size,
+            expiry: expiry,
+            canceled: false
+        });
+
+        emit OrderPlaced(orderId, maker, marketId, isYes, priceBps, size, expiry);
     }
 
     function _assertOrderFillable(Order storage order, uint128 fillSize) internal view {

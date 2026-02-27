@@ -13,7 +13,6 @@ struct HealthResponse {
     timestamp: String,
 }
 
-/// Basic health check endpoint (for load balancers)
 pub async fn health_check() -> impl Responder {
     HttpResponse::Ok().json(HealthResponse {
         status: "healthy".to_string(),
@@ -22,29 +21,17 @@ pub async fn health_check() -> impl Responder {
     })
 }
 
-/// Detailed health check with component status
 pub async fn health_detailed(state: web::Data<Arc<AppState>>) -> impl Responder {
     let uptime = state.metrics.get_metrics().uptime_seconds;
 
-    // Check database health
     let db_health = check_database_health(&state).await;
-
-    // Check Redis health
     let redis_health = check_redis_health(&state).await;
-
-    // Check Solana RPC health
-    let solana_health = check_solana_health(&state).await;
-
-    // Check Base RPC health
     let base_health = check_base_health(&state).await;
 
-    // Determine overall status
     let overall_status = determine_overall_status(
         &db_health,
         &redis_health,
-        &solana_health,
         &base_health,
-        state.config.solana_enabled,
         state.config.evm_enabled,
     );
 
@@ -55,7 +42,6 @@ pub async fn health_detailed(state: web::Data<Arc<AppState>>) -> impl Responder 
         checks: HealthChecks {
             database: db_health,
             redis: redis_health,
-            solana: solana_health,
             base: base_health,
         },
     };
@@ -67,13 +53,11 @@ pub async fn health_detailed(state: web::Data<Arc<AppState>>) -> impl Responder 
     }
 }
 
-/// Get application metrics (JSON format)
 pub async fn get_metrics(state: web::Data<Arc<AppState>>) -> impl Responder {
     let metrics = state.metrics.get_metrics();
     HttpResponse::Ok().json(metrics)
 }
 
-/// Get application metrics (Prometheus format)
 pub async fn get_metrics_prometheus(state: web::Data<Arc<AppState>>) -> impl Responder {
     let prometheus_output = state.metrics.export_prometheus();
     HttpResponse::Ok()
@@ -84,7 +68,6 @@ pub async fn get_metrics_prometheus(state: web::Data<Arc<AppState>>) -> impl Res
 async fn check_database_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth {
     let start = Instant::now();
 
-    // Execute actual query to verify database connectivity
     match sqlx::query("SELECT 1").execute(state.db.pool()).await {
         Ok(_) => {
             let latency_ms = start.elapsed().as_millis() as u64;
@@ -105,7 +88,6 @@ async fn check_database_health(state: &web::Data<Arc<AppState>>) -> ComponentHea
 async fn check_redis_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth {
     let start = Instant::now();
 
-    // Try a simple get operation
     match state.redis.get::<String>("health_check").await {
         Ok(_) => {
             let latency_ms = start.elapsed().as_millis() as u64;
@@ -116,28 +98,6 @@ async fn check_redis_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth
             }
         }
         Err(e) => ComponentHealth::unhealthy(&format!("Redis error: {}", e)),
-    }
-}
-
-async fn check_solana_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth {
-    if !state.config.solana_enabled {
-        return ComponentHealth::disabled("Solana integration disabled");
-    }
-
-    let start = Instant::now();
-
-    // Try to get keeper balance as a health check
-    let keeper = state.solana.keeper_pubkey();
-    match state.solana.get_balance(&keeper).await {
-        Ok(_) => {
-            let latency_ms = start.elapsed().as_millis() as u64;
-            if latency_ms > 2000 {
-                ComponentHealth::degraded(latency_ms, "High RPC latency")
-            } else {
-                ComponentHealth::healthy(latency_ms)
-            }
-        }
-        Err(e) => ComponentHealth::unhealthy(&format!("Solana RPC error: {}", e)),
     }
 }
 
@@ -192,29 +152,18 @@ async fn check_base_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth 
 fn determine_overall_status(
     db: &ComponentHealth,
     redis: &ComponentHealth,
-    solana: &ComponentHealth,
     base: &ComponentHealth,
-    solana_enabled: bool,
     evm_enabled: bool,
 ) -> HealthStatus {
-    // If any critical component is unhealthy, overall is unhealthy
     if db.status == HealthStatus::Unhealthy {
         return HealthStatus::Unhealthy;
     }
 
-    // If any component is degraded, overall is degraded
     if db.status == HealthStatus::Degraded || redis.status == HealthStatus::Degraded {
         return HealthStatus::Degraded;
     }
 
-    if solana_enabled
-        && (solana.status == HealthStatus::Degraded || solana.status == HealthStatus::Unhealthy)
-    {
-        return HealthStatus::Degraded;
-    }
-
-    if evm_enabled
-        && (base.status == HealthStatus::Degraded || base.status == HealthStatus::Unhealthy)
+    if evm_enabled && (base.status == HealthStatus::Degraded || base.status == HealthStatus::Unhealthy)
     {
         return HealthStatus::Degraded;
     }

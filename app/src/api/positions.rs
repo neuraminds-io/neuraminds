@@ -7,21 +7,21 @@ use crate::models::{ClaimWinningsResponse, Outcome, PositionListResponse};
 use crate::require_auth;
 use crate::AppState;
 
-fn ensure_legacy_position_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
-    if !state.config.legacy_reads_enabled {
+fn ensure_position_read_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
         return Err(ApiError::bad_request(
-            "LEGACY_READ_PATH_DISABLED",
-            "Legacy position read path is disabled",
+            "EVM_READ_PATH_DISABLED",
+            "EVM position read path is disabled",
         ));
     }
     Ok(())
 }
 
-fn ensure_legacy_position_write_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
-    if !state.config.legacy_writes_enabled {
+fn ensure_position_write_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_writes_enabled {
         return Err(ApiError::bad_request(
-            "LEGACY_WRITE_PATH_DISABLED",
-            "Legacy position write path is disabled",
+            "EVM_WRITE_PATH_DISABLED",
+            "EVM position write path is disabled",
         ));
     }
     Ok(())
@@ -32,7 +32,7 @@ pub async fn list_positions(
     req: HttpRequest,
     state: web::Data<Arc<AppState>>,
 ) -> Result<impl Responder, ApiError> {
-    ensure_legacy_position_mode(&state)?;
+    ensure_position_read_mode(&state)?;
 
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
@@ -53,7 +53,7 @@ pub async fn get_position(
     state: web::Data<Arc<AppState>>,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
-    ensure_legacy_position_mode(&state)?;
+    ensure_position_read_mode(&state)?;
 
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
@@ -79,7 +79,7 @@ pub async fn claim_winnings(
     state: web::Data<Arc<AppState>>,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
-    ensure_legacy_position_write_mode(&state)?;
+    ensure_position_write_mode(&state)?;
 
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
@@ -131,9 +131,6 @@ pub async fn claim_winnings(
             "No winning tokens to claim",
         ));
     }
-
-    // In production: submit claim transaction
-    // let (tx_sig, claimed_amount) = state.solana.claim_winnings(&market_pda, &owner).await?;
 
     let claimed_amount = winning_tokens; // 1:1 redemption
 

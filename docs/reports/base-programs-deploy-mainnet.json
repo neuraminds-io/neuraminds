@@ -1,14 +1,15 @@
 {
-  "timestamp": "2026-02-26T14:12:11Z",
+  "timestamp": "2026-02-26T23:41:43Z",
   "network": "mainnet",
   "chainId": 8453,
   "rpcUrl": "https://base-mainnet.g.alchemy.com/v2/ezbkII66mmExHt3B6aeKM",
   "account": "base-deployer",
   "dryRun": false,
   "contracts": {
-    "marketCore": "0x723a565f03e5d46b56866ff7e1a084f09f8f7030",
-    "orderBook": "0x37ca877505976805f10a1bc6fc06e005502273a9",
-    "collateralVault": "0xbd63831a06daf3e5165b26604380b38f1db90617"
+    "marketCore": "0x4d66ab11e147f6d8c395b36d6b0da867eb1f7a13",
+    "orderBook": "0x391050b6a7e3be5b699772880fe6d3d249d49b7b",
+    "collateralVault": "0x139290d00aebe1df9f5d40b796c0d30dea1e93a0",
+    "agentRuntime": "0xbf5d884648bd799092f5b1663c950a85dee1e825"
   },
   "runFile": "evm/broadcast/DeployPrograms.s.sol/8453/run-latest.json"
 }

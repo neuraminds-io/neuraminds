@@ -4,39 +4,46 @@ pragma solidity 0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {MarketCore} from "../src/MarketCore.sol";
 import {OrderBook} from "../src/OrderBook.sol";
+import {CollateralVault} from "../src/CollateralVault.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 
 contract OrderBookTest is Test {
     address internal admin = makeAddr("admin");
     address internal creator = makeAddr("creator");
     address internal resolver = makeAddr("resolver");
-    address internal matcher = makeAddr("matcher");
     address internal yesTrader = makeAddr("yes-trader");
     address internal noTrader = makeAddr("no-trader");
     address internal outsider = makeAddr("outsider");
 
     MarketCore internal marketCore;
     OrderBook internal orderBook;
+    CollateralVault internal collateralVault;
     MockERC20 internal usdc;
 
     function setUp() external {
         marketCore = new MarketCore(admin);
         usdc = new MockERC20("USD Coin", "USDC");
-        orderBook = new OrderBook(admin, address(marketCore), address(usdc));
+        collateralVault = new CollateralVault(admin, address(usdc));
+        orderBook = new OrderBook(admin, address(marketCore), address(collateralVault));
 
         vm.startPrank(admin);
         marketCore.grantRole(marketCore.MARKET_CREATOR_ROLE(), creator);
         marketCore.grantRole(marketCore.RESOLVER_ROLE(), resolver);
-        orderBook.grantRole(orderBook.MATCHER_ROLE(), matcher);
+        collateralVault.grantRole(collateralVault.OPERATOR_ROLE(), address(orderBook));
         vm.stopPrank();
 
         usdc.mint(yesTrader, 1_000e6);
         usdc.mint(noTrader, 1_000e6);
 
         vm.prank(yesTrader);
-        usdc.approve(address(orderBook), type(uint256).max);
+        usdc.approve(address(collateralVault), type(uint256).max);
         vm.prank(noTrader);
-        usdc.approve(address(orderBook), type(uint256).max);
+        usdc.approve(address(collateralVault), type(uint256).max);
+
+        vm.prank(yesTrader);
+        collateralVault.deposit(500e6);
+        vm.prank(noTrader);
+        collateralVault.deposit(500e6);
     }
 
     function test_placeOrder() external {
@@ -77,14 +84,14 @@ contract OrderBookTest is Test {
         vm.prank(noTrader);
         uint256 noOrderId = orderBook.placeOrder(marketId, false, 4_800, 100e6, uint64(block.timestamp + 1 days));
 
-        vm.prank(matcher);
+        vm.prank(outsider);
         orderBook.matchOrders(yesOrderId, noOrderId, 40e6);
 
         (,,,,, uint128 yesRemaining,,) = orderBook.orders(yesOrderId);
         (,,,,, uint128 noRemaining,,) = orderBook.orders(noOrderId);
         assertEq(yesRemaining, 60e6);
         assertEq(noRemaining, 60e6);
-        assertEq(usdc.balanceOf(address(orderBook)), 80e6);
+        assertEq(collateralVault.availableBalance(address(orderBook)), 80e6);
 
         (uint128 yesShares,, bool yesClaimed) = orderBook.positions(marketId, yesTrader);
         (, uint128 noShares, bool noClaimed) = orderBook.positions(marketId, noTrader);
@@ -103,7 +110,8 @@ contract OrderBookTest is Test {
         vm.prank(yesTrader);
         uint256 payout = orderBook.claim(marketId);
         assertEq(payout, 80e6);
-        assertEq(usdc.balanceOf(yesTrader), 1_040e6);
+        assertEq(collateralVault.availableBalance(yesTrader), 540e6);
+        assertEq(collateralVault.availableBalance(address(orderBook)), 0);
 
         vm.prank(noTrader);
         vm.expectRevert(OrderBook.NoWinningShares.selector);
@@ -120,12 +128,12 @@ contract OrderBookTest is Test {
         vm.prank(noTrader);
         uint256 noOrderId = orderBook.placeOrder(marketId, false, 5_000, 100e6, uint64(block.timestamp + 1 days));
 
-        vm.prank(matcher);
+        vm.prank(outsider);
         vm.expectRevert(OrderBook.PriceCrossFailed.selector);
         orderBook.matchOrders(yesOrderId, noOrderId, 10e6);
     }
 
-    function test_matchFailsForUnauthorizedMatcher() external {
+    function test_permissionlessMatcherCanMatch() external {
         vm.prank(creator);
         uint256 marketId = marketCore.createMarket(keccak256("auth"), uint64(block.timestamp + 2 hours), resolver);
 
@@ -136,8 +144,9 @@ contract OrderBookTest is Test {
         uint256 noOrderId = orderBook.placeOrder(marketId, false, 4_900, 50e6, uint64(block.timestamp + 1 days));
 
         vm.prank(outsider);
-        vm.expectRevert();
         orderBook.matchOrders(yesOrderId, noOrderId, 10e6);
+
+        assertEq(collateralVault.availableBalance(address(orderBook)), 20e6);
     }
 
     function test_claimFailsBeforeResolve() external {
@@ -150,7 +159,7 @@ contract OrderBookTest is Test {
         vm.prank(noTrader);
         uint256 noOrderId = orderBook.placeOrder(marketId, false, 4_900, 50e6, uint64(block.timestamp + 1 days));
 
-        vm.prank(matcher);
+        vm.prank(outsider);
         orderBook.matchOrders(yesOrderId, noOrderId, 15e6);
 
         vm.prank(yesTrader);
@@ -171,14 +180,14 @@ contract OrderBookTest is Test {
         vm.prank(admin);
         orderBook.pause();
 
-        vm.prank(matcher);
+        vm.prank(outsider);
         vm.expectRevert();
         orderBook.matchOrders(yesOrderId, noOrderId, 10e6);
 
         vm.prank(admin);
         orderBook.unpause();
 
-        vm.prank(matcher);
+        vm.prank(outsider);
         orderBook.matchOrders(yesOrderId, noOrderId, 10e6);
 
         vm.warp(block.timestamp + 1 hours + 1);

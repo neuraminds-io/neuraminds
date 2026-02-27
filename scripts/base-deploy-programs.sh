@@ -169,8 +169,9 @@ fi
 MARKET_CORE_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE" and .contractName=="MarketCore") | .contractAddress' "$RUN_FILE" | tail -n 1)"
 ORDER_BOOK_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE" and .contractName=="OrderBook") | .contractAddress' "$RUN_FILE" | tail -n 1)"
 COLLATERAL_VAULT_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE" and .contractName=="CollateralVault") | .contractAddress' "$RUN_FILE" | tail -n 1)"
+AGENT_RUNTIME_ADDRESS="$(jq -r '.transactions[] | select(.transactionType=="CREATE" and .contractName=="AgentRuntime") | .contractAddress' "$RUN_FILE" | tail -n 1)"
 
-if [[ -z "$MARKET_CORE_ADDRESS" || "$MARKET_CORE_ADDRESS" == "null" || -z "$ORDER_BOOK_ADDRESS" || "$ORDER_BOOK_ADDRESS" == "null" || -z "$COLLATERAL_VAULT_ADDRESS" || "$COLLATERAL_VAULT_ADDRESS" == "null" ]]; then
+if [[ -z "$MARKET_CORE_ADDRESS" || "$MARKET_CORE_ADDRESS" == "null" || -z "$ORDER_BOOK_ADDRESS" || "$ORDER_BOOK_ADDRESS" == "null" || -z "$COLLATERAL_VAULT_ADDRESS" || "$COLLATERAL_VAULT_ADDRESS" == "null" || -z "$AGENT_RUNTIME_ADDRESS" || "$AGENT_RUNTIME_ADDRESS" == "null" ]]; then
   echo "Could not extract deployed contract addresses from $RUN_FILE" >&2
   exit 1
 fi
@@ -196,6 +197,7 @@ jq -n \
   --arg marketCore "$MARKET_CORE_ADDRESS" \
   --arg orderBook "$ORDER_BOOK_ADDRESS" \
   --arg collateralVault "$COLLATERAL_VAULT_ADDRESS" \
+  --arg agentRuntime "$AGENT_RUNTIME_ADDRESS" \
   --arg runFile "$RUN_FILE_REL" \
   '{
     timestamp: $timestamp,
@@ -207,7 +209,8 @@ jq -n \
     contracts: {
       marketCore: $marketCore,
       orderBook: $orderBook,
-      collateralVault: $collateralVault
+      collateralVault: $collateralVault,
+      agentRuntime: $agentRuntime
     },
     runFile: $runFile
   }' > "$REPORT_JSON"
@@ -217,6 +220,7 @@ cat > "$REPORT_ENV" <<ENV
 MARKET_CORE_ADDRESS=$MARKET_CORE_ADDRESS
 ORDER_BOOK_ADDRESS=$ORDER_BOOK_ADDRESS
 COLLATERAL_VAULT_ADDRESS=$COLLATERAL_VAULT_ADDRESS
+AGENT_RUNTIME_ADDRESS=$AGENT_RUNTIME_ADDRESS
 ENV
 
 echo ""
@@ -224,11 +228,12 @@ echo "Deploy programs complete ($NETWORK)"
 echo "MarketCore: $MARKET_CORE_ADDRESS"
 echo "OrderBook: $ORDER_BOOK_ADDRESS"
 echo "CollateralVault: $COLLATERAL_VAULT_ADDRESS"
+echo "AgentRuntime: $AGENT_RUNTIME_ADDRESS"
 echo "Report: $REPORT_JSON"
 echo "Env snippet: $REPORT_ENV"
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  for required_var in BASE_ADMIN BASE_MARKET_CREATOR BASE_RESOLVER BASE_PAUSER BASE_MATCHER BASE_OPERATOR; do
+  for required_var in BASE_ADMIN BASE_MARKET_CREATOR BASE_RESOLVER BASE_PAUSER BASE_OPERATOR; do
     if [[ -z "${!required_var:-}" ]]; then
       echo "Missing required variable for role verification: $required_var" >&2
       exit 1
@@ -260,6 +265,7 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   wait_for_code "$MARKET_CORE_ADDRESS" "MarketCore"
   wait_for_code "$ORDER_BOOK_ADDRESS" "OrderBook"
   wait_for_code "$COLLATERAL_VAULT_ADDRESS" "CollateralVault"
+  wait_for_code "$AGENT_RUNTIME_ADDRESS" "AgentRuntime"
 
   ROLE_REPORT="$REPORT_DIR/base-programs-roles-${NETWORK}.json"
 
@@ -267,10 +273,11 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   MARKET_CREATOR_ROLE="$(cast call --rpc-url "$RPC_URL" "$MARKET_CORE_ADDRESS" "MARKET_CREATOR_ROLE()(bytes32)")"
   RESOLVER_ROLE="$(cast call --rpc-url "$RPC_URL" "$MARKET_CORE_ADDRESS" "RESOLVER_ROLE()(bytes32)")"
   MARKET_PAUSER_ROLE="$(cast call --rpc-url "$RPC_URL" "$MARKET_CORE_ADDRESS" "PAUSER_ROLE()(bytes32)")"
-  MATCHER_ROLE="$(cast call --rpc-url "$RPC_URL" "$ORDER_BOOK_ADDRESS" "MATCHER_ROLE()(bytes32)")"
   ORDERBOOK_PAUSER_ROLE="$(cast call --rpc-url "$RPC_URL" "$ORDER_BOOK_ADDRESS" "PAUSER_ROLE()(bytes32)")"
+  AGENT_RUNTIME_ROLE="$(cast call --rpc-url "$RPC_URL" "$ORDER_BOOK_ADDRESS" "AGENT_RUNTIME_ROLE()(bytes32)")"
   OPERATOR_ROLE="$(cast call --rpc-url "$RPC_URL" "$COLLATERAL_VAULT_ADDRESS" "OPERATOR_ROLE()(bytes32)")"
   VAULT_PAUSER_ROLE="$(cast call --rpc-url "$RPC_URL" "$COLLATERAL_VAULT_ADDRESS" "PAUSER_ROLE()(bytes32)")"
+  RUNTIME_PAUSER_ROLE="$(cast call --rpc-url "$RPC_URL" "$AGENT_RUNTIME_ADDRESS" "PAUSER_ROLE()(bytes32)")"
 
   has_role() {
     local contract="$1"
@@ -285,12 +292,20 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   PAUSER_MARKET_HAS_ROLE="$(has_role "$MARKET_CORE_ADDRESS" "$MARKET_PAUSER_ROLE" "$BASE_PAUSER")"
 
   ADMIN_ORDERBOOK="$(has_role "$ORDER_BOOK_ADDRESS" "$DEFAULT_ADMIN_ROLE" "$BASE_ADMIN")"
-  MATCHER_HAS_ROLE="$(has_role "$ORDER_BOOK_ADDRESS" "$MATCHER_ROLE" "$BASE_MATCHER")"
   PAUSER_ORDERBOOK_HAS_ROLE="$(has_role "$ORDER_BOOK_ADDRESS" "$ORDERBOOK_PAUSER_ROLE" "$BASE_PAUSER")"
+  RUNTIME_CAN_PLACE_FOR="$(has_role "$ORDER_BOOK_ADDRESS" "$AGENT_RUNTIME_ROLE" "$AGENT_RUNTIME_ADDRESS")"
+  OPTIONAL_RUNTIME_OPERATOR_HAS_ROLE="n/a"
+  if [[ -n "${BASE_AGENT_RUNTIME_OPERATOR:-}" ]]; then
+    OPTIONAL_RUNTIME_OPERATOR_HAS_ROLE="$(has_role "$ORDER_BOOK_ADDRESS" "$AGENT_RUNTIME_ROLE" "$BASE_AGENT_RUNTIME_OPERATOR")"
+  fi
 
   ADMIN_VAULT="$(has_role "$COLLATERAL_VAULT_ADDRESS" "$DEFAULT_ADMIN_ROLE" "$BASE_ADMIN")"
   OPERATOR_HAS_ROLE="$(has_role "$COLLATERAL_VAULT_ADDRESS" "$OPERATOR_ROLE" "$BASE_OPERATOR")"
+  ORDERBOOK_OPERATOR_HAS_ROLE="$(has_role "$COLLATERAL_VAULT_ADDRESS" "$OPERATOR_ROLE" "$ORDER_BOOK_ADDRESS")"
   PAUSER_VAULT_HAS_ROLE="$(has_role "$COLLATERAL_VAULT_ADDRESS" "$VAULT_PAUSER_ROLE" "$BASE_PAUSER")"
+
+  ADMIN_RUNTIME="$(has_role "$AGENT_RUNTIME_ADDRESS" "$DEFAULT_ADMIN_ROLE" "$BASE_ADMIN")"
+  PAUSER_RUNTIME_HAS_ROLE="$(has_role "$AGENT_RUNTIME_ADDRESS" "$RUNTIME_PAUSER_ROLE" "$BASE_PAUSER")"
 
   jq -n \
     --arg timestamp "$TIMESTAMP" \
@@ -298,23 +313,29 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
     --arg marketCore "$MARKET_CORE_ADDRESS" \
     --arg orderBook "$ORDER_BOOK_ADDRESS" \
     --arg collateralVault "$COLLATERAL_VAULT_ADDRESS" \
+    --arg agentRuntime "$AGENT_RUNTIME_ADDRESS" \
     --arg adminHasDefault "$ADMIN_HAS_DEFAULT" \
     --arg creatorHasRole "$CREATOR_HAS_ROLE" \
     --arg resolverHasRole "$RESOLVER_HAS_ROLE" \
     --arg pauserMarketHasRole "$PAUSER_MARKET_HAS_ROLE" \
     --arg adminOrderbook "$ADMIN_ORDERBOOK" \
-    --arg matcherHasRole "$MATCHER_HAS_ROLE" \
     --arg pauserOrderbookHasRole "$PAUSER_ORDERBOOK_HAS_ROLE" \
+    --arg runtimeCanPlaceFor "$RUNTIME_CAN_PLACE_FOR" \
+    --arg optionalRuntimeOperatorHasRole "$OPTIONAL_RUNTIME_OPERATOR_HAS_ROLE" \
     --arg adminVault "$ADMIN_VAULT" \
     --arg operatorHasRole "$OPERATOR_HAS_ROLE" \
+    --arg orderbookOperatorHasRole "$ORDERBOOK_OPERATOR_HAS_ROLE" \
     --arg pauserVaultHasRole "$PAUSER_VAULT_HAS_ROLE" \
+    --arg adminRuntime "$ADMIN_RUNTIME" \
+    --arg pauserRuntimeHasRole "$PAUSER_RUNTIME_HAS_ROLE" \
     '{
       timestamp: $timestamp,
       network: $network,
       contracts: {
         marketCore: $marketCore,
         orderBook: $orderBook,
-        collateralVault: $collateralVault
+        collateralVault: $collateralVault,
+        agentRuntime: $agentRuntime
       },
       roleChecks: {
         marketCore: {
@@ -325,13 +346,19 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
         },
         orderBook: {
           adminDefaultRole: ($adminOrderbook == "true"),
-          matcherRole: ($matcherHasRole == "true"),
-          pauserRole: ($pauserOrderbookHasRole == "true")
+          pauserRole: ($pauserOrderbookHasRole == "true"),
+          agentRuntimeRoleForRuntime: ($runtimeCanPlaceFor == "true"),
+          agentRuntimeRoleForOptionalOperator: if $optionalRuntimeOperatorHasRole == "n/a" then null else ($optionalRuntimeOperatorHasRole == "true") end
         },
         collateralVault: {
           adminDefaultRole: ($adminVault == "true"),
           operatorRole: ($operatorHasRole == "true"),
+          orderBookOperatorRole: ($orderbookOperatorHasRole == "true"),
           pauserRole: ($pauserVaultHasRole == "true")
+        },
+        agentRuntime: {
+          adminDefaultRole: ($adminRuntime == "true"),
+          pauserRole: ($pauserRuntimeHasRole == "true")
         }
       }
     }' > "$ROLE_REPORT"

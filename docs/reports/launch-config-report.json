@@ -1,17 +1,16 @@
 {
-  "generatedAt": "2026-02-26T18:38:35.155Z",
-  "mode": "staging",
+  "generatedAt": "2026-02-26T23:45:47.664Z",
+  "mode": "production",
   "chainMode": "base",
   "allowMissingSecrets": false,
-  "summary": {
-    "missingCount": 0,
-    "warningCount": 1,
-    "errorCount": 0,
-    "ready": true
-  },
   "missing": [],
-  "warnings": [
-    "NEURA_TOKEN_ADDRESS is not set. Token-related UI/API features should stay disabled until token launch."
-  ],
-  "errors": []
+  "warnings": [],
+  "errors": [],
+  "summary": {
+    "ready": true,
+    "missingCount": 0,
+    "warningCount": 0,
+    "errorCount": 0,
+    "missingTolerated": false
+  }
 }

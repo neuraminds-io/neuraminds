@@ -27,33 +27,33 @@ const CHECKLIST: ChecklistCategory[] = [
       {
         id: 'sc-1',
         title: 'Reentrancy Analysis',
-        description: 'Review all cross-program invocations for reentrancy vulnerabilities',
+        description: 'Review all external contract calls for reentrancy vulnerabilities',
         status: 'complete',
         priority: 'critical',
         category: 'Smart Contract Security',
-        notes: 'All CPIs go to Token program (cannot callback). State updates after CPI.',
+        notes: 'External calls are guarded and state updates are ordered around lock/unlock flows.',
       },
       {
         id: 'sc-2',
         title: 'Arithmetic Overflow Protection',
-        description: 'Verify all arithmetic operations use checked_* or saturating_* methods',
+        description: 'Verify all arithmetic operations enforce safe bounds and fixed-point precision',
         status: 'complete',
         priority: 'critical',
         category: 'Smart Contract Security',
-        notes: 'Using checked_add, checked_sub, checked_mul throughout.',
+        notes: 'Core math paths are covered by unit tests and revert on invalid ranges.',
       },
       {
         id: 'sc-3',
         title: 'Account Ownership Verification',
-        description: 'Ensure all accounts are properly verified using Anchor constraints',
+        description: 'Ensure all privileged methods enforce role and ownership checks',
         status: 'complete',
         priority: 'critical',
         category: 'Smart Contract Security',
       },
       {
         id: 'sc-4',
-        title: 'PDA Derivation Security',
-        description: 'Review PDA seeds and bump handling for collision resistance',
+        title: 'Access Control Hardening',
+        description: 'Review admin/operator/resolver permissions and timelock boundaries',
         status: 'complete',
         priority: 'high',
         category: 'Smart Contract Security',
@@ -78,11 +78,11 @@ const CHECKLIST: ChecklistCategory[] = [
       {
         id: 'sc-7',
         title: 'Fuzz Testing',
-        description: 'libFuzzer setup for orderbook operations',
+        description: 'Foundry fuzz/invariant stress tests for market and orderbook logic',
         status: 'complete',
         priority: 'high',
         category: 'Smart Contract Security',
-        notes: 'Fuzz tests added in programs/orderbook/fuzz/',
+        notes: 'Run via scripts/fuzz-campaign.sh against evm/ contracts.',
       },
     ],
   },
@@ -558,7 +558,8 @@ export function SecurityAuditChecklist() {
             <li className="flex items-start gap-2">
               <span className="text-accent">4.</span>
               <span>
-                Run npm audit, cargo audit, and anchor verify before submitting for audit.
+                Run npm audit, cargo audit, forge test, and contract verification before submitting
+                for audit.
               </span>
             </li>
             <li className="flex items-start gap-2">

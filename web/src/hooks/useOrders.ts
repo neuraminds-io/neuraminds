@@ -2,8 +2,9 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { parseEventLogs } from 'viem';
-import { useConfig, usePublicClient, useWriteContract } from 'wagmi';
+import { useConfig, usePublicClient, useWalletClient } from 'wagmi';
 
+import { api } from '@/lib/api';
 import { ORDER_BOOK_ABI, ORDER_BOOK_ADDRESS, ORDER_PLACED_EVENT_ABI, assertContractAddress } from '@/lib/contracts';
 import { useBaseWallet } from '@/hooks/useBaseWallet';
 import type { OrderFilters, PlaceOrderRequest, PlaceOrderResponse, PaginatedResponse, Order } from '@/types';
@@ -167,32 +168,40 @@ export function usePlaceOrder() {
   const queryClient = useQueryClient();
   const baseWallet = useBaseWallet();
   const config = useConfig();
-  const { writeContractAsync } = useWriteContract();
+  const { data: walletClient } = useWalletClient();
 
   return useMutation({
     mutationFn: async (data: PlaceOrderRequest): Promise<PlaceOrderResponse> => {
-      const orderBookAddress = assertContractAddress(
-        ORDER_BOOK_ADDRESS,
-        'NEXT_PUBLIC_ORDER_BOOK_ADDRESS'
-      );
-
       if (!baseWallet.address || !baseWallet.isConnected) {
         throw new Error('Connect your wallet before placing an order');
+      }
+      if (!walletClient) {
+        throw new Error('Wallet client unavailable');
       }
 
       await baseWallet.ensureBaseChain();
 
-      const marketId = BigInt(data.marketId);
-      const isYes = data.outcome === 'yes';
-      const priceBps = BigInt(Math.max(1, Math.min(9_999, Math.round((data.price ?? 0.5) * 10_000))));
+      const marketId = Number(data.marketId);
+      if (!Number.isInteger(marketId) || marketId < 1) {
+        throw new Error('Invalid market id');
+      }
+      const priceBps = Math.max(1, Math.min(9_999, Math.round((data.price ?? 0.5) * 10_000)));
       const size = toBaseUnits(data.quantity);
-      const expiry = BigInt(Math.floor(Date.now() / 1000) + (data.expiresIn || DEFAULT_EXPIRY_SECONDS));
+      const expiry = Math.floor(Date.now() / 1000) + (data.expiresIn || DEFAULT_EXPIRY_SECONDS);
 
-      const hash = await writeContractAsync({
-        address: orderBookAddress,
-        abi: ORDER_BOOK_ABI,
-        functionName: 'placeOrder',
-        args: [marketId, isYes, priceBps, size, expiry],
+      const prepared = await api.prepareBasePlaceOrder({
+        from: baseWallet.address,
+        marketId,
+        outcome: data.outcome,
+        priceBps,
+        size: size.toString(),
+        expiry,
+      });
+      const hash = await walletClient.sendTransaction({
+        account: baseWallet.address as `0x${string}`,
+        to: prepared.to as `0x${string}`,
+        data: prepared.data,
+        value: BigInt(prepared.value),
       });
 
       const receipt = await waitForTransactionReceipt(config, { hash });
@@ -221,25 +230,33 @@ export function useCancelOrder() {
   const queryClient = useQueryClient();
   const baseWallet = useBaseWallet();
   const config = useConfig();
-  const { writeContractAsync } = useWriteContract();
+  const { data: walletClient } = useWalletClient();
 
   return useMutation({
     mutationFn: async (orderId: string) => {
-      const orderBookAddress = assertContractAddress(
-        ORDER_BOOK_ADDRESS,
-        'NEXT_PUBLIC_ORDER_BOOK_ADDRESS'
-      );
-
       if (!baseWallet.address || !baseWallet.isConnected) {
         throw new Error('Connect your wallet before cancelling an order');
       }
+      if (!walletClient) {
+        throw new Error('Wallet client unavailable');
+      }
 
       await baseWallet.ensureBaseChain();
-      const hash = await writeContractAsync({
-        address: orderBookAddress,
-        abi: ORDER_BOOK_ABI,
-        functionName: 'cancelOrder',
-        args: [BigInt(orderId)],
+
+      const parsedOrderId = Number(orderId);
+      if (!Number.isInteger(parsedOrderId) || parsedOrderId < 1) {
+        throw new Error('Invalid order id');
+      }
+
+      const prepared = await api.prepareBaseCancelOrder({
+        from: baseWallet.address,
+        orderId: parsedOrderId,
+      });
+      const hash = await walletClient.sendTransaction({
+        account: baseWallet.address as `0x${string}`,
+        to: prepared.to as `0x${string}`,
+        data: prepared.data,
+        value: BigInt(prepared.value),
       });
 
       await waitForTransactionReceipt(config, { hash });

@@ -420,8 +420,8 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.90, rate(polyguard_solana_rpc_duration_ms_bucket[5m]))",
-          "legendFormat": "Solana RPC p90",
+          "expr": "histogram_quantile(0.90, rate(polyguard_request_duration_ms_bucket[5m]))",
+          "legendFormat": "API request p90",
           "refId": "A"
         },
         {

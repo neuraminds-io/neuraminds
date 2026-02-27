@@ -12,8 +12,16 @@ const ERC20_TOTAL_SUPPLY_SELECTOR: &str = "0x18160ddd";
 const ERC20_DECIMALS_SELECTOR: &str = "0x313ce567";
 const MARKET_CORE_COUNT_SELECTOR: &str = "0xec979082";
 const MARKET_CORE_MARKETS_SELECTOR: &str = "0xb1283e77";
+const MARKET_CORE_METADATA_SELECTOR: &str = "0x6b6445b6";
+const MARKET_CORE_CREATE_RICH_SELECTOR: &str = "0xddabefe7";
 const ORDER_BOOK_COUNT_SELECTOR: &str = "0x2453ffa8";
 const ORDER_BOOK_ORDERS_SELECTOR: &str = "0xa85c38ef";
+const ORDER_BOOK_PLACE_SELECTOR: &str = "0xa8dd6515";
+const ORDER_BOOK_CANCEL_SELECTOR: &str = "0x514fcac7";
+const ORDER_BOOK_CLAIM_SELECTOR: &str = "0x379607f5";
+const ORDER_BOOK_MATCH_SELECTOR: &str = "0xc6437097";
+const AGENT_RUNTIME_CREATE_SELECTOR: &str = "0x325993ba";
+const AGENT_RUNTIME_EXECUTE_SELECTOR: &str = "0xe2a343a5";
 const ORDER_FILLED_TOPIC: &str =
     "0x5aac01386940f75e601757cfe5dc1d4ab2bac84f98d30664486114a8abb38a45";
 const MAX_MARKETS_PAGE_SIZE: u64 = 200;
@@ -21,6 +29,7 @@ const MAX_ORDERBOOK_DEPTH: u64 = 100;
 const MAX_TRADES_PAGE_SIZE: u64 = 200;
 const ORDERBOOK_SCAN_WINDOW: u64 = 150;
 const TRADES_BLOCK_SCAN_WINDOW: u64 = 25_000;
+const MAX_MARKET_TEXT_LENGTH: usize = 2_048;
 
 #[derive(Serialize)]
 pub struct BaseTokenStateResponse {
@@ -62,6 +71,10 @@ pub struct BaseMarketsResponse {
 pub struct BaseMarketSnapshot {
     pub id: String,
     pub question_hash: String,
+    pub question: String,
+    pub description: String,
+    pub category: String,
+    pub resolution_source: String,
     pub resolver: String,
     pub close_time: u64,
     pub resolve_time: u64,
@@ -108,6 +121,94 @@ pub struct BaseTradesResponse {
     pub offset: u64,
     pub has_more: bool,
     pub source: String,
+}
+
+#[derive(Serialize)]
+pub struct PreparedEvmWriteResponse {
+    pub chain_id: u64,
+    pub from: Option<String>,
+    pub to: String,
+    pub data: String,
+    pub value: String,
+    pub method: String,
+}
+
+#[derive(Serialize)]
+pub struct RelayRawTransactionResponse {
+    pub chain_id: u64,
+    pub tx_hash: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareCreateMarketWriteRequest {
+    pub from: Option<String>,
+    pub question: String,
+    pub description: Option<String>,
+    pub category: Option<String>,
+    pub resolution_source: Option<String>,
+    pub close_time: u64,
+    pub resolver: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreparePlaceOrderWriteRequest {
+    pub from: Option<String>,
+    pub market_id: u64,
+    pub outcome: String,
+    pub price_bps: u64,
+    pub size: String,
+    pub expiry: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareCancelOrderWriteRequest {
+    pub from: Option<String>,
+    pub order_id: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareClaimWriteRequest {
+    pub from: Option<String>,
+    pub market_id: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareMatchOrdersWriteRequest {
+    pub from: Option<String>,
+    pub first_order_id: u64,
+    pub second_order_id: u64,
+    pub fill_size: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareCreateAgentWriteRequest {
+    pub from: Option<String>,
+    pub market_id: u64,
+    pub is_yes: bool,
+    pub price_bps: u64,
+    pub size: String,
+    pub cadence: u64,
+    pub expiry_window: u64,
+    pub strategy: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareExecuteAgentWriteRequest {
+    pub from: Option<String>,
+    pub agent_id: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelayRawTransactionRequest {
+    pub raw_tx: String,
 }
 
 #[derive(Default)]
@@ -237,7 +338,25 @@ pub async fn get_base_markets(
             .eth_call(market_core, &calldata)
             .await
             .map_err(map_evm_rpc_error)?;
-        markets.push(decode_market_snapshot(index, &slot)?);
+        let mut snapshot = decode_market_snapshot(index, &slot)?;
+
+        let metadata_calldata = format!(
+            "{}{}",
+            MARKET_CORE_METADATA_SELECTOR,
+            encode_u256_hex(index)
+        );
+        if let Ok(payload) = state.evm_rpc.eth_call(market_core, &metadata_calldata).await {
+            if let Ok((question, description, category, resolution_source)) =
+                decode_market_metadata_tuple(&payload)
+            {
+                snapshot.question = question;
+                snapshot.description = description;
+                snapshot.category = category;
+                snapshot.resolution_source = resolution_source;
+            }
+        }
+
+        markets.push(snapshot);
     }
 
     Ok(HttpResponse::Ok().json(BaseMarketsResponse {
@@ -631,10 +750,416 @@ pub async fn get_base_trades(
     }))
 }
 
+pub async fn prepare_create_market_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareCreateMarketWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    let market_core = configured_address(
+        &state.config.market_core_address,
+        "MARKET_CORE_ADDRESS_NOT_CONFIGURED",
+        "MARKET_CORE_ADDRESS must be configured for write operations",
+    )?;
+
+    let resolver = normalize_required_address(
+        body.resolver.as_str(),
+        "INVALID_RESOLVER",
+        "resolver must be a valid 0x EVM address",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+
+    let question = body.question.trim();
+    if question.is_empty() {
+        return Err(ApiError::bad_request(
+            "INVALID_QUESTION",
+            "question must not be empty",
+        ));
+    }
+    if question.len() > MAX_MARKET_TEXT_LENGTH {
+        return Err(ApiError::bad_request(
+            "QUESTION_TOO_LONG",
+            "question exceeds max length",
+        ));
+    }
+
+    let description = body.description.as_deref().unwrap_or("").trim();
+    let category = body.category.as_deref().unwrap_or("").trim();
+    let resolution_source = body.resolution_source.as_deref().unwrap_or("").trim();
+    if description.len() > MAX_MARKET_TEXT_LENGTH
+        || category.len() > MAX_MARKET_TEXT_LENGTH
+        || resolution_source.len() > MAX_MARKET_TEXT_LENGTH
+    {
+        return Err(ApiError::bad_request(
+            "MARKET_TEXT_TOO_LONG",
+            "description/category/resolutionSource exceeds max length",
+        ));
+    }
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| ApiError::internal("System time error"))?
+        .as_secs();
+    if body.close_time <= now {
+        return Err(ApiError::bad_request(
+            "INVALID_CLOSE_TIME",
+            "closeTime must be in the future",
+        ));
+    }
+
+    let data = encode_create_market_rich_calldata(
+        question,
+        description,
+        category,
+        resolution_source,
+        body.close_time,
+        &resolver,
+    )?;
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        market_core,
+        data,
+        "createMarketRich",
+    )))
+}
+
+pub async fn prepare_place_order_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PreparePlaceOrderWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    let order_book = configured_address(
+        &state.config.order_book_address,
+        "ORDER_BOOK_ADDRESS_NOT_CONFIGURED",
+        "ORDER_BOOK_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+
+    let is_yes = match body.outcome.as_str() {
+        "yes" => true,
+        "no" => false,
+        _ => {
+            return Err(ApiError::bad_request(
+                "INVALID_OUTCOME",
+                "outcome must be either 'yes' or 'no'",
+            ))
+        }
+    };
+
+    if body.price_bps == 0 || body.price_bps >= 10_000 {
+        return Err(ApiError::bad_request(
+            "INVALID_PRICE_BPS",
+            "priceBps must be between 1 and 9999",
+        ));
+    }
+
+    let size = parse_u128_decimal(&body.size, "size")?;
+    if size == 0 {
+        return Err(ApiError::bad_request(
+            "INVALID_SIZE",
+            "size must be greater than zero",
+        ));
+    }
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| ApiError::internal("System time error"))?
+        .as_secs();
+    if body.expiry <= now {
+        return Err(ApiError::bad_request(
+            "INVALID_EXPIRY",
+            "expiry must be in the future",
+        ));
+    }
+
+    let data = format!(
+        "{}{}{}{}{}{}",
+        ORDER_BOOK_PLACE_SELECTOR,
+        encode_u256_hex(body.market_id),
+        encode_bool_word(is_yes),
+        encode_u256_hex_u128(body.price_bps as u128),
+        encode_u256_hex_u128(size),
+        encode_u256_hex(body.expiry),
+    );
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        order_book,
+        data,
+        "placeOrder",
+    )))
+}
+
+pub async fn prepare_cancel_order_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareCancelOrderWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    let order_book = configured_address(
+        &state.config.order_book_address,
+        "ORDER_BOOK_ADDRESS_NOT_CONFIGURED",
+        "ORDER_BOOK_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+
+    let data = format!(
+        "{}{}",
+        ORDER_BOOK_CANCEL_SELECTOR,
+        encode_u256_hex(body.order_id)
+    );
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        order_book,
+        data,
+        "cancelOrder",
+    )))
+}
+
+pub async fn prepare_claim_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareClaimWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    let order_book = configured_address(
+        &state.config.order_book_address,
+        "ORDER_BOOK_ADDRESS_NOT_CONFIGURED",
+        "ORDER_BOOK_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+
+    let data = format!(
+        "{}{}",
+        ORDER_BOOK_CLAIM_SELECTOR,
+        encode_u256_hex(body.market_id)
+    );
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        order_book,
+        data,
+        "claim",
+    )))
+}
+
+pub async fn prepare_match_orders_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareMatchOrdersWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    let order_book = configured_address(
+        &state.config.order_book_address,
+        "ORDER_BOOK_ADDRESS_NOT_CONFIGURED",
+        "ORDER_BOOK_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+
+    if body.first_order_id == body.second_order_id {
+        return Err(ApiError::bad_request(
+            "INVALID_MATCH_PAIR",
+            "firstOrderId and secondOrderId must differ",
+        ));
+    }
+    let fill_size = parse_u128_decimal(&body.fill_size, "fillSize")?;
+    if fill_size == 0 {
+        return Err(ApiError::bad_request(
+            "INVALID_FILL_SIZE",
+            "fillSize must be greater than zero",
+        ));
+    }
+
+    let data = format!(
+        "{}{}{}{}",
+        ORDER_BOOK_MATCH_SELECTOR,
+        encode_u256_hex(body.first_order_id),
+        encode_u256_hex(body.second_order_id),
+        encode_u256_hex_u128(fill_size),
+    );
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        order_book,
+        data,
+        "matchOrders",
+    )))
+}
+
+pub async fn prepare_create_agent_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareCreateAgentWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    let agent_runtime = configured_address(
+        &state.config.agent_runtime_address,
+        "AGENT_RUNTIME_ADDRESS_NOT_CONFIGURED",
+        "AGENT_RUNTIME_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+
+    if body.price_bps == 0 || body.price_bps >= 10_000 {
+        return Err(ApiError::bad_request(
+            "INVALID_PRICE_BPS",
+            "priceBps must be between 1 and 9999",
+        ));
+    }
+    let size = parse_u128_decimal(&body.size, "size")?;
+    if size == 0 {
+        return Err(ApiError::bad_request(
+            "INVALID_SIZE",
+            "size must be greater than zero",
+        ));
+    }
+    if body.cadence == 0 || body.expiry_window == 0 {
+        return Err(ApiError::bad_request(
+            "INVALID_AGENT_TIMING",
+            "cadence and expiryWindow must be greater than zero",
+        ));
+    }
+    if body.strategy.len() > MAX_MARKET_TEXT_LENGTH {
+        return Err(ApiError::bad_request(
+            "STRATEGY_TOO_LONG",
+            "strategy exceeds max length",
+        ));
+    }
+
+    let data = encode_create_agent_calldata(
+        body.market_id,
+        body.is_yes,
+        body.price_bps,
+        size,
+        body.cadence,
+        body.expiry_window,
+        body.strategy.as_str(),
+    )?;
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        agent_runtime,
+        data,
+        "createAgent",
+    )))
+}
+
+pub async fn prepare_execute_agent_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareExecuteAgentWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    let agent_runtime = configured_address(
+        &state.config.agent_runtime_address,
+        "AGENT_RUNTIME_ADDRESS_NOT_CONFIGURED",
+        "AGENT_RUNTIME_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+    let data = format!(
+        "{}{}",
+        AGENT_RUNTIME_EXECUTE_SELECTOR,
+        encode_u256_hex(body.agent_id)
+    );
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        agent_runtime,
+        data,
+        "executeAgent",
+    )))
+}
+
+pub async fn relay_raw_transaction(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<RelayRawTransactionRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    if !is_valid_hex_payload(body.raw_tx.as_str()) {
+        return Err(ApiError::bad_request(
+            "INVALID_RAW_TX",
+            "rawTx must be a valid 0x-prefixed hex string",
+        ));
+    }
+
+    let tx_hash = state
+        .evm_rpc
+        .eth_send_raw_transaction(body.raw_tx.as_str())
+        .await
+        .map_err(map_evm_rpc_error)?;
+
+    Ok(HttpResponse::Ok().json(RelayRawTransactionResponse {
+        chain_id: state.config.base_chain_id,
+        tx_hash,
+    }))
+}
+
 fn is_valid_evm_address(address: &str) -> bool {
     address.len() == 42
         && address.starts_with("0x")
         && address[2..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn is_valid_hex_payload(value: &str) -> bool {
+    value.len() >= 4
+        && value.starts_with("0x")
+        && value.len() % 2 == 0
+        && value[2..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn ensure_evm_writes_enabled(state: &Arc<AppState>) -> Result<(), ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_writes_enabled {
+        return Err(ApiError::bad_request(
+            "EVM_WRITES_DISABLED",
+            "EVM write operations are disabled",
+        ));
+    }
+    Ok(())
+}
+
+fn configured_address(address: &str, code: &str, message: &str) -> Result<String, ApiError> {
+    let trimmed = address.trim();
+    if trimmed.is_empty() {
+        return Err(ApiError::bad_request(code, message));
+    }
+    normalize_required_address(trimmed, code, message)
+}
+
+fn normalize_required_address(address: &str, code: &str, message: &str) -> Result<String, ApiError> {
+    let trimmed = address.trim();
+    if !is_valid_evm_address(trimmed) {
+        return Err(ApiError::bad_request(code, message));
+    }
+    Ok(trimmed.to_ascii_lowercase())
+}
+
+fn normalize_optional_address(address: Option<&String>) -> Result<Option<String>, ApiError> {
+    match address {
+        None => Ok(None),
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Ok(None);
+            }
+            if !is_valid_evm_address(trimmed) {
+                return Err(ApiError::bad_request(
+                    "INVALID_FROM_ADDRESS",
+                    "from must be a valid 0x EVM address",
+                ));
+            }
+            Ok(Some(trimmed.to_ascii_lowercase()))
+        }
+    }
 }
 
 fn parse_u8_hex(value: &str) -> Result<u8, ApiError> {
@@ -671,6 +1196,136 @@ fn encode_u256_hex(value: u64) -> String {
     format!("{:064x}", value)
 }
 
+fn encode_u256_hex_u128(value: u128) -> String {
+    format!("{:064x}", value)
+}
+
+fn encode_bool_word(value: bool) -> String {
+    if value {
+        format!("{:064x}", 1)
+    } else {
+        format!("{:064x}", 0)
+    }
+}
+
+fn encode_address_word(value: &str) -> Result<String, ApiError> {
+    if !is_valid_evm_address(value) {
+        return Err(ApiError::bad_request(
+            "INVALID_ADDRESS",
+            "address must be a valid 0x EVM address",
+        ));
+    }
+    Ok(format!("{:0>64}", value[2..].to_ascii_lowercase()))
+}
+
+fn encode_dynamic_string_tail(value: &str) -> String {
+    let encoded = hex::encode(value.as_bytes());
+    let padded_len = if encoded.is_empty() {
+        0
+    } else {
+        ((encoded.len() + 63) / 64) * 64
+    };
+    let mut padded = encoded;
+    if padded.len() < padded_len {
+        padded.push_str(&"0".repeat(padded_len - padded.len()));
+    }
+    format!("{}{}", encode_u256_hex_u128(value.len() as u128), padded)
+}
+
+fn encode_create_market_rich_calldata(
+    question: &str,
+    description: &str,
+    category: &str,
+    resolution_source: &str,
+    close_time: u64,
+    resolver: &str,
+) -> Result<String, ApiError> {
+    let question_tail = encode_dynamic_string_tail(question);
+    let description_tail = encode_dynamic_string_tail(description);
+    let category_tail = encode_dynamic_string_tail(category);
+    let source_tail = encode_dynamic_string_tail(resolution_source);
+    let resolver_word = encode_address_word(resolver)?;
+
+    let head_len_bytes = 32usize * 6usize;
+    let question_offset = head_len_bytes;
+    let description_offset = question_offset + (question_tail.len() / 2);
+    let category_offset = description_offset + (description_tail.len() / 2);
+    let source_offset = category_offset + (category_tail.len() / 2);
+
+    Ok(format!(
+        "{}{}{}{}{}{}{}{}{}{}",
+        MARKET_CORE_CREATE_RICH_SELECTOR,
+        encode_u256_hex_u128(question_offset as u128),
+        encode_u256_hex_u128(description_offset as u128),
+        encode_u256_hex_u128(category_offset as u128),
+        encode_u256_hex_u128(source_offset as u128),
+        encode_u256_hex(close_time),
+        resolver_word,
+        question_tail,
+        description_tail,
+        format!("{}{}", category_tail, source_tail),
+    ))
+}
+
+fn encode_create_agent_calldata(
+    market_id: u64,
+    is_yes: bool,
+    price_bps: u64,
+    size: u128,
+    cadence: u64,
+    expiry_window: u64,
+    strategy: &str,
+) -> Result<String, ApiError> {
+    let strategy_tail = encode_dynamic_string_tail(strategy);
+    let head_len_bytes = 32usize * 7usize;
+
+    Ok(format!(
+        "{}{}{}{}{}{}{}{}{}",
+        AGENT_RUNTIME_CREATE_SELECTOR,
+        encode_u256_hex(market_id),
+        encode_bool_word(is_yes),
+        encode_u256_hex_u128(price_bps as u128),
+        encode_u256_hex_u128(size),
+        encode_u256_hex(cadence),
+        encode_u256_hex(expiry_window),
+        encode_u256_hex_u128(head_len_bytes as u128),
+        strategy_tail,
+    ))
+}
+
+fn parse_u128_decimal(value: &str, field: &str) -> Result<u128, ApiError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(ApiError::bad_request(
+            "INVALID_NUMERIC_FIELD",
+            &format!("{} is required", field),
+        ));
+    }
+    trimmed.parse::<u128>().map_err(|_| {
+        ApiError::bad_request(
+            "INVALID_NUMERIC_FIELD",
+            &format!("{} must be an unsigned integer string", field),
+        )
+    })
+}
+
+fn prepared_write_response(
+    chain_id: u64,
+    from: Option<String>,
+    to: String,
+    data: String,
+    method: &str,
+) -> PreparedEvmWriteResponse {
+    PreparedEvmWriteResponse {
+        chain_id,
+        from,
+        to,
+        data: format!("0x{}", data.trim_start_matches("0x")),
+        value: "0x0".to_string(),
+        method: method.to_string(),
+    }
+}
+
 fn word_at(data: &str, index: usize) -> Result<&str, ApiError> {
     if !data.starts_with("0x") {
         return Err(ApiError::internal("Invalid RPC hex result"));
@@ -682,6 +1337,38 @@ fn word_at(data: &str, index: usize) -> Result<&str, ApiError> {
         return Err(ApiError::internal("Invalid market slot payload"));
     }
     Ok(&data[start..end])
+}
+
+fn decode_market_metadata_tuple(payload: &str) -> Result<(String, String, String, String), ApiError> {
+    Ok((
+        decode_abi_string_at_offset(payload, word_at(payload, 0)?)?,
+        decode_abi_string_at_offset(payload, word_at(payload, 1)?)?,
+        decode_abi_string_at_offset(payload, word_at(payload, 2)?)?,
+        decode_abi_string_at_offset(payload, word_at(payload, 3)?)?,
+    ))
+}
+
+fn decode_abi_string_at_offset(payload: &str, offset_word: &str) -> Result<String, ApiError> {
+    let offset = parse_u64_hex(offset_word)? as usize;
+    if !payload.starts_with("0x") {
+        return Err(ApiError::internal("Invalid ABI payload"));
+    }
+
+    let head = 2 + (offset * 2);
+    if payload.len() < head + 64 {
+        return Err(ApiError::internal("Invalid ABI payload"));
+    }
+    let len_word = &payload[head..head + 64];
+    let length = parse_u64_hex(len_word)? as usize;
+    let data_start = head + 64;
+    let data_end = data_start + (length * 2);
+    if payload.len() < data_end {
+        return Err(ApiError::internal("Invalid ABI payload"));
+    }
+
+    let raw = &payload[data_start..data_end];
+    let bytes = hex::decode(raw).map_err(|_| ApiError::internal("Invalid ABI payload"))?;
+    String::from_utf8(bytes).map_err(|_| ApiError::internal("Invalid UTF-8 market metadata"))
 }
 
 fn decode_market_snapshot(index: u64, slot: &str) -> Result<BaseMarketSnapshot, ApiError> {
@@ -709,6 +1396,10 @@ fn decode_market_snapshot(index: u64, slot: &str) -> Result<BaseMarketSnapshot, 
     Ok(BaseMarketSnapshot {
         id: index.to_string(),
         question_hash,
+        question: String::new(),
+        description: String::new(),
+        category: String::new(),
+        resolution_source: String::new(),
         resolver,
         close_time,
         resolve_time,
@@ -796,6 +1487,35 @@ mod tests {
         let encoded = encode_u256_hex(42);
         assert_eq!(encoded.len(), 64);
         assert!(encoded.ends_with("2a"));
+    }
+
+    #[test]
+    fn test_is_valid_hex_payload() {
+        assert!(is_valid_hex_payload("0x1234"));
+        assert!(!is_valid_hex_payload("0x123"));
+        assert!(!is_valid_hex_payload("1234"));
+    }
+
+    #[test]
+    fn test_decode_market_metadata_tuple() {
+        let q = encode_dynamic_string_tail("question?");
+        let d = encode_dynamic_string_tail("description");
+        let c = encode_dynamic_string_tail("crypto");
+        let s = encode_dynamic_string_tail("source");
+
+        let head = format!(
+            "{}{}{}{}",
+            encode_u256_hex_u128(128),
+            encode_u256_hex_u128(128 + q.len() as u128 / 2),
+            encode_u256_hex_u128(128 + q.len() as u128 / 2 + d.len() as u128 / 2),
+            encode_u256_hex_u128(128 + q.len() as u128 / 2 + d.len() as u128 / 2 + c.len() as u128 / 2),
+        );
+        let payload = format!("0x{}{}{}{}{}", head, q, d, c, s);
+        let decoded = decode_market_metadata_tuple(&payload).unwrap();
+        assert_eq!(decoded.0, "question?");
+        assert_eq!(decoded.1, "description");
+        assert_eq!(decoded.2, "crypto");
+        assert_eq!(decoded.3, "source");
     }
 
     #[test]

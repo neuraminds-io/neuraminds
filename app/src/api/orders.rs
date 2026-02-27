@@ -18,21 +18,21 @@ use crate::AppState;
 
 const IDEMPOTENCY_KEY_HEADER: &str = "idempotency-key";
 
-fn ensure_legacy_order_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
-    if !state.config.legacy_reads_enabled {
+fn ensure_order_read_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
         return Err(ApiError::bad_request(
-            "LEGACY_READ_PATH_DISABLED",
-            "Legacy order read path is disabled",
+            "EVM_READ_PATH_DISABLED",
+            "EVM order read path is disabled",
         ));
     }
     Ok(())
 }
 
-fn ensure_legacy_order_write_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
-    if !state.config.legacy_writes_enabled {
+fn ensure_order_write_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_writes_enabled {
         return Err(ApiError::bad_request(
-            "LEGACY_WRITE_PATH_DISABLED",
-            "Legacy order write path is disabled",
+            "EVM_WRITE_PATH_DISABLED",
+            "EVM order write path is disabled",
         ));
     }
     Ok(())
@@ -52,7 +52,7 @@ pub async fn list_orders(
     state: web::Data<Arc<AppState>>,
     query: web::Query<ListOrdersQuery>,
 ) -> Result<impl Responder, ApiError> {
-    ensure_legacy_order_mode(&state)?;
+    ensure_order_read_mode(&state)?;
 
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
@@ -88,7 +88,7 @@ pub async fn get_order(
     state: web::Data<Arc<AppState>>,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
-    ensure_legacy_order_mode(&state)?;
+    ensure_order_read_mode(&state)?;
 
     // SECURITY: Require authentication
     let user = require_auth!(&req, &state);
@@ -123,7 +123,7 @@ pub async fn place_order(
     state: web::Data<Arc<AppState>>,
     body: web::Json<PlaceOrderRequest>,
 ) -> Result<impl Responder, ApiError> {
-    ensure_legacy_order_write_mode(&state)?;
+    ensure_order_write_mode(&state)?;
 
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
@@ -238,42 +238,6 @@ pub async fn place_order(
 
     // Process matches
     for matched_trade in &matches {
-        // Submit settlement transaction to Solana if enabled
-        if state.config.solana_enabled {
-            log::info!(
-                "Trade matched: buy={}, sell={}, qty={}, price={}",
-                matched_trade.buy_order_id,
-                matched_trade.sell_order_id,
-                matched_trade.fill_quantity,
-                matched_trade.fill_price_bps
-            );
-
-            // Derive accounts for settlement
-            // Note: In production, buyer/seller collateral ATAs would come from user accounts
-            // For now we derive PDAs; actual collateral accounts need user wallet integration
-            let buyer_pubkey = solana_sdk::pubkey::Pubkey::default(); // Would come from buy order owner
-            let seller_pubkey = solana_sdk::pubkey::Pubkey::default(); // Would come from sell order owner
-
-            let accounts = state.solana.build_settle_trade_accounts(
-                &order.market_id,
-                &buyer_pubkey,
-                &seller_pubkey,
-                matched_trade.buy_order_id,
-                matched_trade.sell_order_id,
-                buyer_pubkey,  // buyer collateral ATA
-                seller_pubkey, // seller collateral ATA
-            );
-
-            match state.solana.settle_trade(matched_trade, accounts).await {
-                Ok(sig) => {
-                    log::info!("Settlement tx confirmed: {}", sig);
-                }
-                Err(e) => {
-                    log::error!("Settlement failed: {} - trade recorded off-chain only", e);
-                }
-            }
-        }
-
         // Publish trade event via Redis
         let outcome_str = match order.outcome {
             Outcome::Yes => "yes",
@@ -384,7 +348,7 @@ pub async fn cancel_order(
     state: web::Data<Arc<AppState>>,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
-    ensure_legacy_order_write_mode(&state)?;
+    ensure_order_write_mode(&state)?;
 
     // SECURITY: Extract authenticated user from request
     let user = require_auth!(&req, &state);
@@ -432,9 +396,6 @@ pub async fn cancel_order(
         .update_order_status(&order_id, OrderStatus::Cancelled, order.filled_quantity, 0)
         .await
         .map_err(ApiError::from)?;
-
-    // In production: submit cancellation transaction
-    // let tx_sig = state.solana.cancel_order(...).await?;
 
     let now = Utc::now();
 

@@ -25,10 +25,19 @@ services:
         value: "8080"
       - key: JWT_SECRET
         generateValue: true
-      - key: SOLANA_RPC_URL
-        value: https://api.devnet.solana.com
+      - key: EVM_ENABLED
+        value: "true"
+      - key: EVM_READS_ENABLED
+        value: "true"
+      - key: EVM_WRITES_ENABLED
+        value: "true"
+      - key: BASE_RPC_URL
+        value: https://mainnet.base.org
+      - key: BASE_CHAIN_ID
+        value: "8453"
       - key: CORS_ORIGINS
         value: https://polyguard.cc,https://app.polyguard.cc
+
 
 databases:
   - name: polyguard
