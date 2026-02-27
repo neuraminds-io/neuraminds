@@ -14,6 +14,8 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+web/.next/
+web/.turbo/
 
 # Environment
 .env
@@ -45,6 +47,7 @@ logs/
 # Build artifacts
 dist/
 build/
+.cache/
 
 # Test
 coverage/
