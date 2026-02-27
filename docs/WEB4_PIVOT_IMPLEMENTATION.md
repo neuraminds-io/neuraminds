@@ -27,10 +27,12 @@ New protocol-facing routes:
 - `GET /v1/web4/mcp`
 - `POST /v1/web4/mcp` (JSON-RPC 2.0)
 - `GET /v1/web4/agent-card`
+- stdio MCP process: `npm run mcp:server` (`scripts/mcp-server.mjs`)
 
 Purpose:
 - `capabilities`: current implementation status by protocol layer
 - `mcp`: MCP manifest + live MCP JSON-RPC transport (`initialize`, `tools/*`, `resources/*`, `prompts/*`)
+- `mcp:server`: full process MCP server over stdio using the official SDK
 - `agent-card`: A2A-style service card for cross-agent discovery
 
 ### 3) Agent control plane in frontend
@@ -78,6 +80,10 @@ Includes:
 New Web4/infra surfaces:
 - `GET /v1/evm/identity/{wallet}`
 - `GET /v1/evm/reputation/{wallet}`
+- `POST /v1/evm/write/identity/register`
+- `POST /v1/evm/write/identity/tier`
+- `POST /v1/evm/write/identity/active`
+- `POST /v1/evm/write/reputation/outcome`
 - `GET /v1/payments/x402/quote`
 - `POST /v1/payments/x402/verify`
 - `GET /v1/web4/xmtp/health`
@@ -86,22 +92,23 @@ New Web4/infra surfaces:
 
 Behavior:
 - Agent snapshots are enriched with wallet-level ERC-8004 identity/reputation when configured.
+- ERC-8004 write-prep endpoints generate calldata for issuer/attester wallet execution.
 - Premium EVM reads (`orderbook`, `trades`) and premium MCP tool calls are x402-gated.
 - x402 verifies mined Base USDC transfer txs, quote challenge signatures, nonce replay, and tx-hash replay.
-- XMTP swarm messages are signed, persisted, and published over Redis channels.
+- XMTP swarm supports Redis relay mode and XMTP HTTP bridge mode (`services/xmtp-bridge/server.mjs`) with signature replay protection via nonce/expiry.
 
 ## Mapping to your Web4 analysis file
 
 | Web4 proposal | Status in code | Notes |
 |---|---|---|
 | AGENTS.md project layer | Implemented | Root `AGENTS.md` added |
-| MCP server integration | Implemented | Manifest + JSON-RPC transport via `POST /v1/web4/mcp` |
+| MCP server integration | Implemented | HTTP JSON-RPC (`POST /v1/web4/mcp`) + stdio process transport (`npm run mcp:server`) |
 | A2A discovery card | Partial | `GET /v1/web4/agent-card` shipped; no external A2A registry publish yet |
 | Agent runtime discoverability | Implemented | `/v1/evm/agents*` + `/agents` control plane |
 | Autonomous execution | Implemented (operator loop) | `base-agent-executor.sh` executes due agents continuously |
 | ERC-8004 identity/reputation | Implemented | Contracts + API enrichment/endpoints |
 | x402 + AgentKit payments | Implemented | Quote/verify + premium route enforcement |
-| XMTP swarm coordination | Implemented | Signed swarm send/list/health endpoints |
+| XMTP swarm coordination | Implemented | Redis + bridge mode with signed messages, optional nonce/expiry replay protection |
 
 ## Verification run (this pass)
 - `cargo check --manifest-path app/Cargo.toml` passed
@@ -111,4 +118,4 @@ Behavior:
 ## Remaining non-blocking milestones
 1. Publish A2A card to external registries if needed.
 2. Add dashboard visibility for ERC-8004 fields in the `/agents` UI.
-3. Add dedicated x402/XMTP integration tests against Base Sepolia.
+3. Add dedicated x402/XMTP bridge integration tests against Base Sepolia.

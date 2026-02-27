@@ -41,6 +41,13 @@ fn internal_api_base_url(state: &AppState) -> String {
     format!("http://{}:{}/v1", host, state.config.port)
 }
 
+fn is_hex_address(value: &str) -> bool {
+    let trimmed = value.trim();
+    trimmed.len() == 42
+        && trimmed.starts_with("0x")
+        && trimmed[2..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
 #[derive(Debug, Deserialize)]
 struct McpJsonRpcRequest {
     jsonrpc: String,
@@ -203,6 +210,64 @@ fn mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "prepareRegisterIdentityTx",
+            "description": "Prepare calldata for ERC-8004 identity register(address,uint8).",
+            "inputSchema": {
+                "type": "object",
+                "required": ["wallet", "tier"],
+                "properties": {
+                    "from": { "type": "string" },
+                    "wallet": { "type": "string" },
+                    "tier": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    "payment": { "type": "object" }
+                }
+            }
+        }),
+        json!({
+            "name": "prepareSetIdentityTierTx",
+            "description": "Prepare calldata for ERC-8004 identity setTier(address,uint8).",
+            "inputSchema": {
+                "type": "object",
+                "required": ["wallet", "tier"],
+                "properties": {
+                    "from": { "type": "string" },
+                    "wallet": { "type": "string" },
+                    "tier": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    "payment": { "type": "object" }
+                }
+            }
+        }),
+        json!({
+            "name": "prepareSetIdentityActiveTx",
+            "description": "Prepare calldata for ERC-8004 identity setActive(address,bool).",
+            "inputSchema": {
+                "type": "object",
+                "required": ["wallet", "active"],
+                "properties": {
+                    "from": { "type": "string" },
+                    "wallet": { "type": "string" },
+                    "active": { "type": "boolean" },
+                    "payment": { "type": "object" }
+                }
+            }
+        }),
+        json!({
+            "name": "prepareSubmitReputationOutcomeTx",
+            "description": "Prepare calldata for ERC-8004 reputation submitOutcome(address,bool,uint128,uint16).",
+            "inputSchema": {
+                "type": "object",
+                "required": ["wallet", "success", "notionalMicrousdc", "confidenceWeightBps"],
+                "properties": {
+                    "from": { "type": "string" },
+                    "wallet": { "type": "string" },
+                    "success": { "type": "boolean" },
+                    "notionalMicrousdc": { "type": "string" },
+                    "confidenceWeightBps": { "type": "integer", "minimum": 0, "maximum": 10000 },
+                    "payment": { "type": "object" }
+                }
+            }
+        }),
+        json!({
             "name": "getX402Quote",
             "description": "Get x402 quote for premium resources.",
             "inputSchema": {
@@ -224,6 +289,8 @@ fn mcp_tools() -> Vec<Value> {
                     "sender": { "type": "string" },
                     "message": { "type": "string" },
                     "signature": { "type": "string" },
+                    "nonce": { "type": "string" },
+                    "expires_at": { "type": "integer", "minimum": 1 },
                     "metadata": { "type": "object" },
                     "payment": { "type": "object" }
                 }
@@ -513,6 +580,74 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
                 state,
                 reqwest::Method::POST,
                 "/evm/write/agents/execute",
+                Some(args),
+                None,
+            )
+            .await?;
+            if status >= 400 {
+                return Ok(tool_result_payload(
+                    json!({ "status": status, "error": payload }),
+                    true,
+                ));
+            }
+            Ok(tool_result_payload(payload, false))
+        }
+        "prepareRegisterIdentityTx" => {
+            let (status, payload) = call_internal_api(
+                state,
+                reqwest::Method::POST,
+                "/evm/write/identity/register",
+                Some(args),
+                None,
+            )
+            .await?;
+            if status >= 400 {
+                return Ok(tool_result_payload(
+                    json!({ "status": status, "error": payload }),
+                    true,
+                ));
+            }
+            Ok(tool_result_payload(payload, false))
+        }
+        "prepareSetIdentityTierTx" => {
+            let (status, payload) = call_internal_api(
+                state,
+                reqwest::Method::POST,
+                "/evm/write/identity/tier",
+                Some(args),
+                None,
+            )
+            .await?;
+            if status >= 400 {
+                return Ok(tool_result_payload(
+                    json!({ "status": status, "error": payload }),
+                    true,
+                ));
+            }
+            Ok(tool_result_payload(payload, false))
+        }
+        "prepareSetIdentityActiveTx" => {
+            let (status, payload) = call_internal_api(
+                state,
+                reqwest::Method::POST,
+                "/evm/write/identity/active",
+                Some(args),
+                None,
+            )
+            .await?;
+            if status >= 400 {
+                return Ok(tool_result_payload(
+                    json!({ "status": status, "error": payload }),
+                    true,
+                ));
+            }
+            Ok(tool_result_payload(payload, false))
+        }
+        "prepareSubmitReputationOutcomeTx" => {
+            let (status, payload) = call_internal_api(
+                state,
+                reqwest::Method::POST,
+                "/evm/write/reputation/outcome",
                 Some(args),
                 None,
             )
@@ -894,6 +1029,31 @@ pub async fn handle_mcp_jsonrpc(
 
 pub async fn get_web4_capabilities(state: web::Data<Arc<AppState>>) -> impl Responder {
     let api_base = infer_api_base_url(&state);
+    let erc8004_ready = is_hex_address(state.config.erc8004_identity_registry_address.as_str())
+        && is_hex_address(state.config.erc8004_reputation_registry_address.as_str());
+    let x402_status = if state.config.x402_enabled {
+        "implemented"
+    } else {
+        "disabled"
+    };
+    let x402_description = if state.config.x402_enabled {
+        "x402 payment verification for premium orderbook/trade reads and MCP premium calls."
+    } else {
+        "x402 is disabled by config."
+    };
+    let (xmtp_status, xmtp_description) = if !state.config.xmtp_swarm_enabled {
+        ("disabled", "XMTP swarm messaging is disabled by config.")
+    } else if state.config.xmtp_swarm_transport == "xmtp_http" {
+        (
+            "implemented",
+            "XMTP swarm transport routed to XMTP HTTP bridge.",
+        )
+    } else {
+        (
+            "partial",
+            "Redis relay mode enabled; full XMTP network bridge is not active.",
+        )
+    };
 
     HttpResponse::Ok().json(json!({
         "project": "neuraminds",
@@ -919,8 +1079,9 @@ pub async fn get_web4_capabilities(state: web::Data<Arc<AppState>>) -> impl Resp
             {
                 "id": "mcp-jsonrpc-server",
                 "status": "implemented",
-                "description": "MCP JSON-RPC server with tools/resources/prompts.",
-                "endpoint": "/v1/web4/mcp"
+                "description": "MCP JSON-RPC server with tools/resources/prompts over HTTP and stdio process transport.",
+                "endpoint": "/v1/web4/mcp",
+                "stdio_command": "npm run mcp:server"
             },
             {
                 "id": "a2a-agent-card",
@@ -930,18 +1091,22 @@ pub async fn get_web4_capabilities(state: web::Data<Arc<AppState>>) -> impl Resp
             },
             {
                 "id": "erc-8004-identity",
-                "status": "implemented",
-                "description": "Onchain agent identity and reputation registries integrated into agent snapshots."
+                "status": if erc8004_ready { "implemented" } else { "partial" },
+                "description": if erc8004_ready {
+                    "Onchain agent identity and reputation registries integrated into agent snapshots."
+                } else {
+                    "ERC-8004 read integration is present, but one or both registry addresses are not configured."
+                }
             },
             {
                 "id": "x402-agent-payments",
-                "status": "implemented",
-                "description": "x402 payment verification for premium orderbook/trade reads and MCP premium calls."
+                "status": x402_status,
+                "description": x402_description
             },
             {
                 "id": "xmtp-swarm",
-                "status": "implemented",
-                "description": "Signed swarm messaging surfaces exposed under /v1/web4/xmtp/*."
+                "status": xmtp_status,
+                "description": xmtp_description
             }
         ]
     }))
@@ -958,6 +1123,20 @@ pub async fn get_mcp_manifest(state: web::Data<Arc<AppState>>) -> impl Responder
             "type": "http+jsonrpc",
             "endpoint": format!("{}/web4/mcp", api_base)
         },
+        "transports": [
+            {
+                "type": "http+jsonrpc",
+                "endpoint": format!("{}/web4/mcp", api_base)
+            },
+            {
+                "type": "stdio",
+                "command": "npm",
+                "args": ["run", "mcp:server"],
+                "env": {
+                    "NEURAMINDS_API_BASE_URL": api_base
+                }
+            }
+        ],
         "jsonrpc": {
             "version": "2.0",
             "supported_methods": [

@@ -44,4 +44,26 @@ contract ERC8004IdentityRegistryTest is Test {
         assertEq(tier, 77);
         assertFalse(active);
     }
+
+    function test_registerIdentityAndUpdateUri() external {
+        vm.prank(alice);
+        uint256 identityId = registry.registerIdentity("ipfs://agent/alice");
+        assertEq(identityId, 1);
+        assertEq(registry.getAgentId(alice), 1);
+        assertTrue(registry.isRegistered(alice));
+        assertEq(registry.tokenURI(identityId), "ipfs://agent/alice");
+
+        vm.prank(alice);
+        registry.updateIdentityURI(identityId, "ipfs://agent/alice/v2");
+        assertEq(registry.tokenURI(identityId), "ipfs://agent/alice/v2");
+    }
+
+    function test_identityTokenIsNonTransferable() external {
+        vm.prank(alice);
+        uint256 identityId = registry.registerIdentity("ipfs://agent/alice");
+
+        vm.prank(alice);
+        vm.expectRevert(ERC8004IdentityRegistry.IdentityNonTransferable.selector);
+        registry.transferFrom(alice, issuer, identityId);
+    }
 }

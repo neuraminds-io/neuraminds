@@ -292,6 +292,8 @@ const API_DOCS: EndpointGroup[] = [
         response: {
           example: `{
   "enabled": true,
+  "transport": "xmtp_http",
+  "bridge_url_configured": true,
   "topic_prefix": "neuraminds/base/swarm",
   "max_messages": 500
 }`,
@@ -308,6 +310,8 @@ const API_DOCS: EndpointGroup[] = [
   "swarm_id": "alpha",
   "sender": "0xabc123...",
   "message": "rebalance now",
+  "nonce": "alpha-001",
+  "expires_at": 1893456000,
   "signature": "<signed payload>"
 }`,
         },
@@ -450,9 +454,18 @@ const API_DOCS: EndpointGroup[] = [
         params: [
           { name: 'marketId', type: 'string', required: true, description: 'Market ID' },
         ],
+        body: {
+          schema: 'ClaimWinningsRequest',
+          example: `{
+  "txSignature": "0x..."
+}`,
+        },
         response: {
           example: `{
-  "amount": 150.00,
+  "marketId": "1",
+  "claimedAmount": 150000000,
+  "winningOutcome": "yes",
+  "winningTokensBurned": 150000000,
   "txSignature": "5xKXG..."
 }`,
         },
@@ -482,6 +495,7 @@ const API_DOCS: EndpointGroup[] = [
         method: 'POST',
         path: '/wallet/deposit',
         summary: 'Initiate deposit',
+        description: 'Wallet/Jupiter deposits require onchain USDC transfer proof. Blindfold source is disabled.',
         auth: true,
         body: {
           schema: 'DepositRequest',
@@ -494,8 +508,9 @@ const API_DOCS: EndpointGroup[] = [
         response: {
           example: `{
   "transactionId": "tx_abc123",
-  "status": "pending",
-  "amount": 100.00
+  "status": "confirmed",
+  "amount": 100000000,
+  "txSignature": "0x..."
 }`,
         },
       },
@@ -507,17 +522,20 @@ const API_DOCS: EndpointGroup[] = [
         body: {
           schema: 'WithdrawRequest',
           example: `{
-  "amount": 100.00,
-  "destination": "7xKXG..."
+  "amount": 100000000,
+  "destination": "0x...",
+  "txSignature": "0x..."
 }`,
         },
         response: {
           example: `{
   "transactionId": "tx_xyz789",
   "status": "pending",
-  "amount": 100.00,
-  "fee": 0.50,
-  "netAmount": 99.50
+  "amount": 100000000,
+  "fee": 100000,
+  "netAmount": 99900000,
+  "estimatedCompletion": "Queued for operator settlement",
+  "txSignature": null
 }`,
         },
       },

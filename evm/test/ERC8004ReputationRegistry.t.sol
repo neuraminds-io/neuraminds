@@ -47,4 +47,37 @@ contract ERC8004ReputationRegistryTest is Test {
         vm.expectRevert(ERC8004ReputationRegistry.IdentityMissing.selector);
         reputationRegistry.submitOutcome(noIdentity, true, 1_000_000, 2000);
     }
+
+    function test_submitFeedbackAndRevoke() external {
+        address reviewer = makeAddr("reviewer");
+
+        vm.prank(reviewer);
+        uint64 feedbackId = reputationRegistry.submitFeedback(alice, 3200, "solid execution");
+
+        assertEq(feedbackId, 1);
+        assertEq(reputationRegistry.feedbackCount(alice), 1);
+
+        (uint64 id, address author, int32 ratingBps, string memory review,) = reputationRegistry.feedbackAt(alice, 0);
+        assertEq(id, 1);
+        assertEq(author, reviewer);
+        assertEq(ratingBps, 3200);
+        assertEq(review, "solid execution");
+
+        vm.prank(attester);
+        reputationRegistry.revokeFeedback(alice, feedbackId);
+        assertEq(reputationRegistry.feedbackCount(alice), 0);
+    }
+
+    function test_submitReputationDirectly() external {
+        vm.prank(attester);
+        reputationRegistry.submitReputation(alice, 7800, 6400, 2_000_000);
+
+        (uint32 scoreBps, uint32 confidenceBps, uint64 events, uint128 notional, uint64 updatedAt) =
+            reputationRegistry.getReputation(alice);
+        assertEq(scoreBps, 7800);
+        assertEq(confidenceBps, 6400);
+        assertEq(events, 1);
+        assertEq(notional, 2_000_000);
+        assertGt(updatedAt, 0);
+    }
 }

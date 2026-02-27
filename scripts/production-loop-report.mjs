@@ -166,6 +166,64 @@ function buildReport() {
       : 'backend auth rate-limit helpers missing',
   });
 
+  const adminPageText = readText('web/src/app/admin/page.tsx');
+  const adminDashboardReady =
+    adminPageText.length > 0 &&
+    !adminPageText.includes('Mock data - replace with actual API calls') &&
+    !adminPageText.includes('TODO: Call API to approve market') &&
+    !adminPageText.includes('TODO: Call API to reject market');
+  addGate(gates, {
+    id: 'admin_dashboard_live_mode',
+    required: true,
+    status: adminDashboardReady ? 'pass' : 'fail',
+    details: adminDashboardReady
+      ? 'admin dashboard no longer uses mock moderation handlers'
+      : 'admin dashboard still includes mock/TODO moderation logic',
+  });
+
+  const blindfoldClientText = readText('web/src/lib/blindfold.ts');
+  const blindfoldReady =
+    blindfoldClientText.length > 0 &&
+    !blindfoldClientText.includes('TODO: Replace placeholder values when Blindfold API docs are available');
+  addGate(gates, {
+    id: 'blindfold_placeholder_removed',
+    required: true,
+    status: blindfoldReady ? 'pass' : 'fail',
+    details: blindfoldReady
+      ? 'blindfold client no longer ships placeholder integration text'
+      : 'blindfold client still includes placeholder integration markers',
+  });
+
+  const xmtpBridgeFile = path.join(ROOT, 'services', 'xmtp-bridge', 'server.mjs');
+  const mcpServerScript = path.join(ROOT, 'scripts', 'mcp-server.mjs');
+  const packageJsonText = readText('package.json');
+  const mcpStdioReady =
+    fs.existsSync(mcpServerScript) &&
+    packageJsonText.includes('"mcp:server"') &&
+    packageJsonText.includes('scripts/mcp-server.mjs');
+  addGate(gates, {
+    id: 'mcp_stdio_process_present',
+    required: true,
+    status: mcpStdioReady ? 'pass' : 'fail',
+    details: mcpStdioReady
+      ? 'stdio mcp process script and npm wiring present'
+      : 'stdio mcp process missing (scripts/mcp-server.mjs or npm script)',
+  });
+
+  const xmtpServiceText = readText('app/src/services/xmtp_swarm.rs');
+  const xmtpBridgeReady =
+    fs.existsSync(xmtpBridgeFile) &&
+    xmtpServiceText.includes('send_message_via_bridge') &&
+    xmtpServiceText.includes('list_messages_via_bridge');
+  addGate(gates, {
+    id: 'xmtp_bridge_transport_present',
+    required: true,
+    status: xmtpBridgeReady ? 'pass' : 'fail',
+    details: xmtpBridgeReady
+      ? 'xmtp http bridge process and backend transport wiring present'
+      : 'xmtp bridge transport wiring missing',
+  });
+
   if (strictMode) {
     const webBuild = runCommand('npm', ['-C', 'web', 'run', 'build'], strictTimeoutMs);
     addGate(gates, {

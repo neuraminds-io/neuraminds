@@ -73,6 +73,8 @@ These endpoints return `{ chain_id, to, data, value, method }` for wallet signin
 
 ## Operational Notes
 - Strict launch readiness requires DX snapshot capture by default.
+- MCP process runtime:
+  - `npm run mcp:server`
 - Mainnet smoke command for full create/trade/match/resolve/claim loop:
   - `npm run base:smoke:mainnet`
   - `npm run base:smoke:mainnet:dry`
@@ -80,3 +82,5 @@ These endpoints return `{ chain_id, to, data, value, method }` for wallet signin
   - `npm run agents:executor`
   - `npm run agents:executor:sepolia`
   - `npm run agents:executor:dry`
+- XMTP bridge runtime:
+  - `npm run xmtp:bridge`
