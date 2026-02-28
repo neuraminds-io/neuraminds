@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::api::ApiError;
-use crate::services::x402::{self, build_quote, X402PaymentProof, X402Resource};
+use crate::services::x402::{build_quote, X402PaymentProof, X402Resource};
 use crate::services::xmtp_swarm::{self, SwarmListQuery, SwarmSendRequest};
 use crate::AppState;
 
@@ -954,18 +954,6 @@ async fn handle_mcp_method(
                 .map_err(|_| {
                     ApiError::bad_request("INVALID_PARAMS", "tools/call params are invalid")
                 })?;
-
-            if state.config.x402_enabled
-                && params.name != "getOrderBook"
-                && params.name != "getTrades"
-                && params.name != "getX402Quote"
-            {
-                let payment = parse_payment_arg(&params.arguments)?;
-                let Some(proof) = payment else {
-                    return Ok(mcp_response_result(id, tool_payment_required_payload(state, X402Resource::McpToolCall)));
-                };
-                x402::ensure_payment_from_proof(state, &proof, X402Resource::McpToolCall).await?;
-            }
 
             let result = handle_tool_call(state, params).await?;
             Ok(mcp_response_result(id, result))
