@@ -1,0 +1,17 @@
+{
+  "profile": "direct_http",
+  "description": "Direct HTTP JSON-RPC transport to the NeuraMinds MCP endpoint.",
+  "mcpServers": {
+    "neuraminds": {
+      "transport": "http_jsonrpc",
+      "url": "${NEURAMINDS_API_URL}/v1/web4/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "x-client-id": "openclaw-partner"
+      }
+    }
+  },
+  "requiredEnv": [
+    "NEURAMINDS_API_URL"
+  ]
+}

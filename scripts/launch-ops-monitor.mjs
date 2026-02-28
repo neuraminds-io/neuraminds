@@ -46,6 +46,24 @@ function normalizeUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
 }
 
+function boolFlag(value) {
+  if (value === true) {
+    return true;
+  }
+  if (typeof value === 'string') {
+    return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+  }
+  return false;
+}
+
+function apiPath(baseUrl, route) {
+  const base = normalizeUrl(baseUrl);
+  if (base.endsWith('/v1') && route.startsWith('/v1/')) {
+    return `${base}${route.slice(3)}`;
+  }
+  return `${base}${route}`;
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -64,6 +82,45 @@ async function fetchWithTimeout(url, timeoutMs, acceptJson = true) {
       method: 'GET',
       signal: controller.signal,
       headers: acceptJson ? { Accept: 'application/json' } : {},
+    });
+
+    const bodyText = await response.text();
+    return {
+      ok: true,
+      status: response.status,
+      latencyMs: Date.now() - startedAt,
+      bodyText,
+      contentType: response.headers.get('content-type') || '',
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      latencyMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+      bodyText: '',
+      contentType: '',
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function postJsonWithTimeout(url, timeoutMs, payload, headers = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+        'content-type': 'application/json',
+        ...headers,
+      },
+      body: JSON.stringify(payload),
     });
 
     const bodyText = await response.text();
@@ -135,14 +192,17 @@ async function runSample(config, sampleIndex) {
     payout_oldest_pending_seconds: 0,
     indexer_lag_blocks: 0,
     web4_runtime_status: 'unknown',
+    web4_full_ready: false,
+    evm_market_count: 0,
+    evm_agent_count: 0,
   };
 
-  const health = await fetchWithTimeout(`${api}/health`, timeoutMs);
+  const health = await fetchWithTimeout(apiPath(api, '/health'), timeoutMs);
   if (!health.ok) {
     endpoints.push(
       endpointResult({
         id: 'api_health',
-        url: `${api}/health`,
+        url: apiPath(api, '/health'),
         required: true,
         pass: false,
         latencyMs: health.latencyMs,
@@ -156,7 +216,7 @@ async function runSample(config, sampleIndex) {
     endpoints.push(
       endpointResult({
         id: 'api_health',
-        url: `${api}/health`,
+        url: apiPath(api, '/health'),
         required: true,
         pass: health.status === 200 && status === 'healthy',
         latencyMs: health.latencyMs,
@@ -167,12 +227,12 @@ async function runSample(config, sampleIndex) {
     );
   }
 
-  const detailed = await fetchWithTimeout(`${api}/health/detailed`, timeoutMs);
+  const detailed = await fetchWithTimeout(apiPath(api, '/health/detailed'), timeoutMs);
   if (!detailed.ok) {
     endpoints.push(
       endpointResult({
         id: 'api_health_detailed',
-        url: `${api}/health/detailed`,
+        url: apiPath(api, '/health/detailed'),
         required: true,
         pass: false,
         latencyMs: detailed.latencyMs,
@@ -192,7 +252,7 @@ async function runSample(config, sampleIndex) {
     endpoints.push(
       endpointResult({
         id: 'api_health_detailed',
-        url: `${api}/health/detailed`,
+        url: apiPath(api, '/health/detailed'),
         required: true,
         pass: detailed.status === 200 && db === 'healthy' && redis === 'healthy' && baseReady,
         latencyMs: detailed.latencyMs,
@@ -203,12 +263,13 @@ async function runSample(config, sampleIndex) {
     );
   }
 
-  const markets = await fetchWithTimeout(`${api}/v1/evm/markets?limit=1`, timeoutMs);
+  const marketsPath = apiPath(api, `/v1/evm/markets?limit=${Math.max(1, config.minEvmMarkets)}`);
+  const markets = await fetchWithTimeout(marketsPath, timeoutMs);
   if (!markets.ok) {
     endpoints.push(
       endpointResult({
         id: 'evm_markets_public',
-        url: `${api}/v1/evm/markets?limit=1`,
+        url: marketsPath,
         required: true,
         pass: false,
         latencyMs: markets.latencyMs,
@@ -218,27 +279,68 @@ async function runSample(config, sampleIndex) {
     );
   } else {
     const payload = parseJsonSafe(markets.bodyText);
-    const marketCount = Array.isArray(payload?.markets) ? payload.markets.length : -1;
+    metrics.evm_market_count = Array.isArray(payload?.markets) ? payload.markets.length : 0;
     endpoints.push(
       endpointResult({
         id: 'evm_markets_public',
-        url: `${api}/v1/evm/markets?limit=1`,
+        url: marketsPath,
         required: true,
-        pass: markets.status === 200 && Array.isArray(payload?.markets),
+        pass: markets.status === 200 && metrics.evm_market_count >= config.minEvmMarkets,
         latencyMs: markets.latencyMs,
         statusCode: markets.status,
-        details: `marketCount=${marketCount}`,
+        details: `markets=${metrics.evm_market_count} required>=${config.minEvmMarkets}`,
         data: payload,
       }),
     );
   }
 
-  const matcherHealth = await fetchWithTimeout(`${api}/v1/evm/matcher/health`, timeoutMs);
+  let sampleMarketId = null;
+  if (metrics.evm_market_count > 0 && markets.ok) {
+    const payload = parseJsonSafe(markets.bodyText);
+    if (Array.isArray(payload?.markets) && payload.markets[0]) {
+      sampleMarketId = String(payload.markets[0].id ?? payload.markets[0].market_id ?? '');
+    }
+  }
+
+  if (config.minEvmAgents > 0) {
+    const agentsPath = apiPath(api, `/v1/evm/agents?active=true&limit=${Math.max(1, config.minEvmAgents)}`);
+    const agents = await fetchWithTimeout(agentsPath, timeoutMs);
+    if (!agents.ok) {
+      endpoints.push(
+        endpointResult({
+          id: 'evm_agents_active',
+          url: agentsPath,
+          required: true,
+          pass: false,
+          latencyMs: agents.latencyMs,
+          statusCode: agents.status,
+          details: `request failed: ${agents.error || 'unknown error'}`,
+        }),
+      );
+    } else {
+      const payload = parseJsonSafe(agents.bodyText);
+      metrics.evm_agent_count = Array.isArray(payload?.agents) ? payload.agents.length : 0;
+      endpoints.push(
+        endpointResult({
+          id: 'evm_agents_active',
+          url: agentsPath,
+          required: true,
+          pass: agents.status === 200 && metrics.evm_agent_count >= config.minEvmAgents,
+          latencyMs: agents.latencyMs,
+          statusCode: agents.status,
+          details: `agents=${metrics.evm_agent_count} required>=${config.minEvmAgents}`,
+          data: payload,
+        }),
+      );
+    }
+  }
+
+  const matcherHealth = await fetchWithTimeout(apiPath(api, '/v1/evm/matcher/health'), timeoutMs);
   if (!matcherHealth.ok) {
     endpoints.push(
       endpointResult({
         id: 'matcher_health',
-        url: `${api}/v1/evm/matcher/health`,
+        url: apiPath(api, '/v1/evm/matcher/health'),
         required: true,
         pass: false,
         latencyMs: matcherHealth.latencyMs,
@@ -252,7 +354,7 @@ async function runSample(config, sampleIndex) {
     endpoints.push(
       endpointResult({
         id: 'matcher_health',
-        url: `${api}/v1/evm/matcher/health`,
+        url: apiPath(api, '/v1/evm/matcher/health'),
         required: true,
         pass: matcherHealth.status === 200 && !bool(payload?.paused),
         latencyMs: matcherHealth.latencyMs,
@@ -263,12 +365,12 @@ async function runSample(config, sampleIndex) {
     );
   }
 
-  const matcherStats = await fetchWithTimeout(`${api}/v1/evm/matcher/stats`, timeoutMs);
+  const matcherStats = await fetchWithTimeout(apiPath(api, '/v1/evm/matcher/stats'), timeoutMs);
   if (!matcherStats.ok) {
     endpoints.push(
       endpointResult({
         id: 'matcher_stats',
-        url: `${api}/v1/evm/matcher/stats`,
+        url: apiPath(api, '/v1/evm/matcher/stats'),
         required: true,
         pass: false,
         latencyMs: matcherStats.latencyMs,
@@ -281,7 +383,7 @@ async function runSample(config, sampleIndex) {
     endpoints.push(
       endpointResult({
         id: 'matcher_stats',
-        url: `${api}/v1/evm/matcher/stats`,
+        url: apiPath(api, '/v1/evm/matcher/stats'),
         required: true,
         pass: matcherStats.status === 200,
         latencyMs: matcherStats.latencyMs,
@@ -292,12 +394,12 @@ async function runSample(config, sampleIndex) {
     );
   }
 
-  const payoutsHealth = await fetchWithTimeout(`${api}/v1/evm/payouts/health`, timeoutMs);
+  const payoutsHealth = await fetchWithTimeout(apiPath(api, '/v1/evm/payouts/health'), timeoutMs);
   if (!payoutsHealth.ok) {
     endpoints.push(
       endpointResult({
         id: 'payouts_health',
-        url: `${api}/v1/evm/payouts/health`,
+        url: apiPath(api, '/v1/evm/payouts/health'),
         required: true,
         pass: false,
         latencyMs: payoutsHealth.latencyMs,
@@ -311,7 +413,7 @@ async function runSample(config, sampleIndex) {
     endpoints.push(
       endpointResult({
         id: 'payouts_health',
-        url: `${api}/v1/evm/payouts/health`,
+        url: apiPath(api, '/v1/evm/payouts/health'),
         required: true,
         pass: payoutsHealth.status === 200,
         latencyMs: payoutsHealth.latencyMs,
@@ -322,12 +424,12 @@ async function runSample(config, sampleIndex) {
     );
   }
 
-  const payoutsBacklog = await fetchWithTimeout(`${api}/v1/evm/payouts/backlog`, timeoutMs);
+  const payoutsBacklog = await fetchWithTimeout(apiPath(api, '/v1/evm/payouts/backlog'), timeoutMs);
   if (!payoutsBacklog.ok) {
     endpoints.push(
       endpointResult({
         id: 'payouts_backlog',
-        url: `${api}/v1/evm/payouts/backlog`,
+        url: apiPath(api, '/v1/evm/payouts/backlog'),
         required: true,
         pass: false,
         latencyMs: payoutsBacklog.latencyMs,
@@ -343,7 +445,7 @@ async function runSample(config, sampleIndex) {
     endpoints.push(
       endpointResult({
         id: 'payouts_backlog',
-        url: `${api}/v1/evm/payouts/backlog`,
+        url: apiPath(api, '/v1/evm/payouts/backlog'),
         required: true,
         pass: payoutsBacklog.status === 200,
         latencyMs: payoutsBacklog.latencyMs,
@@ -354,12 +456,12 @@ async function runSample(config, sampleIndex) {
     );
   }
 
-  const indexerHealth = await fetchWithTimeout(`${api}/v1/evm/indexer/health`, timeoutMs);
+  const indexerHealth = await fetchWithTimeout(apiPath(api, '/v1/evm/indexer/health'), timeoutMs);
   if (!indexerHealth.ok) {
     endpoints.push(
       endpointResult({
         id: 'indexer_health',
-        url: `${api}/v1/evm/indexer/health`,
+        url: apiPath(api, '/v1/evm/indexer/health'),
         required: true,
         pass: false,
         latencyMs: indexerHealth.latencyMs,
@@ -373,7 +475,7 @@ async function runSample(config, sampleIndex) {
     endpoints.push(
       endpointResult({
         id: 'indexer_health',
-        url: `${api}/v1/evm/indexer/health`,
+        url: apiPath(api, '/v1/evm/indexer/health'),
         required: true,
         pass: indexerHealth.status === 200 && bool(payload?.enabled),
         latencyMs: indexerHealth.latencyMs,
@@ -384,12 +486,12 @@ async function runSample(config, sampleIndex) {
     );
   }
 
-  const indexerLag = await fetchWithTimeout(`${api}/v1/evm/indexer/lag`, timeoutMs);
+  const indexerLag = await fetchWithTimeout(apiPath(api, '/v1/evm/indexer/lag'), timeoutMs);
   if (!indexerLag.ok) {
     endpoints.push(
       endpointResult({
         id: 'indexer_lag',
-        url: `${api}/v1/evm/indexer/lag`,
+        url: apiPath(api, '/v1/evm/indexer/lag'),
         required: true,
         pass: false,
         latencyMs: indexerLag.latencyMs,
@@ -404,7 +506,7 @@ async function runSample(config, sampleIndex) {
     endpoints.push(
       endpointResult({
         id: 'indexer_lag',
-        url: `${api}/v1/evm/indexer/lag`,
+        url: apiPath(api, '/v1/evm/indexer/lag'),
         required: true,
         pass: indexerLag.status === 200,
         latencyMs: indexerLag.latencyMs,
@@ -415,12 +517,12 @@ async function runSample(config, sampleIndex) {
     );
   }
 
-  const runtimeHealth = await fetchWithTimeout(`${api}/v1/web4/runtime/health`, timeoutMs);
+  const runtimeHealth = await fetchWithTimeout(apiPath(api, '/v1/web4/runtime/health'), timeoutMs);
   if (!runtimeHealth.ok) {
     endpoints.push(
       endpointResult({
         id: 'web4_runtime_health',
-        url: `${api}/v1/web4/runtime/health`,
+        url: apiPath(api, '/v1/web4/runtime/health'),
         required: true,
         pass: false,
         latencyMs: runtimeHealth.latencyMs,
@@ -431,26 +533,210 @@ async function runSample(config, sampleIndex) {
   } else {
     const payload = parseJsonSafe(runtimeHealth.bodyText);
     metrics.web4_runtime_status = String(payload?.status || 'unknown');
+    metrics.web4_full_ready = payload?.fullWeb4Ready === true;
+    const mcpReady = payload?.components?.mcp?.ready === true;
+    const x402Ready = payload?.components?.x402?.ready === true;
+    const xmtpReady = payload?.components?.xmtp?.ready === true;
+    const pass = config.requireFullWeb4
+      ? runtimeHealth.status === 200 && mcpReady && x402Ready && xmtpReady && metrics.web4_full_ready
+      : runtimeHealth.status === 200 && mcpReady && metrics.web4_runtime_status !== 'unhealthy';
+
     endpoints.push(
       endpointResult({
         id: 'web4_runtime_health',
-        url: `${api}/v1/web4/runtime/health`,
+        url: apiPath(api, '/v1/web4/runtime/health'),
         required: true,
-        pass: runtimeHealth.status === 200 && metrics.web4_runtime_status !== 'unhealthy',
+        pass,
         latencyMs: runtimeHealth.latencyMs,
         statusCode: runtimeHealth.status,
-        details: `status=${metrics.web4_runtime_status}`,
+        details: `status=${metrics.web4_runtime_status} mcp=${mcpReady} x402=${x402Ready} xmtp=${xmtpReady} fullWeb4Ready=${metrics.web4_full_ready}`,
         data: payload,
       }),
     );
   }
 
-  const compliancePolicy = await fetchWithTimeout(`${api}/v1/compliance/policy`, timeoutMs);
+  const mcpPing = await postJsonWithTimeout(
+    apiPath(api, '/v1/web4/mcp'),
+    timeoutMs,
+    {
+      jsonrpc: '2.0',
+      id: `launch-ops-ping-${sampleIndex}`,
+      method: 'ping',
+      params: {},
+    },
+    {
+      'x-client-id': `launch-ops-${config.environment}`,
+    },
+  );
+
+  if (!mcpPing.ok) {
+    endpoints.push(
+      endpointResult({
+        id: 'web4_mcp_ping',
+        url: apiPath(api, '/v1/web4/mcp'),
+        required: true,
+        pass: false,
+        latencyMs: mcpPing.latencyMs,
+        statusCode: mcpPing.status,
+        details: `request failed: ${mcpPing.error || 'unknown error'}`,
+      }),
+    );
+  } else {
+    const payload = parseJsonSafe(mcpPing.bodyText);
+    endpoints.push(
+      endpointResult({
+        id: 'web4_mcp_ping',
+        url: apiPath(api, '/v1/web4/mcp'),
+        required: true,
+        pass: mcpPing.status === 200 && payload?.result?.ok === true,
+        latencyMs: mcpPing.latencyMs,
+        statusCode: mcpPing.status,
+        details: `http=${mcpPing.status} ok=${payload?.result?.ok === true}`,
+        data: payload,
+      }),
+    );
+  }
+
+  if (config.requireFullWeb4) {
+    const quotePath = apiPath(api, '/v1/payments/x402/quote?resource=mcp_tool_call');
+    const x402Quote = await fetchWithTimeout(quotePath, timeoutMs);
+    if (!x402Quote.ok) {
+      endpoints.push(
+        endpointResult({
+          id: 'x402_quote',
+          url: quotePath,
+          required: true,
+          pass: false,
+          latencyMs: x402Quote.latencyMs,
+          statusCode: x402Quote.status,
+          details: `request failed: ${x402Quote.error || 'unknown error'}`,
+        }),
+      );
+    } else {
+      const payload = parseJsonSafe(x402Quote.bodyText);
+      const pass =
+        x402Quote.status === 200 &&
+        typeof payload?.nonce === 'string' &&
+        typeof payload?.receiver === 'string' &&
+        Number.isFinite(Number(payload?.amount_microusdc));
+      endpoints.push(
+        endpointResult({
+          id: 'x402_quote',
+          url: quotePath,
+          required: true,
+          pass,
+          latencyMs: x402Quote.latencyMs,
+          statusCode: x402Quote.status,
+          details: pass
+            ? `receiver=${payload.receiver} amount=${payload.amount_microusdc}`
+            : `http=${x402Quote.status} payload=${payload ? 'json' : 'invalid'}`,
+          data: payload,
+        }),
+      );
+    }
+
+    const xmtpPath = apiPath(api, '/v1/web4/xmtp/health');
+    const xmtpHealth = await fetchWithTimeout(xmtpPath, timeoutMs);
+    if (!xmtpHealth.ok) {
+      endpoints.push(
+        endpointResult({
+          id: 'xmtp_health',
+          url: xmtpPath,
+          required: true,
+          pass: false,
+          latencyMs: xmtpHealth.latencyMs,
+          statusCode: xmtpHealth.status,
+          details: `request failed: ${xmtpHealth.error || 'unknown error'}`,
+        }),
+      );
+    } else {
+      const payload = parseJsonSafe(xmtpHealth.bodyText);
+      const enabled = payload?.enabled === true;
+      const transport = String(payload?.transport || 'unknown');
+      const bridgeConfigured = payload?.bridge_url_configured === true;
+      endpoints.push(
+        endpointResult({
+          id: 'xmtp_health',
+          url: xmtpPath,
+          required: true,
+          pass:
+            xmtpHealth.status === 200 &&
+            enabled &&
+            (transport !== 'xmtp_http' || bridgeConfigured),
+          latencyMs: xmtpHealth.latencyMs,
+          statusCode: xmtpHealth.status,
+          details: `enabled=${enabled} transport=${transport} bridgeConfigured=${bridgeConfigured}`,
+          data: payload,
+        }),
+      );
+    }
+
+    if (sampleMarketId) {
+      const unpaidOrderbookCall = await postJsonWithTimeout(
+        apiPath(api, '/v1/web4/mcp'),
+        timeoutMs,
+        {
+          jsonrpc: '2.0',
+          id: `launch-ops-orderbook-unpaid-${sampleIndex}`,
+          method: 'tools/call',
+          params: {
+            name: 'getOrderBook',
+            arguments: {
+              market_id: Number(sampleMarketId),
+              outcome: 'yes',
+              depth: 3,
+            },
+          },
+        },
+        {
+          'x-client-id': `launch-ops-${config.environment}`,
+        },
+      );
+
+      if (!unpaidOrderbookCall.ok) {
+        endpoints.push(
+          endpointResult({
+            id: 'x402_mcp_enforced',
+            url: apiPath(api, '/v1/web4/mcp'),
+            required: true,
+            pass: false,
+            latencyMs: unpaidOrderbookCall.latencyMs,
+            statusCode: unpaidOrderbookCall.status,
+            details: `request failed: ${unpaidOrderbookCall.error || 'unknown error'}`,
+          }),
+        );
+      } else {
+        const payload = parseJsonSafe(unpaidOrderbookCall.bodyText);
+        const structured = payload?.result?.structuredContent;
+        const status = Number(structured?.status || 0);
+        const code = String(structured?.error?.code || '');
+
+        endpoints.push(
+          endpointResult({
+            id: 'x402_mcp_enforced',
+            url: apiPath(api, '/v1/web4/mcp'),
+            required: true,
+            pass:
+              unpaidOrderbookCall.status === 200 &&
+              payload?.result?.isError === true &&
+              status === 402 &&
+              code === 'PAYMENT_REQUIRED',
+            latencyMs: unpaidOrderbookCall.latencyMs,
+            statusCode: unpaidOrderbookCall.status,
+            details: `http=${unpaidOrderbookCall.status} status=${status || 'n/a'} code=${code || 'n/a'}`,
+            data: payload,
+          }),
+        );
+      }
+    }
+  }
+
+  const compliancePolicy = await fetchWithTimeout(apiPath(api, '/v1/compliance/policy'), timeoutMs);
   if (!compliancePolicy.ok) {
     endpoints.push(
       endpointResult({
         id: 'compliance_policy',
-        url: `${api}/v1/compliance/policy`,
+        url: apiPath(api, '/v1/compliance/policy'),
         required: true,
         pass: false,
         latencyMs: compliancePolicy.latencyMs,
@@ -463,7 +749,7 @@ async function runSample(config, sampleIndex) {
     endpoints.push(
       endpointResult({
         id: 'compliance_policy',
-        url: `${api}/v1/compliance/policy`,
+        url: apiPath(api, '/v1/compliance/policy'),
         required: true,
         pass: compliancePolicy.status === 200,
         latencyMs: compliancePolicy.latencyMs,
@@ -562,7 +848,18 @@ function buildSummary(config, samples) {
     0,
   );
 
+  const marketCountMin = samples.reduce(
+    (min, sample) => Math.min(min, numberOr(sample.metrics.evm_market_count, 0)),
+    Number.MAX_SAFE_INTEGER,
+  );
+
+  const agentCountMin = samples.reduce(
+    (min, sample) => Math.min(min, numberOr(sample.metrics.evm_agent_count, 0)),
+    Number.MAX_SAFE_INTEGER,
+  );
+
   const runtimeStatuses = [...new Set(samples.map((sample) => String(sample.metrics.web4_runtime_status || 'unknown')))].sort();
+  const fullWeb4Failures = samples.filter((sample) => sample.metrics.web4_full_ready !== true).length;
 
   const payoutAgeBreached = payoutOldestMax > config.maxPayoutOldestPendingSeconds;
   const indexerLagBreached = indexerLagMax > config.maxIndexerLagBlocks;
@@ -584,6 +881,15 @@ function buildSummary(config, samples) {
   if (runtimeUnhealthy) {
     requiredFailures.push('web4 runtime reported unhealthy status');
   }
+  if (config.requireFullWeb4 && fullWeb4Failures > 0) {
+    requiredFailures.push(`full web4 readiness failed in ${fullWeb4Failures}/${samples.length} samples`);
+  }
+  if (marketCountMin < config.minEvmMarkets) {
+    requiredFailures.push(`evm market count dropped below ${config.minEvmMarkets}`);
+  }
+  if (config.minEvmAgents > 0 && agentCountMin < config.minEvmAgents) {
+    requiredFailures.push(`evm agent count dropped below ${config.minEvmAgents}`);
+  }
 
   return {
     ready: requiredFailures.length === 0,
@@ -593,11 +899,17 @@ function buildSummary(config, samples) {
       payoutOldestPendingSecondsMax: payoutOldestMax,
       indexerLagBlocksMax: indexerLagMax,
       runtimeStatuses,
+      marketCountMin,
+      agentCountMin: config.minEvmAgents > 0 ? agentCountMin : null,
+      fullWeb4Failures,
     },
     thresholds: {
       maxPersistentMatcherBacklogSec: config.maxPersistentMatcherBacklogSec,
       maxPayoutOldestPendingSeconds: config.maxPayoutOldestPendingSeconds,
       maxIndexerLagBlocks: config.maxIndexerLagBlocks,
+      minEvmMarkets: config.minEvmMarkets,
+      minEvmAgents: config.minEvmAgents,
+      requireFullWeb4: config.requireFullWeb4,
     },
   };
 }
@@ -614,12 +926,20 @@ function buildMarkdown(report) {
   lines.push(`- Matcher backlog persistence: <= ${report.summary.thresholds.maxPersistentMatcherBacklogSec}s`);
   lines.push(`- Oldest pending payout: <= ${report.summary.thresholds.maxPayoutOldestPendingSeconds}s`);
   lines.push(`- Indexer lag: <= ${report.summary.thresholds.maxIndexerLagBlocks} blocks`);
+  lines.push(`- Min EVM markets: >= ${report.summary.thresholds.minEvmMarkets}`);
+  lines.push(`- Min EVM agents: >= ${report.summary.thresholds.minEvmAgents}`);
+  lines.push(`- Require full Web4: ${report.summary.thresholds.requireFullWeb4}`);
   lines.push('');
   lines.push('## Summary Metrics');
   lines.push(`- Matcher backlog max: ${report.summary.metrics.matcherBacklogMax}`);
   lines.push(`- Oldest pending payout max: ${report.summary.metrics.payoutOldestPendingSecondsMax}`);
   lines.push(`- Indexer lag max: ${report.summary.metrics.indexerLagBlocksMax}`);
   lines.push(`- Web4 runtime statuses: ${report.summary.metrics.runtimeStatuses.join(', ')}`);
+  lines.push(`- EVM markets min: ${report.summary.metrics.marketCountMin}`);
+  if (report.summary.metrics.agentCountMin !== null) {
+    lines.push(`- EVM agents min: ${report.summary.metrics.agentCountMin}`);
+  }
+  lines.push(`- Full Web4 failing samples: ${report.summary.metrics.fullWeb4Failures}`);
   lines.push('');
 
   if (report.summary.requiredFailures.length > 0) {
@@ -631,13 +951,13 @@ function buildMarkdown(report) {
   }
 
   lines.push('## Samples');
-  lines.push('| Sample | Timestamp | Failed Required Endpoints | Matcher Backlog | Oldest Pending Payout (s) | Indexer Lag (blocks) | Runtime |');
-  lines.push('|---|---|---|---:|---:|---:|---|');
+  lines.push('| Sample | Timestamp | Failed Required Endpoints | Matcher Backlog | Oldest Pending Payout (s) | Indexer Lag (blocks) | Markets | Agents | Runtime | Full Web4 |');
+  lines.push('|---|---|---|---:|---:|---:|---:|---:|---|---|');
 
   for (const sample of report.samples) {
     const failed = sample.requiredFailed.length === 0 ? 'none' : sample.requiredFailed.join(', ');
     lines.push(
-      `| ${sample.sampleIndex} | ${sample.timestamp} | ${markdownEscape(failed)} | ${sample.metrics.matcher_backlog} | ${sample.metrics.payout_oldest_pending_seconds} | ${sample.metrics.indexer_lag_blocks} | ${markdownEscape(sample.metrics.web4_runtime_status)} |`,
+      `| ${sample.sampleIndex} | ${sample.timestamp} | ${markdownEscape(failed)} | ${sample.metrics.matcher_backlog} | ${sample.metrics.payout_oldest_pending_seconds} | ${sample.metrics.indexer_lag_blocks} | ${sample.metrics.evm_market_count} | ${sample.metrics.evm_agent_count} | ${markdownEscape(sample.metrics.web4_runtime_status)} | ${sample.metrics.web4_full_ready} |`,
     );
   }
 
@@ -647,7 +967,7 @@ function buildMarkdown(report) {
 
 function usage() {
   console.log(
-    'usage: node scripts/launch-ops-monitor.mjs --env <staging|production> --api-url <url> [--web-url <url>] [--samples <n>] [--interval-sec <seconds>] [--timeout-ms <ms>] [--max-persistent-matcher-backlog-sec <seconds>] [--max-payout-oldest-pending-seconds <seconds>] [--max-indexer-lag-blocks <blocks>] [--output <path>] [--output-md <path>]'
+    'usage: node scripts/launch-ops-monitor.mjs --env <staging|production> --api-url <url> [--web-url <url>] [--samples <n>] [--interval-sec <seconds>] [--timeout-ms <ms>] [--max-persistent-matcher-backlog-sec <seconds>] [--max-payout-oldest-pending-seconds <seconds>] [--max-indexer-lag-blocks <blocks>] [--require-full-web4] [--min-evm-markets <n>] [--min-evm-agents <n>] [--output <path>] [--output-md <path>]'
   );
 }
 
@@ -673,6 +993,9 @@ async function main() {
     Number(args['max-payout-oldest-pending-seconds'] || 600),
   );
   const maxIndexerLagBlocks = Math.max(1, Number(args['max-indexer-lag-blocks'] || 20));
+  const requireFullWeb4 = boolFlag(args['require-full-web4']);
+  const minEvmMarkets = Math.max(0, Number(args['min-evm-markets'] || 1));
+  const minEvmAgents = Math.max(0, Number(args['min-evm-agents'] || 0));
 
   if (!apiUrl) {
     usage();
@@ -698,6 +1021,9 @@ async function main() {
     maxPersistentMatcherBacklogSec,
     maxPayoutOldestPendingSeconds,
     maxIndexerLagBlocks,
+    requireFullWeb4,
+    minEvmMarkets,
+    minEvmAgents,
   };
 
   const allSamples = [];
@@ -718,6 +1044,9 @@ async function main() {
     webUrl: webUrl || null,
     samplesRequested: samples,
     intervalSec,
+    requireFullWeb4,
+    minEvmMarkets,
+    minEvmAgents,
     summary,
     samples: allSamples,
   };

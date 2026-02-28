@@ -1,0 +1,19 @@
+{
+  "profile": "stdio_bridge",
+  "description": "Stdio MCP bridge profile for OpenClaw via local NeuraMinds MCP server process.",
+  "mcpServers": {
+    "neuraminds": {
+      "command": "node",
+      "args": [
+        "scripts/mcp-server.mjs"
+      ],
+      "cwd": ".",
+      "env": {
+        "NEURAMINDS_API_BASE_URL": "${NEURAMINDS_API_URL}/v1"
+      }
+    }
+  },
+  "requiredEnv": [
+    "NEURAMINDS_API_URL"
+  ]
+}

@@ -384,6 +384,19 @@ async function main() {
   );
 
   server.registerResource(
+    'runtime-health',
+    'neuraminds://runtime/health',
+    {
+      title: 'Web4 runtime health',
+      description: 'Current MCP/x402/XMTP runtime readiness state.',
+      mimeType: 'application/json',
+    },
+    async () => {
+      return await readResource('neuraminds://runtime/health');
+    },
+  );
+
+  server.registerResource(
     'xmtp-health',
     'neuraminds://xmtp/health',
     {
@@ -393,6 +406,19 @@ async function main() {
     },
     async () => {
       return await readResource('neuraminds://xmtp/health');
+    },
+  );
+
+  server.registerPrompt(
+    'market-scan',
+    {
+      description: 'Scan active markets and return ranked opportunities.',
+      argsSchema: {
+        limit: z.number().int().min(1).max(50).optional(),
+      },
+    },
+    async (args) => {
+      return await getPrompt('market-scan', args);
     },
   );
 

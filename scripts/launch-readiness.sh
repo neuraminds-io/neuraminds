@@ -10,11 +10,17 @@ API_URL=""
 WEB_URL=""
 CHAIN_MODE="${CHAIN_MODE:-base}"
 RUN_WEB_E2E=0
+RUN_OPENCLAW_E2E=0
+OPENCLAW_MODE="both"
+REQUIRE_FULL_WEB4=0
+MIN_EVM_MARKETS=1
+MIN_EVM_AGENTS=0
 SKIP_DX_SNAPSHOT=0
 REQUIRE_DX_SNAPSHOT=0
 DX_SNAPSHOT_OUT="docs/reports/dx-terminal-snapshot.json"
 DX_SNAPSHOT_CAPTURED=0
 REQUIRE_DX_SNAPSHOT_EXPLICIT=0
+OPENCLAW_E2E_REPORT=""
 
 for arg in "$@"; do
   case "$arg" in
@@ -39,6 +45,21 @@ for arg in "$@"; do
     --run-web-e2e)
       RUN_WEB_E2E=1
       ;;
+    --run-openclaw-e2e)
+      RUN_OPENCLAW_E2E=1
+      ;;
+    --openclaw-mode=*)
+      OPENCLAW_MODE="${arg#*=}"
+      ;;
+    --require-full-web4)
+      REQUIRE_FULL_WEB4=1
+      ;;
+    --min-evm-markets=*)
+      MIN_EVM_MARKETS="${arg#*=}"
+      ;;
+    --min-evm-agents=*)
+      MIN_EVM_AGENTS="${arg#*=}"
+      ;;
     --skip-dx-snapshot)
       SKIP_DX_SNAPSHOT=1
       ;;
@@ -51,11 +72,30 @@ for arg in "$@"; do
       ;;
     *)
       echo "Unknown flag: $arg"
-      echo "Usage: scripts/launch-readiness.sh [--strict] [--mode=production|staging|development] [--allow-missing-secrets] [--api-url=<url>] [--web-url=<url>] [--chain-mode=base|solana|dual] [--run-web-e2e] [--skip-dx-snapshot] [--require-dx-snapshot] [--dx-snapshot-out=<path>]"
+      echo "Usage: scripts/launch-readiness.sh [--strict] [--mode=production|staging|development] [--allow-missing-secrets] [--api-url=<url>] [--web-url=<url>] [--chain-mode=base|solana|dual] [--run-web-e2e] [--run-openclaw-e2e] [--openclaw-mode=direct|stdio|both] [--require-full-web4] [--min-evm-markets=<n>] [--min-evm-agents=<n>] [--skip-dx-snapshot] [--require-dx-snapshot] [--dx-snapshot-out=<path>]"
       exit 1
       ;;
   esac
 done
+
+case "${OPENCLAW_MODE}" in
+  direct|stdio|both)
+    ;;
+  *)
+    echo "openclaw mode must be one of: direct, stdio, both"
+    exit 1
+    ;;
+esac
+
+if ! [[ "${MIN_EVM_MARKETS}" =~ ^[0-9]+$ ]]; then
+  echo "min-evm-markets must be a non-negative integer"
+  exit 1
+fi
+
+if ! [[ "${MIN_EVM_AGENTS}" =~ ^[0-9]+$ ]]; then
+  echo "min-evm-agents must be a non-negative integer"
+  exit 1
+fi
 
 if [[ "${STRICT}" -eq 1 && "${SKIP_DX_SNAPSHOT}" -eq 0 && "${REQUIRE_DX_SNAPSHOT_EXPLICIT}" -eq 0 ]]; then
   REQUIRE_DX_SNAPSHOT=1
@@ -88,6 +128,11 @@ echo "strict=${STRICT}"
 echo "allow_missing_secrets=${ALLOW_MISSING_SECRETS}"
 echo "chain_mode=${CHAIN_MODE}"
 echo "run_web_e2e=${RUN_WEB_E2E}"
+echo "run_openclaw_e2e=${RUN_OPENCLAW_E2E}"
+echo "openclaw_mode=${OPENCLAW_MODE}"
+echo "require_full_web4=${REQUIRE_FULL_WEB4}"
+echo "min_evm_markets=${MIN_EVM_MARKETS}"
+echo "min_evm_agents=${MIN_EVM_AGENTS}"
 echo "skip_dx_snapshot=${SKIP_DX_SNAPSHOT}"
 echo "require_dx_snapshot=${REQUIRE_DX_SNAPSHOT}"
 echo "dx_snapshot_out=${DX_SNAPSHOT_OUT}"
@@ -165,7 +210,10 @@ else
 fi
 
 if [[ -n "${API_URL}" ]]; then
-  SYNTH_ARGS=(--env "${MODE}" --api-url "${API_URL}" --chain-mode "${CHAIN_MODE}")
+  SYNTH_ARGS=(--env "${MODE}" --api-url "${API_URL}" --chain-mode "${CHAIN_MODE}" --min-evm-markets "${MIN_EVM_MARKETS}" --min-evm-agents "${MIN_EVM_AGENTS}")
+  if [[ "${REQUIRE_FULL_WEB4}" -eq 1 ]]; then
+    SYNTH_ARGS+=(--require-full-web4)
+  fi
   if [[ -n "${WEB_URL}" ]]; then
     SYNTH_ARGS+=(--web-url "${WEB_URL}")
   fi
@@ -176,6 +224,24 @@ if [[ -n "${API_URL}" ]]; then
   )
 else
   echo "synthetic monitor skipped (set --api-url to enable live endpoint checks)"
+fi
+
+if [[ "${RUN_OPENCLAW_E2E}" -eq 1 ]]; then
+  if [[ -z "${API_URL}" ]]; then
+    echo "openclaw e2e requires --api-url"
+    exit 1
+  fi
+
+  OPENCLAW_E2E_REPORT="docs/reports/openclaw-e2e-${MODE}.json"
+  OPENCLAW_ARGS=(--mode "${OPENCLAW_MODE}" --api-url "${API_URL}" --min-markets "${MIN_EVM_MARKETS}" --min-agents "${MIN_EVM_AGENTS}" --output "${OPENCLAW_E2E_REPORT}" --output-md "docs/reports/openclaw-e2e-${MODE}.md")
+  if [[ "${REQUIRE_FULL_WEB4}" -eq 1 ]]; then
+    OPENCLAW_ARGS+=(--require-full-web4)
+  fi
+
+  (
+    cd "${ROOT_DIR}"
+    node scripts/openclaw-e2e-readiness.mjs "${OPENCLAW_ARGS[@]}"
+  )
 fi
 
 if [[ "${RUN_WEB_E2E}" -eq 1 ]]; then
@@ -215,6 +281,9 @@ echo "- docs/reports/production-loop-report.json"
 echo "- docs/reports/launch-go-no-go.json"
 if [[ -n "${API_URL}" ]]; then
   echo "- docs/reports/synthetic-monitor-${MODE}.json"
+fi
+if [[ "${RUN_OPENCLAW_E2E}" -eq 1 ]]; then
+  echo "- ${OPENCLAW_E2E_REPORT}"
 fi
 if [[ "${RUN_WEB_E2E}" -eq 1 ]]; then
   echo "- web/playwright-report/index.html"

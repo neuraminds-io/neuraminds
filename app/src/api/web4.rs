@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -7,6 +7,15 @@ use crate::api::ApiError;
 use crate::services::x402::{self, build_quote, X402PaymentProof, X402Resource};
 use crate::services::xmtp_swarm::{self, SwarmListQuery, SwarmSendRequest};
 use crate::AppState;
+
+const MCP_METHOD_WINDOW_SECONDS: u64 = 60;
+const MCP_TOOL_WINDOW_SECONDS: u64 = 60;
+const MCP_DEFAULT_METHOD_LIMIT_PER_WINDOW: i64 = 240;
+const MCP_QUERY_METHOD_LIMIT_PER_WINDOW: i64 = 120;
+const MCP_TOOL_CALL_METHOD_LIMIT_PER_WINDOW: i64 = 90;
+const MCP_DEFAULT_TOOL_LIMIT_PER_WINDOW: i64 = 60;
+const MCP_WRITE_TOOL_LIMIT_PER_WINDOW: i64 = 30;
+const MCP_SWARM_TOOL_LIMIT_PER_WINDOW: i64 = 20;
 
 fn infer_api_base_url(state: &AppState) -> String {
     if let Ok(public_api_url) = std::env::var("PUBLIC_API_URL") {
@@ -102,6 +111,189 @@ struct McpToolContent {
     text: String,
 }
 
+fn retryable_status(status: u16) -> bool {
+    matches!(status, 402 | 408 | 409 | 425 | 429 | 500 | 502 | 503 | 504)
+}
+
+fn web4_error_payload(
+    code: &str,
+    reason: &str,
+    retryable: bool,
+    quote: Option<Value>,
+    details: Option<Value>,
+) -> Value {
+    let mut payload = serde_json::Map::new();
+    payload.insert("code".to_string(), json!(code));
+    payload.insert("reason".to_string(), json!(reason));
+    payload.insert("retryable".to_string(), json!(retryable));
+    if let Some(quote_payload) = quote {
+        payload.insert("quote".to_string(), quote_payload);
+    }
+    if let Some(extra) = details {
+        payload.insert("details".to_string(), extra);
+    }
+    Value::Object(payload)
+}
+
+fn api_error_as_web4_payload(err: &ApiError) -> Value {
+    let quote = err
+        .details
+        .as_ref()
+        .and_then(|details| details.get("quote"))
+        .cloned();
+    let details = err
+        .details
+        .as_ref()
+        .and_then(|value| value.get("details"))
+        .cloned();
+    web4_error_payload(
+        err.code.as_str(),
+        err.message.as_str(),
+        retryable_status(err.status),
+        quote,
+        details,
+    )
+}
+
+fn web4_error_from_downstream(status: u16, payload: &Value) -> Value {
+    let code = payload
+        .get("error")
+        .and_then(|error| error.get("code"))
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("HTTP_{status}"));
+    let reason = payload
+        .get("error")
+        .and_then(|error| error.get("reason"))
+        .and_then(|value| value.as_str())
+        .or_else(|| {
+            payload
+                .get("error")
+                .and_then(|error| error.get("message"))
+                .and_then(|value| value.as_str())
+        })
+        .unwrap_or("downstream request failed")
+        .to_string();
+    let quote = payload
+        .get("error")
+        .and_then(|error| error.get("details"))
+        .and_then(|details| details.get("quote"))
+        .cloned();
+    web4_error_payload(
+        code.as_str(),
+        reason.as_str(),
+        retryable_status(status),
+        quote,
+        Some(payload.clone()),
+    )
+}
+
+fn sanitize_client_id(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return "anonymous".to_string();
+    }
+    let mut result = String::new();
+    for ch in trimmed.chars().take(96) {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | ':') {
+            result.push(ch);
+        } else {
+            result.push('_');
+        }
+    }
+    if result.is_empty() {
+        "anonymous".to_string()
+    } else {
+        result
+    }
+}
+
+fn request_client_id(req: &HttpRequest) -> String {
+    if let Some(client_id) = req
+        .headers()
+        .get("x-client-id")
+        .and_then(|value| value.to_str().ok())
+    {
+        return sanitize_client_id(client_id);
+    }
+
+    let connection_info = req.connection_info();
+    let remote = connection_info.realip_remote_addr().unwrap_or("anonymous");
+    sanitize_client_id(remote)
+}
+
+fn mcp_method_limit_per_window(method: &str) -> i64 {
+    match method {
+        "tools/call" => MCP_TOOL_CALL_METHOD_LIMIT_PER_WINDOW,
+        "resources/read" | "prompts/get" => MCP_QUERY_METHOD_LIMIT_PER_WINDOW,
+        _ => MCP_DEFAULT_METHOD_LIMIT_PER_WINDOW,
+    }
+}
+
+fn mcp_tool_limit_per_window(tool_name: &str) -> i64 {
+    match tool_name {
+        "prepareCreateAgentTx"
+        | "prepareExecuteAgentTx"
+        | "prepareRegisterIdentityTx"
+        | "prepareSetIdentityTierTx"
+        | "prepareSetIdentityActiveTx"
+        | "prepareSubmitReputationOutcomeTx" => MCP_WRITE_TOOL_LIMIT_PER_WINDOW,
+        "sendSwarmMessage" => MCP_SWARM_TOOL_LIMIT_PER_WINDOW,
+        "listSwarmMessages" => MCP_QUERY_METHOD_LIMIT_PER_WINDOW,
+        _ => MCP_DEFAULT_TOOL_LIMIT_PER_WINDOW,
+    }
+}
+
+async fn enforce_rate_limit(
+    state: &AppState,
+    key: &str,
+    limit: i64,
+    window_seconds: u64,
+) -> Result<(), ApiError> {
+    let (count, ttl) = state
+        .redis
+        .increment_rate_limit(key, window_seconds)
+        .await
+        .map_err(|_| ApiError::internal("failed to evaluate MCP rate limit"))?;
+
+    if count > limit {
+        return Err(ApiError::rate_limited(ttl.max(1) as u64));
+    }
+    Ok(())
+}
+
+async fn enforce_mcp_policy(
+    state: &AppState,
+    req: &HttpRequest,
+    request: &McpJsonRpcRequest,
+) -> Result<(), ApiError> {
+    let client_id = request_client_id(req);
+    let method_limit = mcp_method_limit_per_window(request.method.as_str());
+    let method_key = format!(
+        "mcp:method:{}:{}",
+        request.method.as_str().to_ascii_lowercase(),
+        client_id
+    );
+    enforce_rate_limit(state, method_key.as_str(), method_limit, MCP_METHOD_WINDOW_SECONDS).await?;
+
+    if request.method == "tools/call" {
+        if let Some(params) = request.params.as_ref() {
+            if let Ok(tool_call) = serde_json::from_value::<McpToolCallParams>(params.clone()) {
+                let tool_limit = mcp_tool_limit_per_window(tool_call.name.as_str());
+                let tool_key = format!(
+                    "mcp:tool:{}:{}",
+                    tool_call.name.to_ascii_lowercase(),
+                    client_id
+                );
+                enforce_rate_limit(state, tool_key.as_str(), tool_limit, MCP_TOOL_WINDOW_SECONDS)
+                    .await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn mcp_response_result(id: Value, result: Value) -> Value {
     json!({
         "jsonrpc": "2.0",
@@ -136,6 +328,30 @@ fn tool_result_payload(payload: Value, is_error: bool) -> Value {
         "structuredContent": payload,
         "isError": is_error
     })
+}
+
+fn tool_error_payload(status: u16, error: Value) -> Value {
+    tool_result_payload(
+        json!({
+            "status": status,
+            "error": error
+        }),
+        true,
+    )
+}
+
+fn tool_payment_required_payload(state: &AppState, resource: X402Resource) -> Value {
+    let quote = serde_json::to_value(build_quote(state, resource)).ok();
+    tool_error_payload(
+        402,
+        web4_error_payload(
+            "PAYMENT_REQUIRED",
+            "x402 payment required",
+            true,
+            quote,
+            None,
+        ),
+    )
 }
 
 fn mcp_tools() -> Vec<Value> {
@@ -345,6 +561,11 @@ fn mcp_resources(api_base: &str) -> Vec<Value> {
             "description": "Active AgentRuntime entries with execution readiness."
         }),
         json!({
+            "uri": "neuraminds://runtime/health",
+            "name": "Web4 runtime health",
+            "description": "Current MCP/x402/XMTP runtime readiness state."
+        }),
+        json!({
             "uri": "neuraminds://xmtp/health",
             "name": "XMTP swarm health",
             "description": "XMTP swarm runtime configuration and limits."
@@ -359,6 +580,13 @@ fn mcp_resources(api_base: &str) -> Vec<Value> {
 
 fn mcp_prompts() -> Vec<Value> {
     vec![
+        json!({
+            "name": "market-scan",
+            "description": "Scan active markets and return ranked opportunities.",
+            "arguments": [
+                { "name": "limit", "description": "Number of markets to scan", "required": false }
+            ]
+        }),
         json!({
             "name": "market-analysis",
             "description": "Analyze market structure, liquidity and executable opportunities.",
@@ -459,10 +687,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             let (status, payload) =
                 call_internal_api(state, reqwest::Method::GET, path.as_str(), None, None).await?;
             if status >= 400 {
-                return Ok(tool_result_payload(
-                    json!({ "status": status, "error": payload }),
-                    true,
-                ));
+                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -482,14 +707,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
 
             let payment = parse_payment_arg(&args)?;
             if state.config.x402_enabled && payment.is_none() {
-                return Ok(tool_result_payload(
-                    json!({
-                        "status": 402,
-                        "error": "x402 payment required",
-                        "quote": build_quote(state, X402Resource::OrderBook)
-                    }),
-                    true,
-                ));
+                return Ok(tool_payment_required_payload(state, X402Resource::OrderBook));
             }
             let (status, payload) = call_internal_api(
                 state,
@@ -500,10 +718,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_result_payload(
-                    json!({ "status": status, "error": payload }),
-                    true,
-                ));
+                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -525,14 +740,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
 
             let payment = parse_payment_arg(&args)?;
             if state.config.x402_enabled && payment.is_none() {
-                return Ok(tool_result_payload(
-                    json!({
-                        "status": 402,
-                        "error": "x402 payment required",
-                        "quote": build_quote(state, X402Resource::Trades)
-                    }),
-                    true,
-                ));
+                return Ok(tool_payment_required_payload(state, X402Resource::Trades));
             }
             let (status, payload) = call_internal_api(
                 state,
@@ -543,10 +751,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_result_payload(
-                    json!({ "status": status, "error": payload }),
-                    true,
-                ));
+                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -570,10 +775,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             let (status, payload) =
                 call_internal_api(state, reqwest::Method::GET, path.as_str(), None, None).await?;
             if status >= 400 {
-                return Ok(tool_result_payload(
-                    json!({ "status": status, "error": payload }),
-                    true,
-                ));
+                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -587,10 +789,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_result_payload(
-                    json!({ "status": status, "error": payload }),
-                    true,
-                ));
+                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -604,10 +803,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_result_payload(
-                    json!({ "status": status, "error": payload }),
-                    true,
-                ));
+                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -621,10 +817,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_result_payload(
-                    json!({ "status": status, "error": payload }),
-                    true,
-                ));
+                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -638,10 +831,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_result_payload(
-                    json!({ "status": status, "error": payload }),
-                    true,
-                ));
+                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -655,10 +845,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_result_payload(
-                    json!({ "status": status, "error": payload }),
-                    true,
-                ));
+                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -672,10 +859,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_result_payload(
-                    json!({ "status": status, "error": payload }),
-                    true,
-                ));
+                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -685,12 +869,15 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
                 Some("trades") => X402Resource::Trades,
                 Some("mcp_tool_call") => X402Resource::McpToolCall,
                 _ => {
-                    return Ok(tool_result_payload(
-                        json!({
-                            "status": 400,
-                            "error": "resource must be one of: orderbook, trades, mcp_tool_call"
-                        }),
-                        true,
+                    return Ok(tool_error_payload(
+                        400,
+                        web4_error_payload(
+                            "INVALID_X402_RESOURCE",
+                            "resource must be one of: orderbook, trades, mcp_tool_call",
+                            false,
+                            None,
+                            None,
+                        ),
                     ))
                 }
             };
@@ -705,14 +892,7 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             })?;
             match xmtp_swarm::send_message(state, payload).await {
                 Ok(envelope) => Ok(tool_result_payload(json!(envelope), false)),
-                Err(err) => Ok(tool_result_payload(
-                    json!({
-                        "status": err.status,
-                        "code": err.code,
-                        "error": err.message
-                    }),
-                    true,
-                )),
+                Err(err) => Ok(tool_error_payload(err.status, api_error_as_web4_payload(&err))),
             }
         }
         "listSwarmMessages" => {
@@ -726,22 +906,18 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             };
             match xmtp_swarm::list_messages(state, swarm_id, query).await {
                 Ok(data) => Ok(tool_result_payload(json!(data), false)),
-                Err(err) => Ok(tool_result_payload(
-                    json!({
-                        "status": err.status,
-                        "code": err.code,
-                        "error": err.message
-                    }),
-                    true,
-                )),
+                Err(err) => Ok(tool_error_payload(err.status, api_error_as_web4_payload(&err))),
             }
         }
-        _ => Ok(tool_result_payload(
-            json!({
-                "status": 404,
-                "error": format!("Unknown tool: {}", params.name)
-            }),
-            true,
+        _ => Ok(tool_error_payload(
+            404,
+            web4_error_payload(
+                "UNKNOWN_TOOL",
+                format!("Unknown tool: {}", params.name).as_str(),
+                false,
+                None,
+                None,
+            ),
         )),
     }
 }
@@ -786,17 +962,7 @@ async fn handle_mcp_method(
             {
                 let payment = parse_payment_arg(&params.arguments)?;
                 let Some(proof) = payment else {
-                    return Ok(mcp_response_result(
-                        id,
-                        tool_result_payload(
-                            json!({
-                                "status": 402,
-                                "error": "x402 payment required",
-                                "quote": build_quote(state, X402Resource::McpToolCall)
-                            }),
-                            true,
-                        ),
-                    ));
+                    return Ok(mcp_response_result(id, tool_payment_required_payload(state, X402Resource::McpToolCall)));
                 };
                 x402::ensure_payment_from_proof(state, &proof, X402Resource::McpToolCall).await?;
             }
@@ -839,6 +1005,17 @@ async fn handle_mcp_method(
                         state,
                         reqwest::Method::GET,
                         "/evm/agents?active=true&limit=50",
+                        None,
+                        None,
+                    )
+                    .await?;
+                    payload
+                }
+                "neuraminds://runtime/health" => {
+                    let (_, payload) = call_internal_api(
+                        state,
+                        reqwest::Method::GET,
+                        "/web4/runtime/health",
                         None,
                         None,
                     )
@@ -899,6 +1076,14 @@ async fn handle_mcp_method(
                 })?;
 
             let prompt_text = match params.name.as_str() {
+                "market-scan" => {
+                    let limit = params
+                        .arguments
+                        .get("limit")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(5);
+                    format!("Scan top {limit} active markets and return ranked opportunities with: market_id, direction, confidence (0-100), expected edge, invalidation conditions, and execution notes.")
+                }
                 "market-analysis" => {
                     let market_id = params
                         .arguments
@@ -975,6 +1160,7 @@ async fn handle_mcp_method(
 }
 
 pub async fn handle_mcp_jsonrpc(
+    req: HttpRequest,
     state: web::Data<Arc<AppState>>,
     body: web::Json<Value>,
 ) -> impl Responder {
@@ -1022,7 +1208,32 @@ pub async fn handle_mcp_jsonrpc(
         }
 
         if request.id.is_none() {
+            if let Err(err) = enforce_mcp_policy(&state, &req, &request).await {
+                let _ = mcp_response_error(
+                    Value::Null,
+                    -32000,
+                    "MCP request rejected by policy",
+                    Some(json!({
+                        "status": err.status,
+                        "error": api_error_as_web4_payload(&err)
+                    })),
+                );
+                continue;
+            }
             let _ = handle_mcp_method(&state, &request).await;
+            continue;
+        }
+
+        if let Err(err) = enforce_mcp_policy(&state, &req, &request).await {
+            responses.push(mcp_response_error(
+                request.id.unwrap_or(Value::Null),
+                -32000,
+                "MCP request rejected by policy",
+                Some(json!({
+                    "status": err.status,
+                    "error": api_error_as_web4_payload(&err)
+                })),
+            ));
             continue;
         }
 
@@ -1031,8 +1242,11 @@ pub async fn handle_mcp_jsonrpc(
             Err(err) => responses.push(mcp_response_error(
                 request.id.unwrap_or(Value::Null),
                 -32000,
-                &err.message,
-                Some(json!({ "code": err.code, "status": err.status })),
+                "MCP method failed",
+                Some(json!({
+                    "status": err.status,
+                    "error": api_error_as_web4_payload(&err)
+                })),
             )),
         }
     }
@@ -1090,6 +1304,23 @@ pub async fn get_web4_capabilities(state: web::Data<Arc<AppState>>) -> impl Resp
             "evm_writes_enabled": state.config.evm_writes_enabled,
             "solana_reads_enabled": state.config.solana_reads_enabled,
             "solana_writes_enabled": state.config.solana_writes_enabled
+        },
+        "policy": {
+            "mcp_method_rate_window_seconds": MCP_METHOD_WINDOW_SECONDS,
+            "mcp_tool_rate_window_seconds": MCP_TOOL_WINDOW_SECONDS,
+            "mcp_method_limits_per_window": {
+                "default": MCP_DEFAULT_METHOD_LIMIT_PER_WINDOW,
+                "query": MCP_QUERY_METHOD_LIMIT_PER_WINDOW,
+                "tools_call": MCP_TOOL_CALL_METHOD_LIMIT_PER_WINDOW
+            },
+            "mcp_tool_limits_per_window": {
+                "default": MCP_DEFAULT_TOOL_LIMIT_PER_WINDOW,
+                "write_tools": MCP_WRITE_TOOL_LIMIT_PER_WINDOW,
+                "swarm_tools": MCP_SWARM_TOOL_LIMIT_PER_WINDOW
+            },
+            "error_envelope": {
+                "fields": ["code", "reason", "retryable", "quote"]
+            }
         },
         "protocols": [
             {
@@ -1293,22 +1524,20 @@ pub async fn get_xmtp_swarm_health(state: web::Data<Arc<AppState>>) -> impl Resp
 }
 
 pub async fn get_web4_runtime_health(state: web::Data<Arc<AppState>>) -> impl Responder {
-    let x402_ready = if !state.config.x402_enabled {
-        true
-    } else {
-        !state.config.x402_signing_key.trim().is_empty()
-            && is_hex_address(state.config.x402_receiver_address.as_str())
-    };
+    let x402_signing_key_present = !state.config.x402_signing_key.trim().is_empty();
+    let x402_receiver_valid = is_hex_address(state.config.x402_receiver_address.as_str());
+    let x402_ready = state.config.x402_enabled && x402_signing_key_present && x402_receiver_valid;
 
     let mcp_ready = true;
 
-    let xmtp_bridge_ready = if !state.config.xmtp_swarm_enabled {
-        true
-    } else if state.config.xmtp_swarm_transport != "xmtp_http" {
-        true
-    } else if state.config.xmtp_swarm_bridge_url.trim().is_empty() {
-        false
-    } else {
+    let xmtp_transport = state.config.xmtp_swarm_transport.as_str();
+    let xmtp_transport_http = xmtp_transport == "xmtp_http";
+    let xmtp_transport_redis = xmtp_transport == "redis";
+    let xmtp_bridge_configured = !state.config.xmtp_swarm_bridge_url.trim().is_empty();
+    let xmtp_bridge_reachable = if state.config.xmtp_swarm_enabled
+        && xmtp_transport_http
+        && xmtp_bridge_configured
+    {
         let url = format!(
             "{}/health",
             state
@@ -1323,9 +1552,21 @@ pub async fn get_web4_runtime_health(state: web::Data<Arc<AppState>>) -> impl Re
             .await
             .map(|response| response.status().is_success())
             .unwrap_or(false)
+    } else {
+        false
     };
 
-    let status = if x402_ready && mcp_ready && xmtp_bridge_ready {
+    let xmtp_ready = state.config.xmtp_swarm_enabled
+        && if xmtp_transport_http {
+            xmtp_bridge_configured && xmtp_bridge_reachable
+        } else if xmtp_transport_redis {
+            true
+        } else {
+            false
+        };
+    let full_web4_ready = mcp_ready && x402_ready && xmtp_ready;
+
+    let status = if full_web4_ready {
         "healthy"
     } else if mcp_ready {
         "degraded"
@@ -1338,18 +1579,32 @@ pub async fn get_web4_runtime_health(state: web::Data<Arc<AppState>>) -> impl Re
         "components": {
             "mcp": {
                 "ready": mcp_ready,
-                "transport": ["http+jsonrpc", "stdio"]
+                "transport": ["http+jsonrpc", "stdio"],
+                "requiredForFullWeb4": true
             },
             "x402": {
                 "ready": x402_ready,
-                "enabled": state.config.x402_enabled
+                "enabled": state.config.x402_enabled,
+                "requiredForFullWeb4": true,
+                "config": {
+                    "signingKeyPresent": x402_signing_key_present,
+                    "receiverAddressValid": x402_receiver_valid
+                }
             },
             "xmtp": {
-                "ready": xmtp_bridge_ready,
+                "ready": xmtp_ready,
                 "enabled": state.config.xmtp_swarm_enabled,
-                "transport": state.config.xmtp_swarm_transport
+                "requiredForFullWeb4": true,
+                "transport": state.config.xmtp_swarm_transport,
+                "config": {
+                    "transportHttp": xmtp_transport_http,
+                    "transportRedis": xmtp_transport_redis,
+                    "bridgeConfigured": xmtp_bridge_configured,
+                    "bridgeReachable": xmtp_bridge_reachable
+                }
             }
-        }
+        },
+        "fullWeb4Ready": full_web4_ready
     }))
 }
 

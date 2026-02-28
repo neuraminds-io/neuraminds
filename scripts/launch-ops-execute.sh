@@ -28,6 +28,11 @@ SOAK_INTERVAL_SEC="900"
 MAX_PERSISTENT_MATCHER_BACKLOG_SEC="60"
 MAX_PAYOUT_OLDEST_PENDING_SEC="600"
 MAX_INDEXER_LAG_BLOCKS="20"
+REQUIRE_FULL_WEB4=1
+MIN_EVM_MARKETS="3"
+MIN_EVM_AGENTS="1"
+RUN_OPENCLAW_E2E=1
+OPENCLAW_MODE="both"
 
 SKIP_CHAOS=0
 
@@ -52,6 +57,11 @@ Options:
   --soak-interval-sec <n>
   --strict / --no-strict
   --worker-live-tx (default: dry-run workers)
+  --require-full-web4 / --no-require-full-web4
+  --min-evm-markets <n>
+  --min-evm-agents <n>
+  --run-openclaw-e2e / --skip-openclaw-e2e
+  --openclaw-mode direct|stdio|both
   --skip-chaos
   -h|--help
 USAGE
@@ -183,6 +193,46 @@ while [[ $# -gt 0 ]]; do
       WORKER_LIVE_TX=1
       shift
       ;;
+    --require-full-web4)
+      REQUIRE_FULL_WEB4=1
+      shift
+      ;;
+    --no-require-full-web4)
+      REQUIRE_FULL_WEB4=0
+      shift
+      ;;
+    --min-evm-markets)
+      MIN_EVM_MARKETS="${2:-}"
+      shift 2
+      ;;
+    --min-evm-markets=*)
+      MIN_EVM_MARKETS="${1#*=}"
+      shift
+      ;;
+    --min-evm-agents)
+      MIN_EVM_AGENTS="${2:-}"
+      shift 2
+      ;;
+    --min-evm-agents=*)
+      MIN_EVM_AGENTS="${1#*=}"
+      shift
+      ;;
+    --run-openclaw-e2e)
+      RUN_OPENCLAW_E2E=1
+      shift
+      ;;
+    --skip-openclaw-e2e)
+      RUN_OPENCLAW_E2E=0
+      shift
+      ;;
+    --openclaw-mode)
+      OPENCLAW_MODE="${2:-}"
+      shift 2
+      ;;
+    --openclaw-mode=*)
+      OPENCLAW_MODE="${1#*=}"
+      shift
+      ;;
     --skip-chaos)
       SKIP_CHAOS=1
       shift
@@ -198,6 +248,25 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if ! [[ "$MIN_EVM_MARKETS" =~ ^[0-9]+$ ]]; then
+  echo "--min-evm-markets must be a non-negative integer" >&2
+  exit 1
+fi
+
+if ! [[ "$MIN_EVM_AGENTS" =~ ^[0-9]+$ ]]; then
+  echo "--min-evm-agents must be a non-negative integer" >&2
+  exit 1
+fi
+
+case "$OPENCLAW_MODE" in
+  direct|stdio|both)
+    ;;
+  *)
+    echo "--openclaw-mode must be direct, stdio, or both" >&2
+    exit 1
+    ;;
+esac
 
 normalize_url() {
   local value="$1"
@@ -329,6 +398,9 @@ run_phase1() {
     --api-url "$STAGING_API_URL" \
     --web-url "$STAGING_WEB_URL" \
     --chain-mode "$CHAIN_MODE" \
+    --min-evm-markets "$MIN_EVM_MARKETS" \
+    --min-evm-agents "$MIN_EVM_AGENTS" \
+    $( [[ "$REQUIRE_FULL_WEB4" -eq 1 ]] && echo "--require-full-web4" ) \
     --output "$REPORT_DIR/synthetic-monitor-staging-live-$TIMESTAMP.json" \
     --output-md "$REPORT_DIR/synthetic-monitor-staging-live-$TIMESTAMP.md"
 
@@ -339,13 +411,23 @@ run_phase1() {
       --api-url="$STAGING_API_URL" \
       --web-url="$STAGING_WEB_URL" \
       --chain-mode="$CHAIN_MODE" \
+      --min-evm-markets="$MIN_EVM_MARKETS" \
+      --min-evm-agents="$MIN_EVM_AGENTS" \
+      $( [[ "$REQUIRE_FULL_WEB4" -eq 1 ]] && echo "--require-full-web4" ) \
+      $( [[ "$RUN_OPENCLAW_E2E" -eq 1 ]] && echo "--run-openclaw-e2e" ) \
+      --openclaw-mode="$OPENCLAW_MODE" \
       --dx-snapshot-out="$REPORT_DIR/dx-terminal-snapshot-staging-$TIMESTAMP.json"
   else
     bash "$ROOT_DIR/scripts/launch-readiness.sh" \
       --mode=staging \
       --api-url="$STAGING_API_URL" \
       --web-url="$STAGING_WEB_URL" \
-      --chain-mode="$CHAIN_MODE"
+      --chain-mode="$CHAIN_MODE" \
+      --min-evm-markets="$MIN_EVM_MARKETS" \
+      --min-evm-agents="$MIN_EVM_AGENTS" \
+      $( [[ "$REQUIRE_FULL_WEB4" -eq 1 ]] && echo "--require-full-web4" ) \
+      $( [[ "$RUN_OPENCLAW_E2E" -eq 1 ]] && echo "--run-openclaw-e2e" ) \
+      --openclaw-mode="$OPENCLAW_MODE"
   fi
 
   node "$ROOT_DIR/scripts/launch-ops-freeze.mjs" \
@@ -389,6 +471,9 @@ run_phase2() {
     --max-persistent-matcher-backlog-sec "$MAX_PERSISTENT_MATCHER_BACKLOG_SEC" \
     --max-payout-oldest-pending-seconds "$MAX_PAYOUT_OLDEST_PENDING_SEC" \
     --max-indexer-lag-blocks "$MAX_INDEXER_LAG_BLOCKS" \
+    --min-evm-markets "$MIN_EVM_MARKETS" \
+    --min-evm-agents "$MIN_EVM_AGENTS" \
+    $( [[ "$REQUIRE_FULL_WEB4" -eq 1 ]] && echo "--require-full-web4" ) \
     --output "$REPORT_DIR/launch-ops-phase2-monitor-$TIMESTAMP.json" \
     --output-md "$REPORT_DIR/launch-ops-phase2-monitor-$TIMESTAMP.md"
 }
@@ -408,6 +493,9 @@ run_phase3() {
     --max-persistent-matcher-backlog-sec "$MAX_PERSISTENT_MATCHER_BACKLOG_SEC" \
     --max-payout-oldest-pending-seconds "$MAX_PAYOUT_OLDEST_PENDING_SEC" \
     --max-indexer-lag-blocks "$MAX_INDEXER_LAG_BLOCKS" \
+    --min-evm-markets "$MIN_EVM_MARKETS" \
+    --min-evm-agents "$MIN_EVM_AGENTS" \
+    $( [[ "$REQUIRE_FULL_WEB4" -eq 1 ]] && echo "--require-full-web4" ) \
     --output "$REPORT_DIR/launch-ops-phase3-soak-$TIMESTAMP.json" \
     --output-md "$REPORT_DIR/launch-ops-phase3-soak-$TIMESTAMP.md"
 
@@ -443,6 +531,9 @@ run_phase3() {
       --max-persistent-matcher-backlog-sec "$MAX_PERSISTENT_MATCHER_BACKLOG_SEC" \
       --max-payout-oldest-pending-seconds "$MAX_PAYOUT_OLDEST_PENDING_SEC" \
       --max-indexer-lag-blocks "$MAX_INDEXER_LAG_BLOCKS" \
+      --min-evm-markets "$MIN_EVM_MARKETS" \
+      --min-evm-agents "$MIN_EVM_AGENTS" \
+      $( [[ "$REQUIRE_FULL_WEB4" -eq 1 ]] && echo "--require-full-web4" ) \
       --output "$REPORT_DIR/launch-ops-phase3-post-chaos-$TIMESTAMP.json" \
       --output-md "$REPORT_DIR/launch-ops-phase3-post-chaos-$TIMESTAMP.md"
   else
@@ -462,6 +553,11 @@ run_phase4() {
     --api-url="$PRODUCTION_API_URL" \
     --web-url="$PRODUCTION_WEB_URL" \
     --chain-mode="$CHAIN_MODE" \
+    --min-evm-markets="$MIN_EVM_MARKETS" \
+    --min-evm-agents="$MIN_EVM_AGENTS" \
+    $( [[ "$REQUIRE_FULL_WEB4" -eq 1 ]] && echo "--require-full-web4" ) \
+    $( [[ "$RUN_OPENCLAW_E2E" -eq 1 ]] && echo "--run-openclaw-e2e" ) \
+    --openclaw-mode="$OPENCLAW_MODE" \
     --dx-snapshot-out="$REPORT_DIR/dx-terminal-snapshot-production-$TIMESTAMP.json"
 
   node "$ROOT_DIR/scripts/launch-ops-monitor.mjs" \
@@ -473,6 +569,9 @@ run_phase4() {
     --max-persistent-matcher-backlog-sec "$MAX_PERSISTENT_MATCHER_BACKLOG_SEC" \
     --max-payout-oldest-pending-seconds "$MAX_PAYOUT_OLDEST_PENDING_SEC" \
     --max-indexer-lag-blocks "$MAX_INDEXER_LAG_BLOCKS" \
+    --min-evm-markets "$MIN_EVM_MARKETS" \
+    --min-evm-agents "$MIN_EVM_AGENTS" \
+    $( [[ "$REQUIRE_FULL_WEB4" -eq 1 ]] && echo "--require-full-web4" ) \
     --output "$REPORT_DIR/launch-ops-phase4-preflight-$TIMESTAMP.json" \
     --output-md "$REPORT_DIR/launch-ops-phase4-preflight-$TIMESTAMP.md"
 
