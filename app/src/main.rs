@@ -203,6 +203,10 @@ async fn main() -> std::io::Result<()> {
         .expect("valid governor configuration");
 
     let config_clone = config.clone();
+    let geo_blocking_enabled = std::env::var("GEO_BLOCKING_ENABLED")
+        .ok()
+        .map(|value| value.trim().eq_ignore_ascii_case("true"))
+        .unwrap_or(true);
 
     HttpServer::new(move || {
         let cors = if config_clone.is_development {
@@ -237,9 +241,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(app_state.clone()))
             .wrap(Governor::new(&governor_conf))
-            .wrap(crate::middleware::GeoBlock::new(
-                !config_clone.is_development,
-            ))
+            .wrap(crate::middleware::GeoBlock::new(geo_blocking_enabled))
             .wrap(cors)
             .wrap(
                 actix_middleware::DefaultHeaders::new()

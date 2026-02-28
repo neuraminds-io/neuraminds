@@ -7,6 +7,7 @@
 - `CORS_ORIGINS` (no wildcard, https origins only)
 - `BLINDFOLD_WEBHOOK_SECRET`
 - `CHAIN_MODE` (`base`, `solana`, or `dual`)
+- `GEO_BLOCKING_ENABLED=true` (required for compliance write restrictions)
 
 ## Frontend/Edge Required (Production, Common)
 - `NEXT_PUBLIC_API_URL` (https)

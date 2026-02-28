@@ -242,14 +242,14 @@ probe_compliance() {
   blocked_status="$(curl -sS -o /tmp/launch_ops_blocked_response.json -w '%{http_code}' \
     -X POST \
     -H 'content-type: application/json' \
-    -H 'CF-IPCountry: US' \
+    -H 'X-Country: US' \
     -d '{"jsonrpc":"2.0","id":"blocked-check","method":"ping","params":{}}' \
     "$base_url/v1/web4/mcp" || true)"
 
   allowed_status="$(curl -sS -o /tmp/launch_ops_allowed_response.json -w '%{http_code}' \
     -X POST \
     -H 'content-type: application/json' \
-    -H 'CF-IPCountry: JP' \
+    -H 'X-Country: JP' \
     -d '{"jsonrpc":"2.0","id":"allowed-check","method":"ping","params":{}}' \
     "$base_url/v1/web4/mcp" || true)"
 
