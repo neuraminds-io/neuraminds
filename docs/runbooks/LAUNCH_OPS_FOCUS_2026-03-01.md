@@ -41,6 +41,7 @@ npm run launch:ops:phase2 -- \
 Phase 3 (soak + chaos + compliance probes):
 
 ```bash
+export GEO_TEST_OVERRIDE_KEY=<staging_geo_probe_key>
 npm run launch:ops:phase3 -- \
   --staging-api-url https://neuraminds-api-base-staging-v1.onrender.com \
   --staging-web-url https://neuraminds-web-base-staging-v4.onrender.com \

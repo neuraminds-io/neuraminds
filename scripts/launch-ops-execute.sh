@@ -238,18 +238,39 @@ probe_compliance() {
 
   local blocked_status
   local allowed_status
+  local probe_mode
+  local geo_override_key
+  local -a blocked_headers
+  local -a allowed_headers
+
+  geo_override_key="${GEO_TEST_OVERRIDE_KEY:-}"
+  probe_mode="x-country-fallback"
+  blocked_headers=("-H" "content-type: application/json" "-H" "X-Country: US")
+  allowed_headers=("-H" "content-type: application/json" "-H" "X-Country: JP")
+
+  if [[ -n "$geo_override_key" ]]; then
+    probe_mode="geo-test-override"
+    blocked_headers=(
+      "-H" "content-type: application/json"
+      "-H" "X-Geo-Test-Key: $geo_override_key"
+      "-H" "X-Geo-Test-Country: US"
+    )
+    allowed_headers=(
+      "-H" "content-type: application/json"
+      "-H" "X-Geo-Test-Key: $geo_override_key"
+      "-H" "X-Geo-Test-Country: JP"
+    )
+  fi
 
   blocked_status="$(curl -sS -o /tmp/launch_ops_blocked_response.json -w '%{http_code}' \
     -X POST \
-    -H 'content-type: application/json' \
-    -H 'X-Country: US' \
+    "${blocked_headers[@]}" \
     -d '{"jsonrpc":"2.0","id":"blocked-check","method":"ping","params":{}}' \
     "$base_url/v1/web4/mcp" || true)"
 
   allowed_status="$(curl -sS -o /tmp/launch_ops_allowed_response.json -w '%{http_code}' \
     -X POST \
-    -H 'content-type: application/json' \
-    -H 'X-Country: JP' \
+    "${allowed_headers[@]}" \
     -d '{"jsonrpc":"2.0","id":"allowed-check","method":"ping","params":{}}' \
     "$base_url/v1/web4/mcp" || true)"
 
@@ -258,6 +279,7 @@ probe_compliance() {
     const out = process.argv[1];
     const blockedStatus = process.argv[2];
     const allowedStatus = process.argv[3];
+    const probeMode = process.argv[4];
 
     let blockedBody = "";
     let allowedBody = "";
@@ -266,6 +288,7 @@ probe_compliance() {
 
     const report = {
       generatedAt: new Date().toISOString(),
+      probeMode,
       blockedProbe: {
         country: "US",
         status: Number(blockedStatus || 0),
@@ -283,7 +306,7 @@ probe_compliance() {
     report.ready = report.blockedProbe.pass && report.allowedProbe.pass;
     fs.writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`, "utf8");
     if (!report.ready) process.exit(1);
-  ' "$output_json" "$blocked_status" "$allowed_status"
+  ' "$output_json" "$blocked_status" "$allowed_status" "$probe_mode"
 }
 
 mkdir -p "$ROOT_DIR/$REPORT_DIR"

@@ -8,6 +8,7 @@
 - `BLINDFOLD_WEBHOOK_SECRET`
 - `CHAIN_MODE` (`base`, `solana`, or `dual`)
 - `GEO_BLOCKING_ENABLED=true` (required for compliance write restrictions)
+- `GEO_TEST_OVERRIDE_KEY` (staging-only, required for deterministic launch compliance probes)
 
 ## Frontend/Edge Required (Production, Common)
 - `NEXT_PUBLIC_API_URL` (https)

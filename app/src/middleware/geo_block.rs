@@ -144,8 +144,7 @@ where
             });
         }
 
-        // Check country from various CDN headers
-        let country = get_country_from_headers(&req);
+        let country = get_country_override(&req).or_else(|| get_country_from_headers(&req));
 
         if let Some(country_code) = &country {
             if get_blocked_countries().contains(country_code.as_str()) {
@@ -247,6 +246,31 @@ fn get_country_from_headers(req: &ServiceRequest) -> Option<String> {
     }
 
     None
+}
+
+fn get_country_override(req: &ServiceRequest) -> Option<String> {
+    let override_key = std::env::var("GEO_TEST_OVERRIDE_KEY").ok()?;
+    if override_key.is_empty() {
+        return None;
+    }
+
+    let headers = req.headers();
+    let provided_key = headers.get("X-Geo-Test-Key")?.to_str().ok()?;
+    if provided_key != override_key {
+        return None;
+    }
+
+    let country = headers
+        .get("X-Geo-Test-Country")?
+        .to_str()
+        .ok()?
+        .trim()
+        .to_uppercase();
+    if country.len() == 2 {
+        Some(country)
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
