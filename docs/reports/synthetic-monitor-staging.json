@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-28T01:19:25.649Z",
+  "generatedAt": "2026-02-28T01:23:06.035Z",
   "env": "staging",
   "chainMode": "base",
   "summary": {
@@ -14,7 +14,7 @@
       "id": "api_health",
       "required": true,
       "status": "pass",
-      "latencyMs": 436,
+      "latencyMs": 344,
       "details": "status=healthy",
       "url": "https://neuraminds-api-base-staging-v1.onrender.com/health"
     },
@@ -22,7 +22,7 @@
       "id": "api_health_detailed",
       "required": true,
       "status": "pass",
-      "latencyMs": 328,
+      "latencyMs": 385,
       "details": "http=200 db=healthy redis=healthy base=healthy solana=healthy",
       "url": "https://neuraminds-api-base-staging-v1.onrender.com/health/detailed"
     },
@@ -30,7 +30,7 @@
       "id": "api_evm_markets_public",
       "required": true,
       "status": "pass",
-      "latencyMs": 250,
+      "latencyMs": 702,
       "details": "marketCount=0",
       "url": "https://neuraminds-api-base-staging-v1.onrender.com/v1/evm/markets?limit=1"
     },
@@ -38,7 +38,7 @@
       "id": "web_health",
       "required": false,
       "status": "pass",
-      "latencyMs": 710,
+      "latencyMs": 312,
       "details": "http=200",
       "url": "https://neuraminds-web-base-staging-v4.onrender.com"
     }

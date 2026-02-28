@@ -117,12 +117,12 @@ fi
 if [[ "${STRICT}" -eq 1 ]]; then
   (
     cd "${ROOT_DIR}"
-    node scripts/production-loop-report.mjs --strict
+    node scripts/production-loop-report.mjs --strict --manifest-env="${ADDRESS_ENV}"
   )
 else
   (
     cd "${ROOT_DIR}"
-    node scripts/production-loop-report.mjs
+    node scripts/production-loop-report.mjs --manifest-env="${ADDRESS_ENV}"
   )
 fi
 

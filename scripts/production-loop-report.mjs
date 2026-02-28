@@ -12,6 +12,10 @@ const ROOT = path.resolve(__dirname, '..');
 const HOME = os.homedir();
 
 const strictMode = process.argv.includes('--strict');
+const manifestEnvArg = process.argv.find((arg) => arg.startsWith('--manifest-env='));
+const manifestEnvironment = manifestEnvArg
+  ? manifestEnvArg.split('=')[1].trim().toLowerCase()
+  : 'production';
 const reportDir = path.join(ROOT, 'docs', 'reports');
 const reportPath = path.join(reportDir, 'production-loop-report.json');
 const modeReportPath = path.join(
@@ -109,6 +113,7 @@ function hasAuthHardeningSignals(routeText) {
 function buildReport() {
   const gates = [];
   const chainMode = String(process.env.CHAIN_MODE || 'base').toLowerCase();
+  const manifestEnv = manifestEnvironment === 'staging' ? 'staging' : 'production';
   const expectsBase = chainMode === 'base' || chainMode === 'dual';
   const expectsSolana = chainMode === 'solana' || chainMode === 'dual';
   const legacyBrandCheckFiles = [
@@ -349,7 +354,7 @@ function buildReport() {
 
     const addressManifest = runCommand(
       'node',
-      ['scripts/validate-address-manifest.mjs', '--environment=production', '--write-report'],
+      ['scripts/validate-address-manifest.mjs', `--environment=${manifestEnv}`, '--write-report'],
       strictTimeoutMs
     );
     addGate(gates, {
