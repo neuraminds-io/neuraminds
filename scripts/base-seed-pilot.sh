@@ -54,7 +54,7 @@ Options:
   --rpc-url <url>                   RPC URL override
   --fixture <path>                  Market fixture JSON (default: config/pilot/base-mainnet-markets.json)
   --count <n>                       Number of markets to seed (default: 20)
-  --order-size <units>              Order size in collateral units (default: 100000 = 0.1 USDC)
+  --order-size <units>              Order size in collateral units (default: 100000 = 0.1 USDC, set 0 for markets-only seed)
   --yes-price-bps <bps>             YES order price bps (default: 5300)
   --no-price-bps <bps>              NO order price bps (default: 4700)
   --order-expiry-sec <seconds>      Order expiry delay (default: 2592000)
@@ -482,7 +482,7 @@ seed_vault_for_signer() {
 
 require_bin
 require_positive_int "$COUNT" "--count"
-require_positive_int "$ORDER_SIZE" "--order-size"
+require_non_negative_int "$ORDER_SIZE" "--order-size"
 require_positive_int "$YES_PRICE_BPS" "--yes-price-bps"
 require_positive_int "$NO_PRICE_BPS" "--no-price-bps"
 require_positive_int "$ORDER_EXPIRY_SEC" "--order-expiry-sec"
@@ -530,18 +530,34 @@ if [[ -z "$AGENT_OWNER_PRIVATE_KEY" && -z "$AGENT_OWNER_ACCOUNT" ]]; then
   AGENT_OWNER_PRIVATE_KEY="$YES_TRADER_PRIVATE_KEY"
   AGENT_OWNER_ACCOUNT="$YES_TRADER_ACCOUNT"
 fi
+if (( ORDER_SIZE == 0 )) && [[ -z "$YES_TRADER_PRIVATE_KEY" && -z "$YES_TRADER_ACCOUNT" ]]; then
+  YES_TRADER_PRIVATE_KEY="$CREATOR_PRIVATE_KEY"
+  YES_TRADER_ACCOUNT="$CREATOR_ACCOUNT"
+fi
+if (( ORDER_SIZE == 0 )) && [[ -z "$NO_TRADER_PRIVATE_KEY" && -z "$NO_TRADER_ACCOUNT" ]]; then
+  NO_TRADER_PRIVATE_KEY="$CREATOR_PRIVATE_KEY"
+  NO_TRADER_ACCOUNT="$CREATOR_ACCOUNT"
+fi
+if (( AGENT_COUNT == 0 )) && [[ -z "$AGENT_OWNER_PRIVATE_KEY" && -z "$AGENT_OWNER_ACCOUNT" ]]; then
+  AGENT_OWNER_PRIVATE_KEY="$CREATOR_PRIVATE_KEY"
+  AGENT_OWNER_ACCOUNT="$CREATOR_ACCOUNT"
+fi
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
   if [[ -z "$CREATOR_PRIVATE_KEY" && -z "$CREATOR_ACCOUNT" ]]; then
     echo "missing market creator signer" >&2
     exit 1
   fi
-  if [[ -z "$YES_TRADER_PRIVATE_KEY" && -z "$YES_TRADER_ACCOUNT" ]]; then
+  if (( ORDER_SIZE > 0 )) && [[ -z "$YES_TRADER_PRIVATE_KEY" && -z "$YES_TRADER_ACCOUNT" ]]; then
     echo "missing YES trader signer" >&2
     exit 1
   fi
-  if [[ -z "$NO_TRADER_PRIVATE_KEY" && -z "$NO_TRADER_ACCOUNT" ]]; then
+  if (( ORDER_SIZE > 0 )) && [[ -z "$NO_TRADER_PRIVATE_KEY" && -z "$NO_TRADER_ACCOUNT" ]]; then
     echo "missing NO trader signer" >&2
+    exit 1
+  fi
+  if (( AGENT_COUNT > 0 )) && [[ -z "$AGENT_OWNER_PRIVATE_KEY" && -z "$AGENT_OWNER_ACCOUNT" ]]; then
+    echo "missing agent owner signer" >&2
     exit 1
   fi
 fi
@@ -680,27 +696,33 @@ for ((i=0; i<MARKET_COUNT; i++)); do
   fi
   market_id="$current_market_count"
 
-  place_yes_tx="$(tx_send "$YES_TRADER_PRIVATE_KEY" "$YES_TRADER_ACCOUNT" "$ORDER_BOOK_ADDRESS" \
-    "placeOrder(uint256,bool,uint128,uint128,uint64)" \
-    "$market_id" "true" "$YES_PRICE_BPS" "$ORDER_SIZE" "$expiry_time")"
+  place_yes_tx=""
+  place_no_tx=""
+  yes_order_id="null"
+  no_order_id="null"
+  if (( ORDER_SIZE > 0 )); then
+    place_yes_tx="$(tx_send "$YES_TRADER_PRIVATE_KEY" "$YES_TRADER_ACCOUNT" "$ORDER_BOOK_ADDRESS" \
+      "placeOrder(uint256,bool,uint128,uint128,uint64)" \
+      "$market_id" "true" "$YES_PRICE_BPS" "$ORDER_SIZE" "$expiry_time")"
 
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    current_order_count=$((current_order_count + 1))
-  else
-    current_order_count="$(call_uint "$ORDER_BOOK_ADDRESS" "orderCount()(uint256)")"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      current_order_count=$((current_order_count + 1))
+    else
+      current_order_count="$(call_uint "$ORDER_BOOK_ADDRESS" "orderCount()(uint256)")"
+    fi
+    yes_order_id="$current_order_count"
+
+    place_no_tx="$(tx_send "$NO_TRADER_PRIVATE_KEY" "$NO_TRADER_ACCOUNT" "$ORDER_BOOK_ADDRESS" \
+      "placeOrder(uint256,bool,uint128,uint128,uint64)" \
+      "$market_id" "false" "$NO_PRICE_BPS" "$ORDER_SIZE" "$expiry_time")"
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      current_order_count=$((current_order_count + 1))
+    else
+      current_order_count="$(call_uint "$ORDER_BOOK_ADDRESS" "orderCount()(uint256)")"
+    fi
+    no_order_id="$current_order_count"
   fi
-  yes_order_id="$current_order_count"
-
-  place_no_tx="$(tx_send "$NO_TRADER_PRIVATE_KEY" "$NO_TRADER_ACCOUNT" "$ORDER_BOOK_ADDRESS" \
-    "placeOrder(uint256,bool,uint128,uint128,uint64)" \
-    "$market_id" "false" "$NO_PRICE_BPS" "$ORDER_SIZE" "$expiry_time")"
-
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    current_order_count=$((current_order_count + 1))
-  else
-    current_order_count="$(call_uint "$ORDER_BOOK_ADDRESS" "orderCount()(uint256)")"
-  fi
-  no_order_id="$current_order_count"
 
   jq -nc \
     --argjson index "$((i + 1))" \
