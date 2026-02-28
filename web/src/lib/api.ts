@@ -550,9 +550,10 @@ class ApiClient {
     return this.request(`/positions/${marketId}`);
   }
 
-  async claimWinnings(marketId: string): Promise<ClaimWinningsResponse> {
+  async claimWinnings(marketId: string, txSignature: string): Promise<ClaimWinningsResponse> {
     return this.request(`/positions/${marketId}/claim`, {
       method: 'POST',
+      body: JSON.stringify({ txSignature }),
     });
   }
 
@@ -737,6 +738,17 @@ class ApiClient {
     });
   }
 
+  async prepareBaseClaimFor(data: {
+    from?: string;
+    user: string;
+    marketId: number;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/positions/claim-for', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async prepareBaseMatchOrders(data: {
     from?: string;
     firstOrderId: number;
@@ -770,6 +782,52 @@ class ApiClient {
     agentId: number;
   }): Promise<PreparedEvmWriteTx> {
     return this.request('/evm/write/agents/execute', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBaseRegisterIdentity(data: {
+    from?: string;
+    wallet: string;
+    tier: number;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/identity/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBaseSetIdentityTier(data: {
+    from?: string;
+    wallet: string;
+    tier: number;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/identity/tier', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBaseSetIdentityActive(data: {
+    from?: string;
+    wallet: string;
+    active: boolean;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/identity/active', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBaseSubmitReputationOutcome(data: {
+    from?: string;
+    wallet: string;
+    success: boolean;
+    notionalMicrousdc: string;
+    confidenceWeightBps: number;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/reputation/outcome', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -810,6 +868,11 @@ class ApiClient {
     return res.nonce;
   }
 
+  async getSolanaNonce(): Promise<string> {
+    const res = await this.request<{ nonce: string }>('/auth/solana/nonce', {}, true);
+    return res.nonce;
+  }
+
   async login(
     wallet: string,
     signature: string,
@@ -832,6 +895,27 @@ class ApiClient {
     if (!res.ok) {
       const data = await res.json();
       throw new ApiError(res.status, data.error || 'SIWE login failed');
+    }
+
+    const data = await res.json();
+    this.setAccessToken(data.accessToken, data.expiresAt);
+    return data;
+  }
+
+  async loginSolana(
+    wallet: string,
+    signature: string,
+    message: string
+  ): Promise<{ accessToken: string; expiresAt: number }> {
+    const res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallet, signature, message, flow: 'solana' }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new ApiError(res.status, data.error || 'Solana login failed');
     }
 
     const data = await res.json();

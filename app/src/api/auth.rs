@@ -3,8 +3,11 @@ use crate::api::{
     jwt::{TokenPair, UserRole},
     ApiError,
 };
+use crate::services::database::ComplianceDecisionEntry;
 use crate::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
+use base64::Engine;
+use ed25519_dalek::{Signature as Ed25519Signature, Verifier, VerifyingKey};
 use http::uri::Authority;
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
@@ -16,6 +19,8 @@ use time::OffsetDateTime;
 const MESSAGE_EXPIRATION_SECS: u64 = 300;
 const NONCE_CLEANUP_AGE_SECS: u64 = 600;
 const EVM_ADDRESS_LEN: usize = 42;
+const SOLANA_PUBKEY_BYTES_LEN: usize = 32;
+const SOLANA_SIGNATURE_BYTES_LEN: usize = 64;
 
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUser {
@@ -54,32 +59,92 @@ pub async fn extract_authenticated_user(
         return Err(ApiError::unauthorized("Token revoked"));
     }
 
+    let wallet = claims.sub.to_ascii_lowercase();
+    if is_write_method(req.method())
+        && state
+            .config
+            .sanctions_blocked_addresses
+            .iter()
+            .any(|blocked| blocked == &wallet)
+    {
+        let request_id = req
+            .headers()
+            .get("x-request-id")
+            .and_then(|value| value.to_str().ok());
+        let route = req.path().to_string();
+        let method = req.method().as_str().to_string();
+        let metadata = serde_json::json!({
+            "source": "sanctions_blocked_addresses",
+        });
+        let decision = ComplianceDecisionEntry {
+            request_id,
+            wallet: Some(wallet.as_str()),
+            country_code: None,
+            action: "write",
+            route: route.as_str(),
+            method: method.as_str(),
+            decision: "deny",
+            reason_code: "SANCTIONS_BLOCKED",
+            metadata,
+        };
+        let _ = state.db.record_compliance_decision(&decision).await;
+
+        return Err(ApiError::forbidden(
+            "wallet is restricted under sanctions policy",
+        ));
+    }
+
     Ok(AuthenticatedUser {
-        wallet_address: claims.sub,
+        wallet_address: wallet,
     })
 }
 
-async fn check_and_record_siwe_nonce_redis(
+fn is_write_method(method: &actix_web::http::Method) -> bool {
+    matches!(
+        *method,
+        actix_web::http::Method::POST
+            | actix_web::http::Method::PUT
+            | actix_web::http::Method::PATCH
+            | actix_web::http::Method::DELETE
+    )
+}
+
+async fn check_and_record_nonce_redis(
     redis: &crate::services::RedisService,
+    prefix: &str,
     nonce: &str,
 ) -> Result<(), ApiError> {
-    let siwe_nonce = format!("siwe:{}", nonce);
+    let scoped_nonce = format!("{}:{}", prefix, nonce);
     let was_new = redis
-        .check_and_record_nonce(&siwe_nonce, NONCE_CLEANUP_AGE_SECS)
+        .check_and_record_nonce(&scoped_nonce, NONCE_CLEANUP_AGE_SECS)
         .await
         .map_err(|e| {
-            log::error!("Redis SIWE nonce check failed: {}", e);
+            log::error!("Redis nonce check failed: {}", e);
             ApiError::internal("Nonce verification failed")
         })?;
 
     if !was_new {
-        log::warn!("Replay attack detected: SIWE nonce {} already used", nonce);
+        log::warn!("Replay attack detected: nonce {} already used", nonce);
         return Err(ApiError::unauthorized(
             "Nonce already used (possible replay attack)",
         ));
     }
 
     Ok(())
+}
+
+async fn check_and_record_siwe_nonce_redis(
+    redis: &crate::services::RedisService,
+    nonce: &str,
+) -> Result<(), ApiError> {
+    check_and_record_nonce_redis(redis, "siwe", nonce).await
+}
+
+async fn check_and_record_solana_nonce_redis(
+    redis: &crate::services::RedisService,
+    nonce: &str,
+) -> Result<(), ApiError> {
+    check_and_record_nonce_redis(redis, "solana", nonce).await
 }
 
 pub fn generate_nonce() -> String {
@@ -118,6 +183,13 @@ pub struct SiweLoginRequest {
     pub signature: String,
 }
 
+#[derive(Deserialize)]
+pub struct SolanaLoginRequest {
+    pub wallet: String,
+    pub message: String,
+    pub signature: String,
+}
+
 pub async fn get_nonce() -> Result<HttpResponse, ApiError> {
     let nonce = generate_nonce();
     let expires_at = SystemTime::now()
@@ -130,6 +202,10 @@ pub async fn get_nonce() -> Result<HttpResponse, ApiError> {
 }
 
 pub async fn get_siwe_nonce() -> Result<HttpResponse, ApiError> {
+    get_nonce().await
+}
+
+pub async fn get_solana_nonce() -> Result<HttpResponse, ApiError> {
     get_nonce().await
 }
 
@@ -212,6 +288,45 @@ pub async fn siwe_login(
     let refresh_token = state.jwt.generate_refresh_token(&wallet, role)?;
 
     log::info!("SIWE user logged in: {} with role {:?}", wallet, role);
+
+    Ok(HttpResponse::Ok().json(TokenPair::new(access_token, refresh_token)))
+}
+
+pub async fn solana_login(
+    http_req: HttpRequest,
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<SolanaLoginRequest>,
+) -> Result<HttpResponse, ApiError> {
+    if !state.config.solana_enabled {
+        return Err(ApiError::bad_request(
+            "SOLANA_DISABLED",
+            "Solana auth is disabled",
+        ));
+    }
+
+    check_auth_rate_limit(&http_req, &state.redis).await?;
+
+    let req = body.into_inner();
+    let wallet = normalize_solana_address(req.wallet.as_str())?;
+    let message_nonce = validate_solana_signin_message(
+        req.message.as_str(),
+        wallet.as_str(),
+        state.config.siwe_domain.as_str(),
+    )?;
+    let signature = decode_solana_signature(req.signature.as_str())?;
+    let verifying_key = decode_solana_public_key(wallet.as_str())?;
+
+    verifying_key
+        .verify(req.message.as_bytes(), &signature)
+        .map_err(|_| ApiError::unauthorized("Solana signature verification failed"))?;
+
+    check_and_record_solana_nonce_redis(&state.redis, message_nonce.as_str()).await?;
+
+    let role = determine_user_role(wallet.as_str(), &state).await;
+    let access_token = state.jwt.generate_access_token(wallet.as_str(), role)?;
+    let refresh_token = state.jwt.generate_refresh_token(wallet.as_str(), role)?;
+
+    log::info!("Solana user logged in: {} with role {:?}", wallet, role);
 
     Ok(HttpResponse::Ok().json(TokenPair::new(access_token, refresh_token)))
 }
@@ -335,6 +450,152 @@ async fn determine_user_role(wallet: &str, _state: &web::Data<Arc<AppState>>) ->
     }
 }
 
+fn normalize_solana_address(wallet: &str) -> Result<String, ApiError> {
+    let trimmed = wallet.trim();
+    if trimmed.is_empty() {
+        return Err(ApiError::bad_request(
+            "INVALID_WALLET",
+            "Wallet is required",
+        ));
+    }
+
+    let bytes = bs58::decode(trimmed)
+        .into_vec()
+        .map_err(|_| ApiError::bad_request("INVALID_WALLET", "Invalid Solana wallet format"))?;
+    if bytes.len() != SOLANA_PUBKEY_BYTES_LEN {
+        return Err(ApiError::bad_request(
+            "INVALID_WALLET",
+            "Invalid Solana wallet length",
+        ));
+    }
+
+    Ok(trimmed.to_string())
+}
+
+fn decode_solana_public_key(wallet: &str) -> Result<VerifyingKey, ApiError> {
+    let bytes = bs58::decode(wallet)
+        .into_vec()
+        .map_err(|_| ApiError::bad_request("INVALID_WALLET", "Invalid Solana wallet format"))?;
+    let key_bytes: [u8; SOLANA_PUBKEY_BYTES_LEN] = bytes.try_into().map_err(|_| {
+        ApiError::bad_request("INVALID_WALLET", "Invalid Solana wallet public key bytes")
+    })?;
+
+    VerifyingKey::from_bytes(&key_bytes)
+        .map_err(|_| ApiError::bad_request("INVALID_WALLET", "Invalid Solana wallet public key"))
+}
+
+fn decode_solana_signature(signature: &str) -> Result<Ed25519Signature, ApiError> {
+    let trimmed = signature.trim();
+    if trimmed.is_empty() {
+        return Err(ApiError::bad_request(
+            "INVALID_SIGNATURE",
+            "signature is required",
+        ));
+    }
+
+    let decoded = if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(trimmed) {
+        bytes
+    } else {
+        bs58::decode(trimmed).into_vec().map_err(|_| {
+            ApiError::bad_request("INVALID_SIGNATURE", "signature must be base64 or base58")
+        })?
+    };
+
+    if decoded.len() != SOLANA_SIGNATURE_BYTES_LEN {
+        return Err(ApiError::bad_request(
+            "INVALID_SIGNATURE",
+            "signature must be 64-byte Ed25519 signature",
+        ));
+    }
+
+    Ed25519Signature::from_slice(&decoded)
+        .map_err(|_| ApiError::bad_request("INVALID_SIGNATURE", "invalid signature bytes"))
+}
+
+fn message_line_value<'a>(message: &'a str, label: &str) -> Option<&'a str> {
+    message
+        .lines()
+        .find_map(|line| line.strip_prefix(label).map(str::trim))
+}
+
+fn validate_solana_signin_message(
+    message: &str,
+    wallet: &str,
+    expected_domain: &str,
+) -> Result<String, ApiError> {
+    if message.len() > 4096 {
+        return Err(ApiError::bad_request(
+            "INVALID_MESSAGE",
+            "Solana signin message too large",
+        ));
+    }
+
+    let lines = message.lines().collect::<Vec<_>>();
+    if lines.len() < 8 {
+        return Err(ApiError::bad_request(
+            "INVALID_MESSAGE",
+            "Malformed Solana signin message",
+        ));
+    }
+
+    let expected_prefix = format!(
+        "{} wants you to sign in with your Solana account:",
+        expected_domain
+    );
+    if lines[0].trim() != expected_prefix {
+        return Err(ApiError::unauthorized("Solana signin domain mismatch"));
+    }
+    if lines[1].trim() != wallet {
+        return Err(ApiError::unauthorized(
+            "Wallet address mismatch in Solana signin message",
+        ));
+    }
+    if !message.contains("Sign in to neuraminds") {
+        return Err(ApiError::bad_request(
+            "INVALID_MESSAGE",
+            "Missing Solana signin statement",
+        ));
+    }
+
+    if let Some(chain) = message_line_value(message, "Chain:") {
+        if chain.to_ascii_lowercase() != "solana" {
+            return Err(ApiError::bad_request(
+                "INVALID_MESSAGE",
+                "Chain must be solana in Solana signin message",
+            ));
+        }
+    }
+
+    let nonce = message_line_value(message, "Nonce:").ok_or_else(|| {
+        ApiError::bad_request("INVALID_MESSAGE", "Nonce missing in signin message")
+    })?;
+    if nonce.is_empty() || nonce.len() > 128 || !nonce.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err(ApiError::bad_request(
+            "INVALID_MESSAGE",
+            "Invalid nonce in Solana signin message",
+        ));
+    }
+
+    let issued_at = message_line_value(message, "Issued At:").ok_or_else(|| {
+        ApiError::bad_request("INVALID_MESSAGE", "Issued At missing in signin message")
+    })?;
+    let issued_at =
+        OffsetDateTime::parse(issued_at, &time::format_description::well_known::Rfc3339)
+            .map_err(|_| ApiError::bad_request("INVALID_MESSAGE", "Invalid Issued At timestamp"))?;
+    let now = OffsetDateTime::now_utc();
+    if issued_at > now + time::Duration::seconds(30) {
+        return Err(ApiError::bad_request(
+            "INVALID_MESSAGE",
+            "Issued At cannot be in the future",
+        ));
+    }
+    if now - issued_at > time::Duration::seconds(MESSAGE_EXPIRATION_SECS as i64) {
+        return Err(ApiError::unauthorized("Solana signin message expired"));
+    }
+
+    Ok(nonce.to_string())
+}
+
 fn validate_evm_address(address: &str) -> Result<(), ApiError> {
     if address.len() != EVM_ADDRESS_LEN || !address.starts_with("0x") {
         return Err(ApiError::bad_request(
@@ -415,6 +676,20 @@ fn decode_hex_signature(signature: &str) -> Result<Vec<u8>, ApiError> {
 mod tests {
     use super::*;
 
+    fn build_solana_signin_message(
+        domain: &str,
+        wallet: &str,
+        nonce: &str,
+        issued_at: OffsetDateTime,
+    ) -> String {
+        let issued_at = issued_at
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap();
+        format!(
+            "{domain} wants you to sign in with your Solana account:\n{wallet}\n\nSign in to neuraminds\n\nURI: https://{domain}\nVersion: 1\nChain: solana\nNonce: {nonce}\nIssued At: {issued_at}"
+        )
+    }
+
     #[test]
     fn test_validate_evm_address_valid() {
         let valid = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
@@ -474,5 +749,41 @@ mod tests {
         use std::collections::HashSet;
         let nonces: HashSet<String> = (0..100).map(|_| generate_nonce()).collect();
         assert_eq!(nonces.len(), 100, "All generated nonces should be unique");
+    }
+
+    #[test]
+    fn test_validate_solana_signin_message_valid() {
+        let domain = "localhost:3000";
+        let wallet = "11111111111111111111111111111111";
+        let nonce = "abc123ef45";
+        let message = build_solana_signin_message(domain, wallet, nonce, OffsetDateTime::now_utc());
+        let parsed =
+            validate_solana_signin_message(message.as_str(), wallet, domain).expect("valid signin");
+        assert_eq!(parsed, nonce);
+    }
+
+    #[test]
+    fn test_validate_solana_signin_message_rejects_domain_mismatch() {
+        let wallet = "11111111111111111111111111111111";
+        let message = build_solana_signin_message(
+            "localhost:3000",
+            wallet,
+            "abc123ef45",
+            OffsetDateTime::now_utc(),
+        );
+        assert!(validate_solana_signin_message(message.as_str(), wallet, "example.com").is_err());
+    }
+
+    #[test]
+    fn test_validate_solana_signin_message_rejects_expired_timestamp() {
+        let domain = "localhost:3000";
+        let wallet = "11111111111111111111111111111111";
+        let message = build_solana_signin_message(
+            domain,
+            wallet,
+            "abc123ef45",
+            OffsetDateTime::now_utc() - time::Duration::seconds(601),
+        );
+        assert!(validate_solana_signin_message(message.as_str(), wallet, domain).is_err());
     }
 }

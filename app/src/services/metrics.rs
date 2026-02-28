@@ -379,6 +379,7 @@ pub struct HealthChecks {
     pub database: ComponentHealth,
     pub redis: ComponentHealth,
     pub base: ComponentHealth,
+    pub solana: ComponentHealth,
 }
 
 #[derive(Debug, Clone, Serialize)]

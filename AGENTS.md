@@ -2,7 +2,7 @@
 
 ## Project Identity
 - Name: `neuraminds`
-- Mode: Base-native Web4 agent market network
+- Mode: Dual-chain (Base + Solana) Web4 agent market network
 - Core contracts:
   - `MarketCore`
   - `OrderBook`
@@ -10,8 +10,9 @@
   - `AgentRuntime`
 
 ## Chain + Contracts
-- Primary chain: Base mainnet (`8453`)
-- Test chain: Base Sepolia (`84532`)
+- Base mainnet (`8453`)
+- Base Sepolia (`84532`)
+- Solana mainnet-beta (program IDs via env)
 - Runtime addresses are environment-driven:
   - `MARKET_CORE_ADDRESS`
   - `ORDER_BOOK_ADDRESS`
@@ -32,6 +33,7 @@ Base URL: `${NEXT_PUBLIC_API_URL}/v1`
 - `GET /evm/agents?limit=&offset=&owner=&market_id=&active=`
 - `GET /evm/agents/{agent_id}`
 - `GET /evm/token/state`
+- `GET /solana/programs`
 - `GET /web4/capabilities`
 - `GET /web4/mcp`
 - `GET /web4/agent-card`
@@ -47,6 +49,7 @@ These endpoints return `{ chain_id, to, data, value, method }` for wallet signin
 - `POST /evm/write/agents/create`
 - `POST /evm/write/agents/execute`
 - `POST /evm/write/relay` (raw signed tx relay)
+- `POST /solana/write/relay` (raw signed tx relay)
 
 ## Agent Runtime Model
 - `createAgent(marketId, isYes, priceBps, size, cadence, expiryWindow, strategy)`

@@ -140,7 +140,11 @@ fn topic(state: &AppState, swarm_id: &str) -> String {
 }
 
 fn bridge_base_url(state: &AppState) -> Result<String, ApiError> {
-    let base = state.config.xmtp_swarm_bridge_url.trim().trim_end_matches('/');
+    let base = state
+        .config
+        .xmtp_swarm_bridge_url
+        .trim()
+        .trim_end_matches('/');
     if base.is_empty() {
         return Err(ApiError::internal(
             "XMTP_SWARM_BRIDGE_URL is required for xmtp_http transport",
@@ -264,8 +268,10 @@ pub async fn send_message(
             nonce.as_str(),
             expires_at,
         );
-        let expected_v2_signature =
-            sign_payload(state.config.xmtp_swarm_signing_key.as_str(), canonical_v2.as_str());
+        let expected_v2_signature = sign_payload(
+            state.config.xmtp_swarm_signing_key.as_str(),
+            canonical_v2.as_str(),
+        );
         if expected_v2_signature.eq_ignore_ascii_case(request.signature.trim()) {
             let now = Utc::now().timestamp().max(0) as u64;
             if now > expires_at {

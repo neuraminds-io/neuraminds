@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-02-26T23:43:19.637Z",
+  "generatedAt": "2026-02-27T23:03:47.274Z",
   "mode": "fast",
   "summary": {
-    "total": 7,
-    "passed": 4,
+    "total": 14,
+    "passed": 11,
     "failed": 0,
     "skipped": 3,
     "requiredFailed": 0,
@@ -33,6 +33,48 @@
       "required": true,
       "status": "pass",
       "details": "backend auth rate-limit helpers present"
+    },
+    {
+      "id": "admin_dashboard_live_mode",
+      "required": true,
+      "status": "pass",
+      "details": "admin dashboard no longer uses mock moderation handlers"
+    },
+    {
+      "id": "blindfold_placeholder_removed",
+      "required": true,
+      "status": "pass",
+      "details": "blindfold client no longer ships placeholder integration text"
+    },
+    {
+      "id": "mcp_stdio_process_present",
+      "required": true,
+      "status": "pass",
+      "details": "stdio mcp process script and npm wiring present"
+    },
+    {
+      "id": "xmtp_bridge_transport_present",
+      "required": true,
+      "status": "pass",
+      "details": "xmtp http bridge process and backend transport wiring present"
+    },
+    {
+      "id": "solana_program_sources_present",
+      "required": true,
+      "status": "pass",
+      "details": "anchor workspace and core Solana program sources present"
+    },
+    {
+      "id": "solana_api_surface_present",
+      "required": true,
+      "status": "pass",
+      "details": "solana program metadata route is registered"
+    },
+    {
+      "id": "synthetic_monitor_chain_mode_support",
+      "required": true,
+      "status": "pass",
+      "details": "synthetic monitor checks honor chain mode and include Solana probe"
     },
     {
       "id": "web_build",

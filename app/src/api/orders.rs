@@ -19,20 +19,24 @@ use crate::AppState;
 const IDEMPOTENCY_KEY_HEADER: &str = "idempotency-key";
 
 fn ensure_order_read_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
-    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
+    let evm_reads = state.config.evm_enabled && state.config.evm_reads_enabled;
+    let solana_reads = state.config.solana_enabled && state.config.solana_reads_enabled;
+    if !evm_reads && !solana_reads {
         return Err(ApiError::bad_request(
-            "EVM_READ_PATH_DISABLED",
-            "EVM order read path is disabled",
+            "CHAIN_READ_PATH_DISABLED",
+            "Order read path is disabled for all configured chains",
         ));
     }
     Ok(())
 }
 
 fn ensure_order_write_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
-    if !state.config.evm_enabled || !state.config.evm_writes_enabled {
+    let evm_writes = state.config.evm_enabled && state.config.evm_writes_enabled;
+    let solana_writes = state.config.solana_enabled && state.config.solana_writes_enabled;
+    if !evm_writes && !solana_writes {
         return Err(ApiError::bad_request(
-            "EVM_WRITE_PATH_DISABLED",
-            "EVM order write path is disabled",
+            "CHAIN_WRITE_PATH_DISABLED",
+            "Order write path is disabled for all configured chains",
         ));
     }
     Ok(())

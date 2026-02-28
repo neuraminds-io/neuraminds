@@ -3,6 +3,7 @@ use actix_governor::{Governor, GovernorConfigBuilder};
 use actix_web::{http::header, middleware as actix_middleware, web, App, HttpServer};
 use dotenvy::dotenv;
 use log::{info, warn};
+use serde_json::json;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -107,12 +108,28 @@ async fn main() -> std::io::Result<()> {
         let market_core = config.market_core_address.clone();
         let order_book = config.order_book_address.clone();
         let indexer = evm_indexer.clone();
+        let db = app_state.db.clone();
+        let rpc = app_state.evm_rpc.clone();
+        let lookback_blocks = config.indexer_lookback_blocks;
+        let confirmations = config.indexer_confirmations;
 
         if market_core.is_empty() || order_book.is_empty() {
             warn!(
                 "Skipping EVM indexer start: MARKET_CORE_ADDRESS or ORDER_BOOK_ADDRESS is missing"
             );
         } else {
+            match db.get_chain_sync_cursor("evm_indexer_main").await {
+                Ok(Some(cursor)) => {
+                    indexer.set_last_synced_block(cursor.last_block).await;
+                    info!(
+                        "Restored EVM indexer cursor from DB at block {}",
+                        cursor.last_block
+                    );
+                }
+                Ok(None) => {}
+                Err(err) => warn!("Failed to restore EVM indexer cursor: {}", err),
+            }
+
             info!("Starting EVM log indexer background loop");
             tokio::spawn(async move {
                 const TOPICS: [&str; 6] = [
@@ -125,11 +142,44 @@ async fn main() -> std::io::Result<()> {
                 ];
 
                 loop {
-                    if let Err(err) = indexer
-                        .sync(&market_core, &order_book, 25_000, &TOPICS)
+                    let latest_block = match rpc.eth_block_number().await {
+                        Ok(block) => block,
+                        Err(err) => {
+                            warn!("Failed to fetch latest Base block for indexer: {}", err);
+                            tokio::time::sleep(tokio::time::Duration::from_secs(20)).await;
+                            continue;
+                        }
+                    };
+                    let target_block = latest_block.saturating_sub(confirmations);
+
+                    match indexer
+                        .sync(
+                            &market_core,
+                            &order_book,
+                            lookback_blocks,
+                            &TOPICS,
+                            Some(target_block),
+                        )
                         .await
                     {
-                        warn!("EVM indexer sync failed: {}", err);
+                        Ok(log_count) => {
+                            let last_synced = indexer.last_synced_block().await;
+                            let meta = json!({
+                                "latestBlock": latest_block,
+                                "targetBlock": target_block,
+                                "logsIndexed": log_count,
+                                "updatedAt": chrono::Utc::now().to_rfc3339(),
+                            });
+                            if let Err(err) = db
+                                .upsert_chain_sync_cursor("evm_indexer_main", last_synced, meta)
+                                .await
+                            {
+                                warn!("Failed to persist EVM indexer cursor: {}", err);
+                            }
+                        }
+                        Err(err) => {
+                            warn!("EVM indexer sync failed: {}", err);
+                        }
                     }
                     tokio::time::sleep(tokio::time::Duration::from_secs(20)).await;
                 }
@@ -274,6 +324,8 @@ async fn main() -> std::io::Result<()> {
                             .route("/login", web::post().to(api::auth::login))
                             .route("/siwe/nonce", web::get().to(api::auth::get_siwe_nonce))
                             .route("/siwe/login", web::post().to(api::auth::siwe_login))
+                            .route("/solana/nonce", web::get().to(api::auth::get_solana_nonce))
+                            .route("/solana/login", web::post().to(api::auth::solana_login))
                             .route("/refresh", web::post().to(api::auth::refresh_token))
                             .route("/logout", web::post().to(api::auth::logout)),
                     )
@@ -291,6 +343,43 @@ async fn main() -> std::io::Result<()> {
                         web::scope("/evm")
                             .route("/markets", web::get().to(api::evm::get_base_markets))
                             .route("/agents", web::get().to(api::evm::get_base_agents))
+                            .route(
+                                "/payouts/candidates",
+                                web::get().to(api::evm::get_base_payout_candidates),
+                            )
+                            .route(
+                                "/matcher/health",
+                                web::get().to(api::evm::get_matcher_health),
+                            )
+                            .route("/matcher/stats", web::get().to(api::evm::get_matcher_stats))
+                            .route("/matcher/pause", web::post().to(api::evm::pause_matcher))
+                            .route("/matcher/resume", web::post().to(api::evm::resume_matcher))
+                            .route(
+                                "/matcher/report",
+                                web::post().to(api::evm::report_matcher_cycle),
+                            )
+                            .route(
+                                "/payouts/health",
+                                web::get().to(api::evm::get_payout_health),
+                            )
+                            .route(
+                                "/payouts/backlog",
+                                web::get().to(api::evm::get_payout_backlog),
+                            )
+                            .route("/payouts/jobs", web::get().to(api::evm::get_payout_jobs))
+                            .route(
+                                "/payouts/report",
+                                web::post().to(api::evm::report_payout_job),
+                            )
+                            .route(
+                                "/indexer/health",
+                                web::get().to(api::evm::get_indexer_health),
+                            )
+                            .route("/indexer/lag", web::get().to(api::evm::get_indexer_lag))
+                            .route(
+                                "/indexer/backfill",
+                                web::post().to(api::evm::trigger_indexer_backfill),
+                            )
                             .route(
                                 "/agents/{agent_id}",
                                 web::get().to(api::evm::get_base_agent),
@@ -338,6 +427,10 @@ async fn main() -> std::io::Result<()> {
                                         web::post().to(api::evm::prepare_claim_write),
                                     )
                                     .route(
+                                        "/positions/claim-for",
+                                        web::post().to(api::evm::prepare_claim_for_write),
+                                    )
+                                    .route(
                                         "/agents/create",
                                         web::post().to(api::evm::prepare_create_agent_write),
                                     )
@@ -346,16 +439,57 @@ async fn main() -> std::io::Result<()> {
                                         web::post().to(api::evm::prepare_execute_agent_write),
                                     )
                                     .route(
+                                        "/identity/register",
+                                        web::post()
+                                            .to(api::evm::prepare_erc8004_register_identity_write),
+                                    )
+                                    .route(
+                                        "/identity/tier",
+                                        web::post().to(api::evm::prepare_erc8004_set_tier_write),
+                                    )
+                                    .route(
+                                        "/identity/active",
+                                        web::post().to(api::evm::prepare_erc8004_set_active_write),
+                                    )
+                                    .route(
+                                        "/reputation/outcome",
+                                        web::post()
+                                            .to(api::evm::prepare_erc8004_submit_outcome_write),
+                                    )
+                                    .route(
                                         "/relay",
                                         web::post().to(api::evm::relay_raw_transaction),
                                     ),
                             ),
                     )
                     .service(
+                        web::scope("/compliance")
+                            .route(
+                                "/policy",
+                                web::get().to(api::compliance::get_compliance_policy),
+                            )
+                            .route(
+                                "/decision",
+                                web::post().to(api::compliance::create_compliance_decision),
+                            ),
+                    )
+                    .service(
+                        web::scope("/solana")
+                            .route("/programs", web::get().to(api::solana::get_solana_programs))
+                            .service(web::scope("/write").route(
+                                "/relay",
+                                web::post().to(api::solana::relay_raw_transaction),
+                            )),
+                    )
+                    .service(
                         web::scope("/web4")
                             .route(
                                 "/capabilities",
                                 web::get().to(api::web4::get_web4_capabilities),
+                            )
+                            .route(
+                                "/runtime/health",
+                                web::get().to(api::web4::get_web4_runtime_health),
                             )
                             .route("/mcp", web::get().to(api::web4::get_mcp_manifest))
                             .route("/mcp", web::post().to(api::web4::handle_mcp_jsonrpc))

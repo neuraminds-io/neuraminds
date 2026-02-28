@@ -23,11 +23,12 @@ function readJson(relPath) {
 
 function gateStatus(report) {
   if (!report) return 'missing';
-  if (report.summary?.ready === true) return 'pass';
+  if (report.summary?.ready === true || report.ready === true) return 'pass';
   return 'fail';
 }
 
 const launchConfig = readJson('docs/reports/launch-config-report.json');
+const addressManifest = readJson('docs/reports/address-manifest-report.json');
 const fastGates = readJson('docs/reports/production-loop-report-fast.json')
   ?? readJson('docs/reports/production-loop-report.json');
 const strictGates = readJson('docs/reports/production-loop-report-strict.json');
@@ -39,6 +40,13 @@ const checks = [
     details: launchConfig
       ? `ready=${launchConfig.summary?.ready === true}`
       : 'missing docs/reports/launch-config-report.json',
+  },
+  {
+    id: 'address_manifest',
+    status: gateStatus(addressManifest),
+    details: addressManifest
+      ? `ready=${addressManifest.ready === true}`
+      : 'missing docs/reports/address-manifest-report.json',
   },
   {
     id: 'fast_gates',

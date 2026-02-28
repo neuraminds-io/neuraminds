@@ -1,9 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { waitForTransactionReceipt } from '@wagmi/core';
+import { useConfig, useWalletClient } from 'wagmi';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import type { PreparedWalletTransaction } from '@/types';
+import { useBaseWallet } from '@/hooks/useBaseWallet';
 
 interface WithdrawFormProps {
   availableBalance: number;
@@ -16,18 +20,37 @@ function formatUsdc(amount: number): string {
 
 export function WithdrawForm({ availableBalance, onSuccess }: WithdrawFormProps) {
   const [amount, setAmount] = useState('');
-  const [destination, setDestination] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const wallet = useBaseWallet();
+  const config = useConfig();
+  const { data: walletClient } = useWalletClient();
 
   const amountNumber = parseFloat(amount) || 0;
   const amountLamports = Math.floor(amountNumber * 1_000_000);
-  const fee = Math.max(amountLamports / 1000, 100_000); // 0.1% min 0.1 USDC
-  const netAmount = amountLamports - fee;
+  const fee = 0;
+  const netAmount = amountLamports;
 
-  const isValidDestination = (address: string) => {
-    return /^0x[a-fA-F0-9]{40}$/.test(address);
+  const sendPreparedTransactions = async (
+    txs: PreparedWalletTransaction[],
+    account: `0x${string}`
+  ): Promise<`0x${string}`> => {
+    let finalHash: `0x${string}` | null = null;
+    for (const tx of txs) {
+      const hash = await walletClient!.sendTransaction({
+        account,
+        to: tx.to as `0x${string}`,
+        data: tx.data,
+        value: BigInt(tx.value),
+      });
+      await waitForTransactionReceipt(config, { hash });
+      finalHash = hash;
+    }
+    if (!finalHash) {
+      throw new Error('No transactions were submitted');
+    }
+    return finalHash;
   };
 
   const handleWithdraw = async () => {
@@ -41,26 +64,47 @@ export function WithdrawForm({ availableBalance, onSuccess }: WithdrawFormProps)
       return;
     }
 
-    if (!destination || !isValidDestination(destination)) {
-      setError('Enter a valid Base wallet address (0x...)');
-      return;
-    }
-
     setLoading(true);
     setError(null);
     setSuccess(null);
 
     try {
+      if (!wallet.isConnected || !wallet.address) {
+        throw new Error('Connect your Base wallet before withdrawing');
+      }
+      if (!walletClient) throw new Error('Wallet client unavailable');
+      await wallet.ensureBaseChain();
+
+      const prepared = await api.withdraw({
+        amount: amountLamports,
+        destination: wallet.address,
+        mode: 'prepare',
+      });
+      if (!prepared.intentId || !prepared.preparedTransactions?.length) {
+        throw new Error('Withdraw preparation failed: missing intent or transactions');
+      }
+      const txHash = await sendPreparedTransactions(
+        prepared.preparedTransactions,
+        wallet.address as `0x${string}`
+      );
       const response = await api.withdraw({
         amount: amountLamports,
-        destination,
+        destination: wallet.address,
+        mode: 'confirm',
+        intentId: prepared.intentId,
+        txSignature: txHash,
       });
 
-      setSuccess(
-        `Withdrawal successful! ${formatUsdc(response.netAmount)} USDC sent. TX: ${response.transactionId.slice(0, 8)}...`
-      );
+      if (response.status === 'confirmed') {
+        setSuccess(
+          `Withdrawal confirmed onchain. ${formatUsdc(response.netAmount)} USDC sent.`
+        );
+      } else {
+        setSuccess(
+          `Withdrawal submitted and pending confirmation.`
+        );
+      }
       setAmount('');
-      setDestination('');
       onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Withdrawal failed');
@@ -111,18 +155,16 @@ export function WithdrawForm({ availableBalance, onSuccess }: WithdrawFormProps)
         </div>
       </div>
 
-      {/* Destination Address */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-text-secondary">
           Destination Wallet
         </label>
-        <Input
-          type="text"
-          value={destination}
-          onChange={(e) => setDestination(e.target.value)}
-          placeholder="0x wallet address"
-          className="font-mono text-sm"
-        />
+        <div className="p-3 border border-border font-mono text-sm text-text-primary">
+          {wallet.address || 'Connect wallet'}
+        </div>
+        <p className="text-xs text-text-secondary">
+          Withdraw flow only supports your authenticated wallet in v1.
+        </p>
       </div>
 
       {/* Fee Breakdown */}
@@ -133,7 +175,7 @@ export function WithdrawForm({ availableBalance, onSuccess }: WithdrawFormProps)
             <span className="text-text-primary">${amountNumber.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-text-secondary">Network Fee (0.1%)</span>
+            <span className="text-text-secondary">Network Fee</span>
             <span className="text-text-secondary">-${formatUsdc(fee)}</span>
           </div>
           <div className="border-t border-border pt-2 mt-2">
@@ -163,16 +205,23 @@ export function WithdrawForm({ availableBalance, onSuccess }: WithdrawFormProps)
         variant="primary"
         size="lg"
         className="w-full"
-        onClick={handleWithdraw}
-        loading={loading}
+        onClick={() => {
+          if (wallet.isConnected) {
+            void handleWithdraw();
+            return;
+          }
+          setError(null);
+          void wallet.connect().catch((err) => {
+            setError(err instanceof Error ? err.message : 'Wallet connection failed');
+          });
+        }}
+        loading={loading || wallet.isConnecting || wallet.isSwitchingChain}
         disabled={
-          amountLamports < 1_000_000 ||
-          amountLamports > availableBalance ||
-          !destination ||
-          !isValidDestination(destination)
+          wallet.isConnected &&
+          (amountLamports < 1_000_000 || amountLamports > availableBalance)
         }
       >
-        Withdraw USDC
+        {wallet.isConnected ? 'Withdraw from Vault' : 'Connect Base Wallet'}
       </Button>
     </div>
   );

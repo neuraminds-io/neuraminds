@@ -121,7 +121,7 @@ function requireMutatingRequestGuards(request: NextRequest): NextResponse | null
 
 function parseLoginRequestBody(
   bodyText: string
-): { wallet: string; signature: string; message: string } | null {
+): { wallet: string; signature: string; message: string; flow: 'siwe' | 'solana' } | null {
   try {
     const parsed = JSON.parse(bodyText) as {
       wallet?: unknown;
@@ -142,7 +142,7 @@ function parseLoginRequestBody(
       return null;
     }
 
-    if (parsed.flow && parsed.flow !== 'siwe') {
+    if (parsed.flow && parsed.flow !== 'siwe' && parsed.flow !== 'solana') {
       return null;
     }
 
@@ -150,6 +150,7 @@ function parseLoginRequestBody(
       wallet: parsed.wallet.trim(),
       signature: parsed.signature.trim(),
       message: parsed.message,
+      flow: parsed.flow === 'solana' ? 'solana' : 'siwe',
     };
   } catch {
     return null;
@@ -203,13 +204,15 @@ export async function POST(request: NextRequest) {
       return jsonError(400, 'Invalid request body');
     }
 
-    const { wallet, signature, message } = body;
+    const { wallet, signature, message, flow } = body;
 
     if (!wallet || !signature || !message) {
       return jsonError(400, 'Missing required fields');
     }
 
-    const target = `${API_BASE}/auth/siwe/login`;
+    const target = flow === 'solana'
+      ? `${API_BASE}/auth/solana/login`
+      : `${API_BASE}/auth/siwe/login`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };

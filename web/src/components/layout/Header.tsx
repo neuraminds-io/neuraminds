@@ -4,8 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { useBaseWallet } from '@/hooks/useBaseWallet';
+import { useSolanaWallet } from '@/hooks/useSolanaWallet';
 import { BrandLogo } from '@/components/layout/BrandLogo';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { CHAIN_MODE } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
 const navLinks = [
@@ -17,15 +19,31 @@ const navLinks = [
 
 function ConnectWalletButton() {
   const baseWallet = useBaseWallet();
+  const solanaWallet = useSolanaWallet();
+  const baseEnabled = CHAIN_MODE === 'base' || CHAIN_MODE === 'dual';
+  const solanaEnabled = CHAIN_MODE === 'solana' || CHAIN_MODE === 'dual';
+  const solanaAvailable = solanaWallet.enabled;
+  const singleMode = baseEnabled !== solanaEnabled;
 
-  const handleClick = () => {
+  const handleBaseClick = () => {
     if (baseWallet.isConnected) {
       baseWallet.disconnect();
       return;
     }
-
     baseWallet.connect().catch((error) => {
       console.error('Base wallet connect failed:', error);
+    });
+  };
+
+  const handleSolanaClick = () => {
+    if (solanaWallet.isConnected) {
+      solanaWallet.disconnect().catch((error) => {
+        console.error('Solana wallet disconnect failed:', error);
+      });
+      return;
+    }
+    solanaWallet.connect().catch((error) => {
+      console.error('Solana wallet connect failed:', error);
     });
   };
 
@@ -33,21 +51,104 @@ function ConnectWalletButton() {
     return `${address.slice(0, 4)}...${address.slice(-4)}`;
   };
 
-  return (
-    <button
-      onClick={handleClick}
+  const installSolanaWallet = (
+    <a
+      href="https://phantom.app/"
+      target="_blank"
+      rel="noreferrer"
       className={cn(
-        'h-9 px-5  text-sm font-medium',
-        'bg-gradient-to-r from-accent to-[#ff8b5f]',
-        'text-white',
-        'hover:opacity-90 hover:shadow-lg hover:shadow-accent/25',
-        'transition-all cursor-pointer'
+        'h-9 px-5 text-sm font-medium inline-flex items-center',
+        'border border-border text-text-primary bg-bg-secondary hover:bg-bg-hover transition-colors'
       )}
     >
-      {baseWallet.isConnected && baseWallet.address
-        ? truncateAddress(baseWallet.address)
-        : 'Connect Wallet'}
-    </button>
+      Install Phantom
+    </a>
+  );
+
+  if (singleMode && baseEnabled) {
+    return (
+      <button
+        onClick={handleBaseClick}
+        className={cn(
+          'h-9 px-5  text-sm font-medium',
+          'bg-gradient-to-r from-accent to-[#ff8b5f]',
+          'text-white',
+          'hover:opacity-90 hover:shadow-lg hover:shadow-accent/25',
+          'transition-all cursor-pointer'
+        )}
+      >
+        {baseWallet.isConnected && baseWallet.address
+          ? truncateAddress(baseWallet.address)
+          : 'Connect Base'}
+      </button>
+    );
+  }
+
+  if (singleMode && solanaEnabled) {
+    if (!solanaAvailable) {
+      return installSolanaWallet;
+    }
+    return (
+      <button
+        onClick={handleSolanaClick}
+        className={cn(
+          'h-9 px-5  text-sm font-medium',
+          'bg-gradient-to-r from-accent to-[#ff8b5f]',
+          'text-white',
+          'hover:opacity-90 hover:shadow-lg hover:shadow-accent/25',
+          'transition-all cursor-pointer'
+        )}
+      >
+        {solanaWallet.isConnected && solanaWallet.address
+          ? truncateAddress(solanaWallet.address)
+          : 'Connect Solana'}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {baseEnabled && (
+        <button
+          onClick={handleBaseClick}
+          className={cn(
+            'h-9 px-3 text-xs font-medium border border-border',
+            'text-text-primary bg-bg-secondary hover:bg-bg-hover transition-colors'
+          )}
+        >
+          {baseWallet.isConnected && baseWallet.address
+            ? `Base ${truncateAddress(baseWallet.address)}`
+            : 'Connect Base'}
+        </button>
+      )}
+      {solanaEnabled && (
+        solanaAvailable ? (
+          <button
+            onClick={handleSolanaClick}
+            className={cn(
+              'h-9 px-3 text-xs font-medium border border-border',
+              'text-text-primary bg-bg-secondary hover:bg-bg-hover transition-colors'
+            )}
+          >
+            {solanaWallet.isConnected && solanaWallet.address
+              ? `Sol ${truncateAddress(solanaWallet.address)}`
+              : 'Connect Solana'}
+          </button>
+        ) : (
+          <a
+            href="https://phantom.app/"
+            target="_blank"
+            rel="noreferrer"
+            className={cn(
+              'h-9 px-3 text-xs font-medium border border-border inline-flex items-center',
+              'text-text-primary bg-bg-secondary hover:bg-bg-hover transition-colors'
+            )}
+          >
+            Install Solana Wallet
+          </a>
+        )
+      )}
+    </div>
   );
 }
 

@@ -10,10 +10,13 @@ pub struct EvmRpcService {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RpcLog {
+    pub address: Option<String>,
     pub transaction_hash: Option<String>,
     pub block_number: Option<String>,
     pub log_index: Option<String>,
+    #[serde(default)]
     pub topics: Vec<String>,
+    #[serde(default)]
     pub data: String,
 }
 
@@ -31,8 +34,11 @@ pub struct RpcTransaction {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RpcTransactionReceipt {
+    pub transaction_hash: Option<String>,
     pub status: Option<String>,
     pub block_number: Option<String>,
+    #[serde(default)]
+    pub logs: Vec<RpcLog>,
 }
 
 #[derive(Debug, Deserialize)]

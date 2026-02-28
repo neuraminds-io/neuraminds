@@ -37,6 +37,10 @@ export const MIN_PRICE_BPS = 100; // 1%
 export const BASE_RPC_ENDPOINT =
   process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://sepolia.base.org';
 export const BASE_CHAIN_ID = Number(process.env.NEXT_PUBLIC_BASE_CHAIN_ID || 84532);
+export const SOLANA_RPC_ENDPOINT =
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+export const CHAIN_MODE =
+  (process.env.NEXT_PUBLIC_CHAIN_MODE || 'base').toLowerCase();
 
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/v1';

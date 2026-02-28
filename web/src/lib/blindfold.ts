@@ -1,21 +1,9 @@
 /**
  * Blindfold Finance Integration
  *
- * Blindfold Fi is a non-KYC card payment provider for crypto purchases.
- * https://www.blindfoldfinance.com/
- *
- * Integration pattern: Redirect-based payment flow
- * 1. User initiates payment on our site
- * 2. We redirect to Blindfold's payment page with amount + callback URL
- * 3. User completes card payment on Blindfold
- * 4. Blindfold redirects back to our site with payment result
- * 5. Blindfold sends webhook to confirm payment completion
- *
- * TODO: Replace placeholder values when Blindfold API docs are available
+ * Blindfold card funding is intentionally disabled in launch runtime.
+ * Wallet-based onchain deposit proofs are the only supported source.
  */
-
-const BLINDFOLD_BASE_URL = process.env.NEXT_PUBLIC_BLINDFOLD_URL || 'https://pay.blindfoldfinance.com';
-const BLINDFOLD_MERCHANT_ID = process.env.NEXT_PUBLIC_BLINDFOLD_MERCHANT_ID || '';
 
 export interface BlindpayConfig {
   amount: number; // USDC amount in smallest units (6 decimals)
@@ -38,28 +26,9 @@ export interface BlindpaySession {
  * The actual implementation will depend on Blindfold's API.
  */
 export async function createPaymentSession(
-  config: BlindpayConfig
+  _config: BlindpayConfig
 ): Promise<BlindpaySession> {
-  // Placeholder implementation
-  // Replace with actual Blindfold API call when docs are available
-
-  const params = new URLSearchParams({
-    merchant: BLINDFOLD_MERCHANT_ID,
-    amount: (config.amount / 1_000_000).toFixed(2),
-    currency: 'USD',
-    crypto_currency: 'USDC',
-    network: 'base',
-    wallet_address: config.walletAddress,
-    callback_url: config.callbackUrl,
-    success_url: config.successUrl,
-    cancel_url: config.cancelUrl,
-  });
-
-  return {
-    sessionId: crypto.randomUUID(),
-    paymentUrl: `${BLINDFOLD_BASE_URL}/pay?${params.toString()}`,
-    expiresAt: Date.now() + 30 * 60 * 1000, // 30 minutes
-  };
+  throw new Error('Blindfold funding is disabled. Use wallet deposit confirmation.');
 }
 
 /**

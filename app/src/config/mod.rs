@@ -15,6 +15,12 @@ pub struct AppConfig {
     pub port: u16,
     pub database_url: String,
     pub redis_url: String,
+    pub chain_mode: String,
+    pub solana_rpc_url: String,
+    pub solana_ws_url: String,
+    pub solana_market_program_id: String,
+    pub solana_orderbook_program_id: String,
+    pub solana_privacy_program_id: String,
     pub base_rpc_url: String,
     pub base_ws_url: String,
     pub base_chain_id: u64,
@@ -26,11 +32,15 @@ pub struct AppConfig {
     pub jwt_secret: String,
     pub cors_origins: Vec<String>,
     pub is_development: bool,
+    pub solana_enabled: bool,
+    pub solana_reads_enabled: bool,
+    pub solana_writes_enabled: bool,
     pub evm_enabled: bool,
     pub evm_reads_enabled: bool,
     pub evm_writes_enabled: bool,
     pub blindfold_webhook_secret: String,
     pub program_vault_address: String,
+    pub collateral_vault_address: String,
     pub usdc_mint: String,
     pub erc8004_identity_registry_address: String,
     pub erc8004_reputation_registry_address: String,
@@ -43,9 +53,18 @@ pub struct AppConfig {
     pub x402_quote_ttl_seconds: u64,
     pub xmtp_swarm_enabled: bool,
     pub xmtp_swarm_signing_key: String,
+    pub xmtp_swarm_transport: String,
+    pub xmtp_swarm_bridge_url: String,
     pub xmtp_swarm_topic_prefix: String,
     pub xmtp_swarm_max_messages: u64,
     pub xmtp_swarm_max_message_bytes: u64,
+    pub sanctions_blocked_addresses: Vec<String>,
+    pub admin_control_key: String,
+    pub matcher_enabled: bool,
+    pub matcher_max_fill_size: u64,
+    pub matcher_rate_limit_per_market: u64,
+    pub indexer_lookback_blocks: u64,
+    pub indexer_confirmations: u64,
 }
 
 impl AppConfig {
@@ -98,6 +117,22 @@ impl AppConfig {
             .unwrap_or_else(|_| "true".to_string())
             .to_lowercase()
             == "true";
+        let solana_enabled = env::var("SOLANA_ENABLED")
+            .unwrap_or_else(|_| "false".to_string())
+            .to_lowercase()
+            == "true";
+        let chain_mode = env::var("CHAIN_MODE")
+            .unwrap_or_else(|_| {
+                if evm_enabled && solana_enabled {
+                    "dual".to_string()
+                } else if solana_enabled {
+                    "solana".to_string()
+                } else {
+                    "base".to_string()
+                }
+            })
+            .trim()
+            .to_ascii_lowercase();
 
         let x402_enabled = env::var("X402_ENABLED")
             .unwrap_or_else(|_| "false".to_string())
@@ -137,6 +172,28 @@ impl AppConfig {
                 "SECURITY ERROR: XMTP_SWARM_SIGNING_KEY must be set when XMTP_SWARM_ENABLED=true"
             );
         }
+        let xmtp_swarm_transport = env::var("XMTP_SWARM_TRANSPORT")
+            .unwrap_or_else(|_| "redis".to_string())
+            .trim()
+            .to_ascii_lowercase();
+        if xmtp_swarm_enabled
+            && xmtp_swarm_transport != "redis"
+            && xmtp_swarm_transport != "xmtp_http"
+        {
+            panic!("SECURITY ERROR: XMTP_SWARM_TRANSPORT must be one of redis|xmtp_http");
+        }
+        let xmtp_swarm_bridge_url = env::var("XMTP_SWARM_BRIDGE_URL")
+            .unwrap_or_else(|_| "".to_string())
+            .trim()
+            .to_string();
+        if xmtp_swarm_enabled
+            && xmtp_swarm_transport == "xmtp_http"
+            && xmtp_swarm_bridge_url.is_empty()
+        {
+            panic!(
+                "SECURITY ERROR: XMTP_SWARM_BRIDGE_URL must be set when XMTP_SWARM_TRANSPORT=xmtp_http"
+            );
+        }
 
         Self {
             host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
@@ -147,6 +204,17 @@ impl AppConfig {
             database_url,
             redis_url: env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
+            chain_mode,
+            solana_rpc_url: env::var("SOLANA_RPC_URL")
+                .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string()),
+            solana_ws_url: env::var("SOLANA_WS_URL")
+                .unwrap_or_else(|_| "wss://api.mainnet-beta.solana.com".to_string()),
+            solana_market_program_id: env::var("SOLANA_MARKET_PROGRAM_ID")
+                .unwrap_or_else(|_| "".to_string()),
+            solana_orderbook_program_id: env::var("SOLANA_ORDERBOOK_PROGRAM_ID")
+                .unwrap_or_else(|_| "".to_string()),
+            solana_privacy_program_id: env::var("SOLANA_PRIVACY_PROGRAM_ID")
+                .unwrap_or_else(|_| "".to_string()),
             base_rpc_url: env::var("BASE_RPC_URL")
                 .unwrap_or_else(|_| "https://mainnet.base.org".to_string()),
             base_ws_url: env::var("BASE_WS_URL")
@@ -164,6 +232,15 @@ impl AppConfig {
             jwt_secret,
             cors_origins,
             is_development,
+            solana_enabled,
+            solana_reads_enabled: env::var("SOLANA_READS_ENABLED")
+                .unwrap_or_else(|_| if solana_enabled { "true" } else { "false" }.to_string())
+                .to_lowercase()
+                == "true",
+            solana_writes_enabled: env::var("SOLANA_WRITES_ENABLED")
+                .unwrap_or_else(|_| if solana_enabled { "true" } else { "false" }.to_string())
+                .to_lowercase()
+                == "true",
             evm_enabled,
             evm_reads_enabled: env::var("EVM_READS_ENABLED")
                 .unwrap_or_else(|_| if evm_enabled { "true" } else { "false" }.to_string())
@@ -183,6 +260,9 @@ impl AppConfig {
             }),
             program_vault_address: env::var("PROGRAM_VAULT_ADDRESS")
                 .unwrap_or_else(|_| "".to_string()),
+            collateral_vault_address: env::var("COLLATERAL_VAULT_ADDRESS").unwrap_or_else(|_| {
+                env::var("PROGRAM_VAULT_ADDRESS").unwrap_or_else(|_| "".to_string())
+            }),
             usdc_mint: env::var("USDC_MINT")
                 .unwrap_or_else(|_| "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".to_string()),
             erc8004_identity_registry_address: env::var("ERC8004_IDENTITY_REGISTRY_ADDRESS")
@@ -210,6 +290,8 @@ impl AppConfig {
                 .expect("X402_QUOTE_TTL_SECONDS must be a number"),
             xmtp_swarm_enabled,
             xmtp_swarm_signing_key,
+            xmtp_swarm_transport,
+            xmtp_swarm_bridge_url,
             xmtp_swarm_topic_prefix: env::var("XMTP_SWARM_TOPIC_PREFIX")
                 .unwrap_or_else(|_| "neuraminds/base/swarm".to_string()),
             xmtp_swarm_max_messages: env::var("XMTP_SWARM_MAX_MESSAGES")
@@ -220,6 +302,33 @@ impl AppConfig {
                 .unwrap_or_else(|_| "32768".to_string())
                 .parse()
                 .expect("XMTP_SWARM_MAX_MESSAGE_BYTES must be a number"),
+            sanctions_blocked_addresses: env::var("SANCTIONS_BLOCKED_ADDRESSES")
+                .unwrap_or_else(|_| "".to_string())
+                .split(',')
+                .map(|s| s.trim().to_ascii_lowercase())
+                .filter(|s| is_valid_hex_address(s))
+                .collect(),
+            admin_control_key: env::var("ADMIN_CONTROL_KEY").unwrap_or_else(|_| "".to_string()),
+            matcher_enabled: env::var("MATCHER_ENABLED")
+                .unwrap_or_else(|_| "true".to_string())
+                .to_lowercase()
+                == "true",
+            matcher_max_fill_size: env::var("MATCHER_MAX_FILL_SIZE")
+                .unwrap_or_else(|_| "1000000".to_string())
+                .parse()
+                .expect("MATCHER_MAX_FILL_SIZE must be a number"),
+            matcher_rate_limit_per_market: env::var("MATCHER_RATE_LIMIT_PER_MARKET")
+                .unwrap_or_else(|_| "50".to_string())
+                .parse()
+                .expect("MATCHER_RATE_LIMIT_PER_MARKET must be a number"),
+            indexer_lookback_blocks: env::var("INDEXER_LOOKBACK_BLOCKS")
+                .unwrap_or_else(|_| "25000".to_string())
+                .parse()
+                .expect("INDEXER_LOOKBACK_BLOCKS must be a number"),
+            indexer_confirmations: env::var("INDEXER_CONFIRMATIONS")
+                .unwrap_or_else(|_| "8".to_string())
+                .parse()
+                .expect("INDEXER_CONFIRMATIONS must be a number"),
         }
     }
 }
@@ -245,14 +354,24 @@ mod tests {
             "HOST",
             "PORT",
             "REDIS_URL",
+            "CHAIN_MODE",
+            "SOLANA_RPC_URL",
+            "SOLANA_WS_URL",
+            "SOLANA_MARKET_PROGRAM_ID",
+            "SOLANA_ORDERBOOK_PROGRAM_ID",
+            "SOLANA_PRIVACY_PROGRAM_ID",
             "BASE_RPC_URL",
             "BASE_WS_URL",
             "BASE_CHAIN_ID",
             "SIWE_DOMAIN",
+            "SOLANA_ENABLED",
+            "SOLANA_READS_ENABLED",
+            "SOLANA_WRITES_ENABLED",
             "EVM_ENABLED",
             "EVM_READS_ENABLED",
             "EVM_WRITES_ENABLED",
             "ORDER_BOOK_ADDRESS",
+            "COLLATERAL_VAULT_ADDRESS",
             "AGENT_RUNTIME_ADDRESS",
             "ERC8004_IDENTITY_REGISTRY_ADDRESS",
             "ERC8004_REPUTATION_REGISTRY_ADDRESS",
@@ -265,9 +384,18 @@ mod tests {
             "X402_QUOTE_TTL_SECONDS",
             "XMTP_SWARM_ENABLED",
             "XMTP_SWARM_SIGNING_KEY",
+            "XMTP_SWARM_TRANSPORT",
+            "XMTP_SWARM_BRIDGE_URL",
             "XMTP_SWARM_TOPIC_PREFIX",
             "XMTP_SWARM_MAX_MESSAGES",
             "XMTP_SWARM_MAX_MESSAGE_BYTES",
+            "SANCTIONS_BLOCKED_ADDRESSES",
+            "ADMIN_CONTROL_KEY",
+            "MATCHER_ENABLED",
+            "MATCHER_MAX_FILL_SIZE",
+            "MATCHER_RATE_LIMIT_PER_MARKET",
+            "INDEXER_LOOKBACK_BLOCKS",
+            "INDEXER_CONFIRMATIONS",
         ];
         let saved: Vec<_> = env_vars
             .iter()

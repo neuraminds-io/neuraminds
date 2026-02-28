@@ -189,7 +189,10 @@ export interface CancelOrderResponse {
 }
 
 export interface ClaimWinningsResponse {
-  amount: number;
+  marketId: string;
+  claimedAmount: number;
+  winningOutcome: Outcome;
+  winningTokensBurned: number;
   txSignature: string;
 }
 
@@ -232,14 +235,24 @@ export interface AgentFilters {
 }
 
 // Wallet types
-export type DepositSource = 'wallet' | 'blindfold';
+export type DepositSource = 'wallet';
+export type WalletWriteMode = 'prepare' | 'relay' | 'confirm';
+
+export interface PreparedWalletTransaction {
+  step: string;
+  to: string;
+  data: `0x${string}`;
+  value: `0x${string}`;
+}
 
 export interface WalletBalance {
   available: number;
   locked: number;
+  claimable: number;
   total: number;
   pendingDeposits: number;
   pendingWithdrawals: number;
+  sourceBlock: number;
 }
 
 export interface DepositAddress {
@@ -253,29 +266,44 @@ export interface DepositAddress {
 
 export interface DepositRequest {
   amount: number;
+  mode?: WalletWriteMode;
+  intentId?: string;
+  rawTx?: string;
   txSignature?: string;
-  source: DepositSource;
+  source?: DepositSource;
 }
 
 export interface DepositResponse {
   transactionId: string;
   status: string;
+  phase: string;
   amount: number;
   depositAddress?: string;
+  intentId?: string;
+  preparedTransactions?: PreparedWalletTransaction[];
+  txSignature?: string;
 }
 
 export interface WithdrawRequest {
   amount: number;
-  destination: string;
+  mode?: WalletWriteMode;
+  intentId?: string;
+  rawTx?: string;
+  destination?: string;
+  txSignature?: string;
 }
 
 export interface WithdrawResponse {
   transactionId: string;
   status: string;
+  phase: string;
   amount: number;
   fee: number;
   netAmount: number;
   estimatedCompletion: string;
+  intentId?: string;
+  preparedTransactions?: PreparedWalletTransaction[];
+  txSignature?: string;
 }
 
 // Notification types

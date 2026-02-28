@@ -48,6 +48,25 @@ fn is_hex_address(value: &str) -> bool {
         && trimmed[2..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
+fn configured_chains(state: &AppState) -> Vec<Value> {
+    let mut chains = Vec::new();
+    if state.config.evm_enabled {
+        chains.push(json!({
+            "name": "base",
+            "id": state.config.base_chain_id
+        }));
+    }
+    if state.config.solana_enabled {
+        chains.push(json!({
+            "name": "solana",
+            "rpc_url": state.config.solana_rpc_url,
+            "market_program_id": state.config.solana_market_program_id,
+            "orderbook_program_id": state.config.solana_orderbook_program_id
+        }));
+    }
+    chains
+}
+
 #[derive(Debug, Deserialize)]
 struct McpJsonRpcRequest {
     jsonrpc: String,
@@ -1029,6 +1048,7 @@ pub async fn handle_mcp_jsonrpc(
 
 pub async fn get_web4_capabilities(state: web::Data<Arc<AppState>>) -> impl Responder {
     let api_base = infer_api_base_url(&state);
+    let chains = configured_chains(&state);
     let erc8004_ready = is_hex_address(state.config.erc8004_identity_registry_address.as_str())
         && is_hex_address(state.config.erc8004_reputation_registry_address.as_str());
     let x402_status = if state.config.x402_enabled {
@@ -1058,17 +1078,18 @@ pub async fn get_web4_capabilities(state: web::Data<Arc<AppState>>) -> impl Resp
     HttpResponse::Ok().json(json!({
         "project": "neuraminds",
         "mode": "web4-agent-market-network",
-        "chain": {
-            "name": "base",
-            "id": state.config.base_chain_id
-        },
+        "chain_mode": state.config.chain_mode,
+        "chains": chains,
         "api_base": api_base,
         "runtime": {
             "market_core_configured": !state.config.market_core_address.trim().is_empty(),
             "order_book_configured": !state.config.order_book_address.trim().is_empty(),
             "agent_runtime_configured": !state.config.agent_runtime_address.trim().is_empty(),
+            "solana_programs_configured": !state.config.solana_market_program_id.trim().is_empty() && !state.config.solana_orderbook_program_id.trim().is_empty(),
             "evm_reads_enabled": state.config.evm_reads_enabled,
-            "evm_writes_enabled": state.config.evm_writes_enabled
+            "evm_writes_enabled": state.config.evm_writes_enabled,
+            "solana_reads_enabled": state.config.solana_reads_enabled,
+            "solana_writes_enabled": state.config.solana_writes_enabled
         },
         "protocols": [
             {
@@ -1118,7 +1139,7 @@ pub async fn get_mcp_manifest(state: web::Data<Arc<AppState>>) -> impl Responder
     HttpResponse::Ok().json(json!({
         "name": "neuraminds",
         "version": "1.0.0",
-        "description": "MCP JSON-RPC server for NeuraMinds Base agent market network.",
+        "description": "MCP JSON-RPC server for NeuraMinds dual-chain (Base + Solana) agent market network.",
         "transport": {
             "type": "http+jsonrpc",
             "endpoint": format!("{}/web4/mcp", api_base)
@@ -1158,24 +1179,52 @@ pub async fn get_mcp_manifest(state: web::Data<Arc<AppState>>) -> impl Responder
 
 pub async fn get_agent_card(state: web::Data<Arc<AppState>>) -> impl Responder {
     let api_base = infer_api_base_url(&state);
-
-    HttpResponse::Ok().json(json!({
-        "schema": "a2a-agent-card/v1",
-        "name": "NeuraMinds Base Agent Network",
-        "description": "Agent-executable prediction market infrastructure on Base.",
-        "network": {
-            "chain": "base",
-            "chain_id": state.config.base_chain_id
-        },
-        "auth": {
+    let chains = configured_chains(&state);
+    let auth = if state.config.chain_mode == "solana" {
+        json!({
+            "type": "solana-signin+jwt",
+            "nonce_endpoint": format!("{}/auth/solana/nonce", api_base),
+            "login_endpoint": format!("{}/auth/solana/login", api_base)
+        })
+    } else if state.config.chain_mode == "dual" {
+        json!({
+            "type": "multiwallet+jwt",
+            "flows": [
+                {
+                    "wallet": "evm",
+                    "type": "siwe+jwt",
+                    "nonce_endpoint": format!("{}/auth/siwe/nonce", api_base),
+                    "login_endpoint": format!("{}/auth/siwe/login", api_base)
+                },
+                {
+                    "wallet": "solana",
+                    "type": "solana-signin+jwt",
+                    "nonce_endpoint": format!("{}/auth/solana/nonce", api_base),
+                    "login_endpoint": format!("{}/auth/solana/login", api_base)
+                }
+            ]
+        })
+    } else {
+        json!({
             "type": "siwe+jwt",
             "nonce_endpoint": format!("{}/auth/siwe/nonce", api_base),
             "login_endpoint": format!("{}/auth/siwe/login", api_base)
+        })
+    };
+
+    HttpResponse::Ok().json(json!({
+        "schema": "a2a-agent-card/v1",
+        "name": "NeuraMinds Agent Network",
+        "description": "Agent-executable prediction market infrastructure on Base and Solana.",
+        "network": {
+            "chain_mode": state.config.chain_mode,
+            "chains": chains
         },
+        "auth": auth,
         "capabilities": [
             {
                 "id": "market-data",
-                "description": "Query markets, orderbooks and fills from Base contracts."
+                "description": "Query markets, orderbooks and fills from configured chains."
             },
             {
                 "id": "agent-runtime",
@@ -1206,6 +1255,11 @@ pub async fn get_agent_card(state: web::Data<Arc<AppState>>) -> impl Responder {
                 "url": format!("{}/evm/markets", api_base)
             },
             {
+                "name": "get_solana_programs",
+                "method": "GET",
+                "url": format!("{}/solana/programs", api_base)
+            },
+            {
                 "name": "list_agents",
                 "method": "GET",
                 "url": format!("{}/evm/agents?active=true", api_base)
@@ -1221,6 +1275,11 @@ pub async fn get_agent_card(state: web::Data<Arc<AppState>>) -> impl Responder {
                 "url": format!("{}/evm/write/agents/execute", api_base)
             },
             {
+                "name": "relay_solana_tx",
+                "method": "POST",
+                "url": format!("{}/solana/write/relay", api_base)
+            },
+            {
                 "name": "send_swarm_message",
                 "method": "POST",
                 "url": format!("{}/web4/xmtp/swarm/send", api_base)
@@ -1231,6 +1290,67 @@ pub async fn get_agent_card(state: web::Data<Arc<AppState>>) -> impl Responder {
 
 pub async fn get_xmtp_swarm_health(state: web::Data<Arc<AppState>>) -> impl Responder {
     HttpResponse::Ok().json(xmtp_swarm::health(&state))
+}
+
+pub async fn get_web4_runtime_health(state: web::Data<Arc<AppState>>) -> impl Responder {
+    let x402_ready = if !state.config.x402_enabled {
+        true
+    } else {
+        !state.config.x402_signing_key.trim().is_empty()
+            && is_hex_address(state.config.x402_receiver_address.as_str())
+    };
+
+    let mcp_ready = true;
+
+    let xmtp_bridge_ready = if !state.config.xmtp_swarm_enabled {
+        true
+    } else if state.config.xmtp_swarm_transport != "xmtp_http" {
+        true
+    } else if state.config.xmtp_swarm_bridge_url.trim().is_empty() {
+        false
+    } else {
+        let url = format!(
+            "{}/health",
+            state
+                .config
+                .xmtp_swarm_bridge_url
+                .trim()
+                .trim_end_matches('/')
+        );
+        reqwest::Client::new()
+            .get(url)
+            .send()
+            .await
+            .map(|response| response.status().is_success())
+            .unwrap_or(false)
+    };
+
+    let status = if x402_ready && mcp_ready && xmtp_bridge_ready {
+        "healthy"
+    } else if mcp_ready {
+        "degraded"
+    } else {
+        "unhealthy"
+    };
+
+    HttpResponse::Ok().json(json!({
+        "status": status,
+        "components": {
+            "mcp": {
+                "ready": mcp_ready,
+                "transport": ["http+jsonrpc", "stdio"]
+            },
+            "x402": {
+                "ready": x402_ready,
+                "enabled": state.config.x402_enabled
+            },
+            "xmtp": {
+                "ready": xmtp_bridge_ready,
+                "enabled": state.config.xmtp_swarm_enabled,
+                "transport": state.config.xmtp_swarm_transport
+            }
+        }
+    }))
 }
 
 pub async fn send_xmtp_swarm_message(

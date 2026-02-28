@@ -115,6 +115,14 @@ async function run() {
   const timeoutMs = Number(args['timeout-ms'] || 10_000);
   const apiUrl = args['api-url'] ? normalizeBaseUrl(String(args['api-url'])) : '';
   const webUrl = args['web-url'] ? normalizeBaseUrl(String(args['web-url'])) : '';
+  const chainMode = String(args['chain-mode'] || process.env.CHAIN_MODE || 'base').toLowerCase();
+  const expectsBase = chainMode === 'base' || chainMode === 'dual';
+  const expectsSolana = chainMode === 'solana' || chainMode === 'dual';
+
+  if (!['base', 'solana', 'dual'].includes(chainMode)) {
+    console.error(`invalid chain mode: ${chainMode}`);
+    process.exit(1);
+  }
 
   if (!apiUrl) {
     usage();
@@ -175,52 +183,87 @@ async function run() {
       database: components.database?.status,
       redis: components.redis?.status,
       base: components.base?.status,
+      solana: components.solana?.status,
     };
     const componentMessages = {
       base: String(components.base?.message || ''),
+      solana: String(components.solana?.message || ''),
     };
     const baseDisabled = componentMessages.base.toLowerCase().includes('disabled');
+    const solanaDisabled = componentMessages.solana.toLowerCase().includes('disabled');
     const pass =
       detailed.status === 200 &&
       componentStatuses.database === 'healthy' &&
       componentStatuses.redis === 'healthy' &&
-      componentStatuses.base === 'healthy' &&
-      !baseDisabled;
+      (!expectsBase || (componentStatuses.base === 'healthy' && !baseDisabled)) &&
+      (!expectsSolana || (componentStatuses.solana === 'healthy' && !solanaDisabled));
 
     checks.push({
       id: 'api_health_detailed',
       required: true,
       status: pass ? 'pass' : 'fail',
       latencyMs: detailed.latencyMs,
-      details: `http=${detailed.status} db=${componentStatuses.database ?? 'unknown'} redis=${componentStatuses.redis ?? 'unknown'} base=${componentStatuses.base ?? 'unknown'}`,
+      details: `http=${detailed.status} db=${componentStatuses.database ?? 'unknown'} redis=${componentStatuses.redis ?? 'unknown'} base=${componentStatuses.base ?? 'unknown'} solana=${componentStatuses.solana ?? 'unknown'}`,
       url: `${apiUrl}/health/detailed`,
     });
   }
 
-  const evmMarkets = await fetchWithTimeout(`${apiUrl}/v1/evm/markets?limit=1`, timeoutMs);
-  if (!evmMarkets.ok) {
-    checks.push({
-      id: 'api_evm_markets_public',
-      required: true,
-      status: 'fail',
-      latencyMs: evmMarkets.latencyMs,
-      details: `request failed: ${evmMarkets.error}`,
-      url: `${apiUrl}/v1/evm/markets?limit=1`,
-    });
-  } else {
-    const payload = parseJsonOrNull(evmMarkets.bodyText);
-    const hasArray = Array.isArray(payload?.markets);
-    const pass = evmMarkets.status === 200 && hasArray;
-    checks.push({
-      id: 'api_evm_markets_public',
-      required: true,
-      status: pass ? 'pass' : 'fail',
-      latencyMs: evmMarkets.latencyMs,
-      details: pass
-        ? `marketCount=${payload.markets.length}`
-        : `http=${evmMarkets.status} marketsArray=${hasArray}`,
-      url: `${apiUrl}/v1/evm/markets?limit=1`,
-    });
+  if (expectsBase) {
+    const evmMarkets = await fetchWithTimeout(`${apiUrl}/v1/evm/markets?limit=1`, timeoutMs);
+    if (!evmMarkets.ok) {
+      checks.push({
+        id: 'api_evm_markets_public',
+        required: true,
+        status: 'fail',
+        latencyMs: evmMarkets.latencyMs,
+        details: `request failed: ${evmMarkets.error}`,
+        url: `${apiUrl}/v1/evm/markets?limit=1`,
+      });
+    } else {
+      const payload = parseJsonOrNull(evmMarkets.bodyText);
+      const hasArray = Array.isArray(payload?.markets);
+      const pass = evmMarkets.status === 200 && hasArray;
+      checks.push({
+        id: 'api_evm_markets_public',
+        required: true,
+        status: pass ? 'pass' : 'fail',
+        latencyMs: evmMarkets.latencyMs,
+        details: pass
+          ? `marketCount=${payload.markets.length}`
+          : `http=${evmMarkets.status} marketsArray=${hasArray}`,
+        url: `${apiUrl}/v1/evm/markets?limit=1`,
+      });
+    }
+  }
+
+  if (expectsSolana) {
+    const solanaPrograms = await fetchWithTimeout(`${apiUrl}/v1/solana/programs`, timeoutMs);
+    if (!solanaPrograms.ok) {
+      checks.push({
+        id: 'api_solana_programs_public',
+        required: true,
+        status: 'fail',
+        latencyMs: solanaPrograms.latencyMs,
+        details: `request failed: ${solanaPrograms.error}`,
+        url: `${apiUrl}/v1/solana/programs`,
+      });
+    } else {
+      const payload = parseJsonOrNull(solanaPrograms.bodyText);
+      const pass =
+        solanaPrograms.status === 200 &&
+        typeof payload?.market_program_id === 'string' &&
+        typeof payload?.orderbook_program_id === 'string';
+      checks.push({
+        id: 'api_solana_programs_public',
+        required: true,
+        status: pass ? 'pass' : 'fail',
+        latencyMs: solanaPrograms.latencyMs,
+        details: pass
+          ? 'program ids available'
+          : `http=${solanaPrograms.status} payload=${payload ? 'json' : 'invalid'}`,
+        url: `${apiUrl}/v1/solana/programs`,
+      });
+    }
   }
 
   if (webUrl) {
@@ -254,7 +297,7 @@ async function run() {
   const report = {
     generatedAt: new Date().toISOString(),
     env: envName,
-    chainMode: 'base',
+    chainMode,
     summary: {
       ready,
       totalChecks: checks.length,
@@ -273,7 +316,7 @@ async function run() {
     '',
     `Generated: ${report.generatedAt}`,
     `Environment: ${envName}`,
-    `Chain mode: base`,
+    `Chain mode: ${chainMode}`,
     '',
     `Ready: ${ready ? 'YES' : 'NO'}`,
     '',

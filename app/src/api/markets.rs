@@ -14,10 +14,12 @@ use crate::models::{
 use crate::AppState;
 
 fn ensure_market_read_mode(state: &web::Data<Arc<AppState>>) -> Result<(), ApiError> {
-    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
+    let evm_reads = state.config.evm_enabled && state.config.evm_reads_enabled;
+    let solana_reads = state.config.solana_enabled && state.config.solana_reads_enabled;
+    if !evm_reads && !solana_reads {
         return Err(ApiError::bad_request(
-            "EVM_READ_PATH_DISABLED",
-            "EVM market read path is disabled",
+            "CHAIN_READ_PATH_DISABLED",
+            "Market read path is disabled for all configured chains",
         ));
     }
     Ok(())
@@ -88,10 +90,12 @@ pub async fn create_market(
     state: web::Data<Arc<AppState>>,
     body: web::Json<CreateMarketRequest>,
 ) -> Result<impl Responder, ApiError> {
-    if !state.config.evm_enabled || !state.config.evm_writes_enabled {
+    let evm_writes = state.config.evm_enabled && state.config.evm_writes_enabled;
+    let solana_writes = state.config.solana_enabled && state.config.solana_writes_enabled;
+    if !evm_writes && !solana_writes {
         return Err(ApiError::bad_request(
-            "EVM_WRITE_PATH_DISABLED",
-            "EVM market write path is disabled",
+            "CHAIN_WRITE_PATH_DISABLED",
+            "Market write path is disabled for all configured chains",
         ));
     }
 

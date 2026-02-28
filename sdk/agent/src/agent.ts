@@ -266,6 +266,24 @@ export class TradingAgent {
     return txHash;
   }
 
+  async claimFor(owner: Address, marketId: bigint): Promise<Hex> {
+    const account = this.requireAccount();
+    const prepared = await this.callWriteApi<PreparedEvmWriteTx>('/evm/write/positions/claim-for', {
+      from: account,
+      user: owner,
+      marketId: Number(marketId),
+    });
+    const txHash = await this.options.walletClient.sendTransaction({
+      account,
+      chain: this.options.walletClient.chain,
+      to: prepared.to,
+      data: prepared.data,
+      value: BigInt(prepared.value),
+    });
+    await this.options.publicClient.waitForTransactionReceipt({ hash: txHash });
+    return txHash;
+  }
+
   async fetchMarketData(marketId: bigint): Promise<MarketData> {
     const [, , , , resolved, outcome] = await this.options.publicClient.readContract({
       address: this.options.marketCoreAddress,

@@ -1,9 +1,14 @@
 {
-  "generatedAt": "2026-02-26T23:44:00.408Z",
+  "generatedAt": "2026-02-28T01:09:14.721Z",
   "go": true,
   "checks": [
     {
       "id": "launch_config",
+      "status": "pass",
+      "details": "ready=true"
+    },
+    {
+      "id": "address_manifest",
       "status": "pass",
       "details": "ready=true"
     },

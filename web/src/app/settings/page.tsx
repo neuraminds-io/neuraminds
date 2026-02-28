@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react';
 
 import { useBaseWallet } from '@/hooks/useBaseWallet';
+import { useSolanaWallet } from '@/hooks/useSolanaWallet';
 import { api, type BaseTokenState } from '@/lib/api';
 import { PageShell } from '@/components/layout';
 import { Card, Button } from '@/components/ui';
 import {
   BASE_RPC_ENDPOINT,
+  SOLANA_RPC_ENDPOINT,
 } from '@/lib/constants';
 import { truncateAddress } from '@/lib/utils';
 
@@ -32,12 +34,13 @@ function formatTokenSupply(totalSupplyHex: string, decimals: number): string {
 
 export default function SettingsPage() {
   const baseWallet = useBaseWallet();
+  const solanaWallet = useSolanaWallet();
 
   const [baseTokenState, setBaseTokenState] = useState<BaseTokenState | null>(null);
   const [baseTokenError, setBaseTokenError] = useState<string | null>(null);
 
-  const connected = baseWallet.isConnected;
-  const walletAddress = baseWallet.address;
+  const connected = baseWallet.isConnected || solanaWallet.isConnected;
+  const walletAddress = baseWallet.address ?? solanaWallet.address;
 
   useEffect(() => {
     let mounted = true;
@@ -61,7 +64,13 @@ export default function SettingsPage() {
   }, []);
 
   const disconnectWallet = () => {
-    baseWallet.disconnect();
+    if (baseWallet.isConnected) {
+      baseWallet.disconnect();
+    }
+    if (solanaWallet.isConnected) {
+      solanaWallet.disconnect().catch(() => {
+      });
+    }
   };
 
   return (
@@ -75,6 +84,9 @@ export default function SettingsPage() {
             <div>
               <div className="text-text-secondary text-sm">Connected Address</div>
               <div className="font-mono">{truncateAddress(walletAddress)}</div>
+              <div className="text-text-secondary text-xs mt-1">
+                {baseWallet.isConnected ? 'Base' : 'Solana'}
+              </div>
             </div>
             <Button variant="danger" size="sm" onClick={disconnectWallet}>
               Disconnect
@@ -116,6 +128,9 @@ export default function SettingsPage() {
           </div>
           <div className="text-text-secondary text-sm break-all">
             RPC: {BASE_RPC_ENDPOINT}
+          </div>
+          <div className="text-text-secondary text-sm break-all">
+            Solana RPC: {SOLANA_RPC_ENDPOINT}
           </div>
           {baseTokenState && (
             <>

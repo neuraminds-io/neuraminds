@@ -48,8 +48,12 @@ impl EvmIndexerService {
         order_book_address: &str,
         lookback_blocks: u64,
         topics: &[&str],
+        latest_block_override: Option<u64>,
     ) -> Result<usize> {
-        let latest_block = self.rpc.eth_block_number().await?;
+        let latest_block = match latest_block_override {
+            Some(value) => value,
+            None => self.rpc.eth_block_number().await?,
+        };
         let from_block = {
             let state = self.state.read().await;
             if state.last_synced_block == 0 {
@@ -109,6 +113,16 @@ impl EvmIndexerService {
         state.last_synced_block = latest_block;
 
         Ok(state.logs.len())
+    }
+
+    pub async fn set_last_synced_block(&self, block: u64) {
+        let mut state = self.state.write().await;
+        state.last_synced_block = block;
+    }
+
+    pub async fn last_synced_block(&self) -> u64 {
+        let state = self.state.read().await;
+        state.last_synced_block
     }
 
     pub async fn logs_by_topic(&self, topic0: &str) -> Vec<RpcLog> {

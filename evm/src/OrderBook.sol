@@ -195,7 +195,16 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
     }
 
     function claim(uint256 marketId) external whenNotPaused nonReentrant returns (uint256 payout) {
-        Position storage position = positions[marketId][msg.sender];
+        return _claim(msg.sender, marketId);
+    }
+
+    function claimFor(address user, uint256 marketId) external whenNotPaused nonReentrant returns (uint256 payout) {
+        if (user == address(0)) revert ZeroAddress();
+        return _claim(user, marketId);
+    }
+
+    function _claim(address user, uint256 marketId) internal returns (uint256 payout) {
+        Position storage position = positions[marketId][user];
         if (position.claimed) revert AlreadyClaimed();
         if (position.yesShares == 0 && position.noShares == 0) revert NoPosition();
 
@@ -216,8 +225,8 @@ contract OrderBook is AccessControl, Pausable, ReentrancyGuard {
         position.noShares = 0;
         position.claimed = true;
 
-        collateralVault.transferAvailable(address(this), msg.sender, payout);
-        emit Claimed(marketId, msg.sender, outcome, payout, winningShares);
+        collateralVault.transferAvailable(address(this), user, payout);
+        emit Claimed(marketId, user, outcome, payout, winningShares);
     }
 
     function claimable(uint256 marketId, address user) external view returns (uint256) {

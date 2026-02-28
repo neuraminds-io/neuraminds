@@ -47,7 +47,9 @@ loadEnvFile(path.join(ROOT, 'web', '.env.local'));
 
 const args = new Set(process.argv.slice(2));
 const modeArg = process.argv.find((arg) => arg.startsWith('--mode='));
+const chainModeArg = process.argv.find((arg) => arg.startsWith('--chain-mode='));
 const mode = (modeArg?.split('=')[1] || 'production').toLowerCase();
+const chainModeOverride = (chainModeArg?.split('=')[1] || '').trim().toLowerCase();
 const allowMissingSecrets = args.has('--allow-missing-secrets');
 const writeReport = args.has('--write-report');
 
@@ -148,6 +150,19 @@ function isHexAddress(value) {
   return /^0x[a-fA-F0-9]{40}$/.test(value);
 }
 
+function isBase58Address(value) {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value);
+}
+
+function readLocalFile(relPath) {
+  const absPath = path.join(ROOT, relPath);
+  try {
+    return fs.readFileSync(absPath, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
 function validate() {
   const requirements = requiredByMode[mode] || requiredByMode.production;
   const required = [...new Set([...requirements.backend, ...requirements.frontend])];
@@ -156,18 +171,81 @@ function validate() {
   const warnings = [];
   const errors = [];
 
-  for (const key of required) {
+  if (mode === 'production' && allowMissingSecrets) {
+    errors.push('allow-missing-secrets is forbidden in production mode');
+  }
+
+  const chainModeRaw = (chainModeOverride || readValue('CHAIN_MODE')).toLowerCase();
+  const chainMode = chainModeRaw || 'base';
+  const chainModes = new Set(['base', 'solana', 'dual']);
+  if (!chainModes.has(chainMode)) {
+    errors.push('CHAIN_MODE must be one of base|solana|dual');
+  }
+
+  const expectsBase = chainMode === 'base' || chainMode === 'dual';
+  const expectsSolana = chainMode === 'solana' || chainMode === 'dual';
+
+  const requiredBaseBackend = [
+    'BASE_RPC_URL',
+    'BASE_WS_URL',
+    'BASE_CHAIN_ID',
+    'SIWE_DOMAIN',
+    'MARKET_CORE_ADDRESS',
+    'ORDER_BOOK_ADDRESS',
+    'COLLATERAL_VAULT_ADDRESS',
+    'AGENT_RUNTIME_ADDRESS',
+    'ERC8004_IDENTITY_REGISTRY_ADDRESS',
+    'ERC8004_REPUTATION_REGISTRY_ADDRESS',
+    'EVM_ENABLED',
+    'EVM_READS_ENABLED',
+    'EVM_WRITES_ENABLED',
+  ];
+  const requiredBaseFrontend = [
+    'NEXT_PUBLIC_BASE_RPC_URL',
+    'NEXT_PUBLIC_BASE_CHAIN_ID',
+    'NEXT_PUBLIC_SIWE_DOMAIN',
+    'NEXT_PUBLIC_MARKET_CORE_ADDRESS',
+    'NEXT_PUBLIC_ORDER_BOOK_ADDRESS',
+    'NEXT_PUBLIC_AGENT_RUNTIME_ADDRESS',
+    'NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS',
+    'NEXT_PUBLIC_COLLATERAL_VAULT_ADDRESS',
+  ];
+  const requiredSolana = [
+    'SOLANA_RPC_URL',
+    'SOLANA_WS_URL',
+    'SOLANA_MARKET_PROGRAM_ID',
+    'SOLANA_ORDERBOOK_PROGRAM_ID',
+    'SOLANA_ENABLED',
+    'SOLANA_READS_ENABLED',
+    'SOLANA_WRITES_ENABLED',
+  ];
+  const requiredSolanaFrontend = [
+    'NEXT_PUBLIC_SOLANA_RPC_URL',
+    'NEXT_PUBLIC_SOLANA_MARKET_PROGRAM_ID',
+    'NEXT_PUBLIC_SOLANA_ORDERBOOK_PROGRAM_ID',
+  ];
+
+  const scopedRequired = [...required];
+  if (!expectsBase) {
+    for (const key of [...requiredBaseBackend, ...requiredBaseFrontend]) {
+      const idx = scopedRequired.indexOf(key);
+      if (idx >= 0) scopedRequired.splice(idx, 1);
+    }
+  }
+  if (expectsSolana) {
+    scopedRequired.push(...requiredSolana, ...requiredSolanaFrontend);
+  }
+
+  for (const key of [...new Set(scopedRequired)]) {
     if (!readValue(key)) missing.push(key);
   }
 
-  const chainMode = readValue('CHAIN_MODE').toLowerCase();
-  if (chainMode && chainMode !== 'base') {
-    errors.push('CHAIN_MODE must be base');
-  }
-
   const publicChainMode = readValue('NEXT_PUBLIC_CHAIN_MODE').toLowerCase();
-  if (publicChainMode && publicChainMode !== 'base') {
-    errors.push('NEXT_PUBLIC_CHAIN_MODE must be base');
+  if (publicChainMode && !chainModes.has(publicChainMode)) {
+    errors.push('NEXT_PUBLIC_CHAIN_MODE must be one of base|solana|dual');
+  }
+  if (publicChainMode && publicChainMode !== chainMode) {
+    warnings.push('NEXT_PUBLIC_CHAIN_MODE differs from CHAIN_MODE');
   }
 
   const jwtSecret = readValue('JWT_SECRET');
@@ -189,6 +267,18 @@ function validate() {
   if (publicBaseRpc && mode !== 'development' && !isHttpsUrl(publicBaseRpc)) {
     errors.push('NEXT_PUBLIC_BASE_RPC_URL must be https in staging/production');
   }
+  const solanaRpc = readValue('SOLANA_RPC_URL');
+  if (expectsSolana && solanaRpc && mode !== 'development' && !isHttpsUrl(solanaRpc)) {
+    errors.push('SOLANA_RPC_URL must be https in staging/production');
+  }
+  const publicSolanaRpc = readValue('NEXT_PUBLIC_SOLANA_RPC_URL');
+  if (expectsSolana && publicSolanaRpc && mode !== 'development' && !isHttpsUrl(publicSolanaRpc)) {
+    errors.push('NEXT_PUBLIC_SOLANA_RPC_URL must be https in staging/production');
+  }
+  const solanaWs = readValue('SOLANA_WS_URL').toLowerCase();
+  if (expectsSolana && solanaWs && mode !== 'development' && !solanaWs.startsWith('wss://')) {
+    errors.push('SOLANA_WS_URL must be wss in staging/production');
+  }
 
   const corsOrigins = parseOrigins(readValue('CORS_ORIGINS'));
   const authAllowedOrigins = parseOrigins(readValue('AUTH_ALLOWED_ORIGINS'));
@@ -208,19 +298,19 @@ function validate() {
     }
   }
 
-  if (readValue('EVM_ENABLED') && !parseBool(readValue('EVM_ENABLED'))) {
-    errors.push('EVM_ENABLED must be true for Base launch');
+  if (expectsBase && readValue('EVM_ENABLED') && !parseBool(readValue('EVM_ENABLED'))) {
+    errors.push('EVM_ENABLED must be true when CHAIN_MODE includes base');
   }
 
-  if (readValue('EVM_READS_ENABLED') && !parseBool(readValue('EVM_READS_ENABLED'))) {
-    errors.push('EVM_READS_ENABLED must be true for Base launch');
+  if (expectsBase && readValue('EVM_READS_ENABLED') && !parseBool(readValue('EVM_READS_ENABLED'))) {
+    errors.push('EVM_READS_ENABLED must be true when CHAIN_MODE includes base');
   }
 
-  if (readValue('EVM_WRITES_ENABLED') && !parseBool(readValue('EVM_WRITES_ENABLED'))) {
-    warnings.push('EVM_WRITES_ENABLED is false (read-only mode)');
+  if (expectsBase && readValue('EVM_WRITES_ENABLED') && !parseBool(readValue('EVM_WRITES_ENABLED'))) {
+    warnings.push('EVM_WRITES_ENABLED is false (base read-only mode)');
   }
 
-  if (parseBool(readValue('EVM_ENABLED'))) {
+  if (expectsBase && parseBool(readValue('EVM_ENABLED'))) {
     const identityRegistry = readValue('ERC8004_IDENTITY_REGISTRY_ADDRESS');
     const reputationRegistry = readValue('ERC8004_REPUTATION_REGISTRY_ADDRESS');
     if (!isHexAddress(identityRegistry)) {
@@ -231,7 +321,7 @@ function validate() {
     }
   }
 
-  if (parseBool(readValue('X402_ENABLED'))) {
+  if (expectsBase && parseBool(readValue('X402_ENABLED'))) {
     if (!readValue('X402_SIGNING_KEY')) {
       errors.push('X402_SIGNING_KEY is required when X402_ENABLED=true');
     }
@@ -240,16 +330,76 @@ function validate() {
       errors.push('X402_RECEIVER_ADDRESS must be a valid 0x address when X402_ENABLED=true');
     }
   }
+  if (expectsBase && mode === 'production' && !parseBool(readValue('X402_ENABLED'))) {
+    errors.push('X402_ENABLED must be true for production launch readiness');
+  }
 
-  if (parseBool(readValue('XMTP_SWARM_ENABLED')) && !readValue('XMTP_SWARM_SIGNING_KEY')) {
+  if (expectsBase && parseBool(readValue('XMTP_SWARM_ENABLED')) && !readValue('XMTP_SWARM_SIGNING_KEY')) {
     errors.push('XMTP_SWARM_SIGNING_KEY is required when XMTP_SWARM_ENABLED=true');
+  }
+  if (expectsBase && mode === 'production' && !parseBool(readValue('XMTP_SWARM_ENABLED'))) {
+    errors.push('XMTP_SWARM_ENABLED must be true for production launch readiness');
+  }
+  if (expectsBase && parseBool(readValue('XMTP_SWARM_ENABLED'))) {
+    const transport = readValue('XMTP_SWARM_TRANSPORT').toLowerCase() || 'redis';
+    if (!['redis', 'xmtp_http'].includes(transport)) {
+      errors.push('XMTP_SWARM_TRANSPORT must be one of redis|xmtp_http');
+    }
+    if (transport === 'xmtp_http' && !readValue('XMTP_SWARM_BRIDGE_URL')) {
+      errors.push('XMTP_SWARM_BRIDGE_URL is required when XMTP_SWARM_TRANSPORT=xmtp_http');
+    }
+    if (mode === 'production' && transport !== 'xmtp_http') {
+      errors.push('XMTP_SWARM_TRANSPORT must be xmtp_http for production launch readiness');
+    }
   }
 
   if (
+    expectsBase &&
     parseBool(readValue('EVM_WRITES_ENABLED')) &&
     !readValue('BASE_AGENT_RUNTIME_OPERATOR_PRIVATE_KEY')
   ) {
-    warnings.push('BASE_AGENT_RUNTIME_OPERATOR_PRIVATE_KEY is missing (autonomous agent executor disabled)');
+    errors.push('BASE_AGENT_RUNTIME_OPERATOR_PRIVATE_KEY is required when EVM_WRITES_ENABLED=true');
+  }
+
+  if (expectsSolana) {
+    if (!parseBool(readValue('SOLANA_ENABLED'))) {
+      errors.push('SOLANA_ENABLED must be true when CHAIN_MODE includes solana');
+    }
+    if (!parseBool(readValue('SOLANA_READS_ENABLED'))) {
+      errors.push('SOLANA_READS_ENABLED must be true when CHAIN_MODE includes solana');
+    }
+    if (!parseBool(readValue('SOLANA_WRITES_ENABLED'))) {
+      warnings.push('SOLANA_WRITES_ENABLED is false (solana read-only mode)');
+    }
+    if (!isBase58Address(readValue('SOLANA_MARKET_PROGRAM_ID'))) {
+      errors.push('SOLANA_MARKET_PROGRAM_ID must be a valid base58 address');
+    }
+    if (!isBase58Address(readValue('SOLANA_ORDERBOOK_PROGRAM_ID'))) {
+      errors.push('SOLANA_ORDERBOOK_PROGRAM_ID must be a valid base58 address');
+    }
+    if (!isBase58Address(readValue('NEXT_PUBLIC_SOLANA_MARKET_PROGRAM_ID'))) {
+      errors.push('NEXT_PUBLIC_SOLANA_MARKET_PROGRAM_ID must be a valid base58 address');
+    }
+    if (!isBase58Address(readValue('NEXT_PUBLIC_SOLANA_ORDERBOOK_PROGRAM_ID'))) {
+      errors.push('NEXT_PUBLIC_SOLANA_ORDERBOOK_PROGRAM_ID must be a valid base58 address');
+    }
+    if (
+      parseBool(readValue('SOLANA_WRITES_ENABLED')) &&
+      !isBase58Address(readValue('SOLANA_PRIVACY_PROGRAM_ID'))
+    ) {
+      errors.push(
+        'SOLANA_PRIVACY_PROGRAM_ID must be a valid base58 address when SOLANA_WRITES_ENABLED=true'
+      );
+    }
+  }
+
+  const adminPage = readLocalFile('web/src/app/admin/page.tsx');
+  if (
+    adminPage.includes('Mock data - replace with actual API calls') ||
+    adminPage.includes('TODO: Call API to approve market') ||
+    adminPage.includes('TODO: Call API to reject market')
+  ) {
+    errors.push('web/src/app/admin/page.tsx still contains mock or TODO admin moderation logic');
   }
 
   const missingAllowed = allowMissingSecrets;
@@ -258,7 +408,7 @@ function validate() {
   return {
     generatedAt: new Date().toISOString(),
     mode,
-    chainMode: 'base',
+    chainMode,
     allowMissingSecrets,
     missing,
     warnings,
@@ -280,7 +430,7 @@ if (writeReport) {
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 }
 
-console.log(`mode=${report.mode} chain=base`);
+console.log(`mode=${report.mode} chain=${report.chainMode}`);
 console.log(
   `ready=${report.summary.ready} missing=${report.summary.missingCount} warnings=${report.summary.warningCount} errors=${report.summary.errorCount}`
 );

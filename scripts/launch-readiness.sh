@@ -51,7 +51,7 @@ for arg in "$@"; do
       ;;
     *)
       echo "Unknown flag: $arg"
-      echo "Usage: scripts/launch-readiness.sh [--strict] [--mode=production|staging|development] [--allow-missing-secrets] [--api-url=<url>] [--web-url=<url>] [--chain-mode=base] [--run-web-e2e] [--skip-dx-snapshot] [--require-dx-snapshot] [--dx-snapshot-out=<path>]"
+      echo "Usage: scripts/launch-readiness.sh [--strict] [--mode=production|staging|development] [--allow-missing-secrets] [--api-url=<url>] [--web-url=<url>] [--chain-mode=base|solana|dual] [--run-web-e2e] [--skip-dx-snapshot] [--require-dx-snapshot] [--dx-snapshot-out=<path>]"
       exit 1
       ;;
   esac
@@ -59,6 +59,27 @@ done
 
 if [[ "${STRICT}" -eq 1 && "${SKIP_DX_SNAPSHOT}" -eq 0 && "${REQUIRE_DX_SNAPSHOT_EXPLICIT}" -eq 0 ]]; then
   REQUIRE_DX_SNAPSHOT=1
+fi
+
+if [[ "${STRICT}" -eq 1 && "${ALLOW_MISSING_SECRETS}" -eq 1 ]]; then
+  echo "strict mode cannot run with --allow-missing-secrets"
+  exit 1
+fi
+
+if [[ -z "${API_URL}" ]]; then
+  if [[ "${MODE}" == "production" ]]; then
+    API_URL="${SYNTHETIC_PROD_API_URL:-${NEXT_PUBLIC_API_URL:-}}"
+  elif [[ "${MODE}" == "staging" ]]; then
+    API_URL="${SYNTHETIC_STAGING_API_URL:-${NEXT_PUBLIC_API_URL:-}}"
+  fi
+fi
+
+if [[ -z "${WEB_URL}" ]]; then
+  if [[ "${MODE}" == "production" ]]; then
+    WEB_URL="${SYNTHETIC_PROD_WEB_URL:-}"
+  elif [[ "${MODE}" == "staging" ]]; then
+    WEB_URL="${SYNTHETIC_STAGING_WEB_URL:-}"
+  fi
 fi
 
 echo "launch readiness starting"
@@ -81,7 +102,16 @@ fi
 
 (
   cd "${ROOT_DIR}"
-  CHAIN_MODE="${CHAIN_MODE}" node scripts/validate-launch-config.mjs "${CONFIG_ARGS[@]}"
+  CHAIN_MODE="${CHAIN_MODE}" node scripts/validate-launch-config.mjs --chain-mode="${CHAIN_MODE}" "${CONFIG_ARGS[@]}"
+)
+
+ADDRESS_ENV="production"
+if [[ "${MODE}" == "staging" ]]; then
+  ADDRESS_ENV="staging"
+fi
+(
+  cd "${ROOT_DIR}"
+  node scripts/validate-address-manifest.mjs --environment="${ADDRESS_ENV}" --write-report
 )
 
 if [[ "${STRICT}" -eq 1 ]]; then
@@ -142,6 +172,7 @@ echo ""
 echo "launch readiness complete"
 echo "reports:"
 echo "- docs/reports/launch-config-report.json"
+echo "- docs/reports/address-manifest-report.json"
 echo "- docs/reports/production-loop-report.json"
 echo "- docs/reports/launch-go-no-go.json"
 if [[ -n "${API_URL}" ]]; then

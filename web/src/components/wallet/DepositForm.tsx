@@ -1,39 +1,48 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { waitForTransactionReceipt } from '@wagmi/core';
+import { useConfig, useWalletClient } from 'wagmi';
 import { api } from '@/lib/api';
-import { createPaymentSession } from '@/lib/blindfold';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import type { DepositAddress, DepositSource } from '@/types';
-import { cn } from '@/lib/utils';
+import type { DepositAddress, PreparedWalletTransaction } from '@/types';
 import { useBaseWallet } from '@/hooks/useBaseWallet';
 
 interface DepositFormProps {
   onSuccess?: () => void;
 }
 
-const depositMethods: { id: DepositSource; label: string; description: string }[] = [
-  {
-    id: 'wallet',
-    label: 'Crypto Wallet',
-    description: 'Transfer USDC from your Base wallet',
-  },
-  {
-    id: 'blindfold',
-    label: 'Card Payment',
-    description: 'Pay with credit/debit card via Blindfold',
-  },
-];
-
 export function DepositForm({ onSuccess }: DepositFormProps) {
-  const baseWallet = useBaseWallet();
-  const [method, setMethod] = useState<DepositSource>('wallet');
   const [amount, setAmount] = useState('');
   const [depositAddress, setDepositAddress] = useState<DepositAddress | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const wallet = useBaseWallet();
+  const config = useConfig();
+  const { data: walletClient } = useWalletClient();
+
+  const sendPreparedTransactions = async (
+    txs: PreparedWalletTransaction[],
+    account: `0x${string}`
+  ): Promise<`0x${string}`> => {
+    let finalHash: `0x${string}` | null = null;
+    for (const tx of txs) {
+      const hash = await walletClient!.sendTransaction({
+        account,
+        to: tx.to as `0x${string}`,
+        data: tx.data,
+        value: BigInt(tx.value),
+      });
+      await waitForTransactionReceipt(config, { hash });
+      finalHash = hash;
+    }
+    if (!finalHash) {
+      throw new Error('No transactions were submitted');
+    }
+    return finalHash;
+  };
 
   useEffect(() => {
     async function fetchDepositAddress() {
@@ -58,32 +67,38 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
     setSuccess(null);
 
     try {
-      const amountLamports = Math.floor(parseFloat(amount) * 1_000_000);
-
-      if (method === 'blindfold') {
-        if (!baseWallet.address) {
-          setError('Please connect your wallet first');
-          return;
-        }
-
-        const session = await createPaymentSession({
-          amount: amountLamports,
-          walletAddress: baseWallet.address,
-          callbackUrl: `${window.location.origin}/api/webhooks/blindfold`,
-          successUrl: `${window.location.origin}/wallet?deposit=success`,
-          cancelUrl: `${window.location.origin}/wallet?deposit=cancelled`,
-        });
-
-        await api.deposit({
-          amount: amountLamports,
-          source: 'blindfold',
-        });
-
-        window.location.href = session.paymentUrl;
-        return;
+      if (!wallet.isConnected || !wallet.address) {
+        throw new Error('Connect your Base wallet before depositing');
       }
+      if (!walletClient) throw new Error('Wallet client unavailable');
+      await wallet.ensureBaseChain();
 
-      setSuccess('Please transfer USDC to the deposit address below');
+      const amountLamports = Math.floor(parseFloat(amount) * 1_000_000);
+      const prepared = await api.deposit({
+        amount: amountLamports,
+        source: 'wallet',
+        mode: 'prepare',
+      });
+      if (!prepared.intentId || !prepared.preparedTransactions?.length) {
+        throw new Error('Deposit preparation failed: missing intent or transactions');
+      }
+      const txHash = await sendPreparedTransactions(
+        prepared.preparedTransactions,
+        wallet.address as `0x${string}`
+      );
+      const response = await api.deposit({
+        amount: amountLamports,
+        source: 'wallet',
+        mode: 'confirm',
+        intentId: prepared.intentId,
+        txSignature: txHash,
+      });
+
+      if (response.status === 'confirmed') {
+        setSuccess('Deposit confirmed onchain.');
+      } else {
+        setSuccess('Deposit submitted and pending confirmation.');
+      }
       setAmount('');
       onSuccess?.();
     } catch (err) {
@@ -95,22 +110,9 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
 
   return (
     <div className="space-y-6">
-      <div className={cn('grid grid-cols-1 gap-3 md:grid-cols-2')}>
-        {depositMethods.map((m) => (
-          <button
-            key={m.id}
-            onClick={() => setMethod(m.id)}
-            className={cn(
-              'p-4  border text-left transition-all duration-fast cursor-pointer',
-              method === m.id
-                ? 'border-accent bg-accent-muted'
-                : 'border-border hover:border-border-hover'
-            )}
-          >
-            <p className="font-medium text-text-primary">{m.label}</p>
-            <p className="text-sm text-text-secondary mt-1">{m.description}</p>
-          </button>
-        ))}
+      <div className="p-4 border border-border text-sm text-text-secondary">
+        Deposit flow is now vault-first on Base:
+        approve USDC, deposit to vault, then confirm.
       </div>
 
       <div className="space-y-2">
@@ -146,10 +148,10 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
         </div>
       </div>
 
-      {method === 'wallet' && depositAddress && (
+      {depositAddress && (
         <div className="space-y-2 p-4  bg-bg-secondary">
           <p className="text-sm font-medium text-text-secondary">
-            Deposit Address
+            Vault Contract
           </p>
           <div className="flex items-center gap-2">
             <code className="flex-1 text-sm text-text-primary bg-bg-tertiary px-3 py-2  font-mono break-all">
@@ -164,7 +166,7 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
             </Button>
           </div>
           <p className="text-xs text-text-secondary mt-2">
-            Send USDC on Base to this address. Minimum: $1 USDC
+            Transactions are signed from your connected wallet and settled on Base.
           </p>
         </div>
       )}
@@ -185,12 +187,20 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
         variant="primary"
         size="lg"
         className="w-full"
-        onClick={handleDeposit}
-        loading={loading}
-        disabled={!amount || parseFloat(amount) < 1}
+        onClick={() => {
+          if (wallet.isConnected) {
+            void handleDeposit();
+            return;
+          }
+          setError(null);
+          void wallet.connect().catch((err) => {
+            setError(err instanceof Error ? err.message : 'Wallet connection failed');
+          });
+        }}
+        loading={loading || wallet.isConnecting || wallet.isSwitchingChain}
+        disabled={wallet.isConnected && (!amount || parseFloat(amount) < 1)}
       >
-        {method === 'blindfold' && 'Pay with Card'}
-        {method === 'wallet' && 'I Have Deposited'}
+        {wallet.isConnected ? 'Deposit to Vault' : 'Connect Base Wallet'}
       </Button>
     </div>
   );

@@ -27,12 +27,15 @@ pub async fn health_detailed(state: web::Data<Arc<AppState>>) -> impl Responder 
     let db_health = check_database_health(&state).await;
     let redis_health = check_redis_health(&state).await;
     let base_health = check_base_health(&state).await;
+    let solana_health = check_solana_health(&state).await;
 
     let overall_status = determine_overall_status(
         &db_health,
         &redis_health,
         &base_health,
+        &solana_health,
         state.config.evm_enabled,
+        state.config.solana_enabled,
     );
 
     let health = SystemHealth {
@@ -43,6 +46,7 @@ pub async fn health_detailed(state: web::Data<Arc<AppState>>) -> impl Responder 
             database: db_health,
             redis: redis_health,
             base: base_health,
+            solana: solana_health,
         },
     };
 
@@ -106,6 +110,11 @@ struct BaseBlockNumberResponse {
     result: Option<String>,
 }
 
+#[derive(serde::Deserialize)]
+struct SolanaSlotResponse {
+    result: Option<u64>,
+}
+
 async fn check_base_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth {
     if !state.config.evm_enabled {
         return ComponentHealth::disabled("Base integration disabled");
@@ -149,11 +158,58 @@ async fn check_base_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth 
     }
 }
 
+async fn check_solana_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth {
+    if !state.config.solana_enabled {
+        return ComponentHealth::disabled("Solana integration disabled");
+    }
+    if !state.config.solana_reads_enabled {
+        return ComponentHealth::disabled("Solana reads disabled");
+    }
+
+    let start = Instant::now();
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getSlot",
+        "params": [{ "commitment": "confirmed" }]
+    });
+
+    let response = reqwest::Client::new()
+        .post(&state.config.solana_rpc_url)
+        .json(&body)
+        .send()
+        .await;
+
+    let latency_ms = start.elapsed().as_millis() as u64;
+    let Ok(response) = response else {
+        return ComponentHealth::unhealthy("Solana RPC request failed");
+    };
+    if !response.status().is_success() {
+        return ComponentHealth::unhealthy("Solana RPC returned non-success status");
+    }
+
+    let payload = response.json::<SolanaSlotResponse>().await;
+    let Ok(payload) = payload else {
+        return ComponentHealth::unhealthy("Failed to decode Solana RPC response");
+    };
+    if payload.result.is_none() {
+        return ComponentHealth::unhealthy("Solana RPC response missing slot");
+    }
+
+    if latency_ms > 2000 {
+        ComponentHealth::degraded(latency_ms, "High RPC latency")
+    } else {
+        ComponentHealth::healthy(latency_ms)
+    }
+}
+
 fn determine_overall_status(
     db: &ComponentHealth,
     redis: &ComponentHealth,
     base: &ComponentHealth,
+    solana: &ComponentHealth,
     evm_enabled: bool,
+    solana_enabled: bool,
 ) -> HealthStatus {
     if db.status == HealthStatus::Unhealthy {
         return HealthStatus::Unhealthy;
@@ -165,6 +221,12 @@ fn determine_overall_status(
 
     if evm_enabled
         && (base.status == HealthStatus::Degraded || base.status == HealthStatus::Unhealthy)
+    {
+        return HealthStatus::Degraded;
+    }
+
+    if solana_enabled
+        && (solana.status == HealthStatus::Degraded || solana.status == HealthStatus::Unhealthy)
     {
         return HealthStatus::Degraded;
     }

@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod compliance;
 pub mod error;
 pub mod evm;
 pub mod health;
@@ -8,6 +9,7 @@ pub mod orders;
 pub mod payments;
 pub mod positions;
 pub mod rate_limit;
+pub mod solana;
 pub mod user;
 pub mod validation;
 pub mod wallet;

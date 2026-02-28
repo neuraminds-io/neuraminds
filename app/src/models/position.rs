@@ -28,6 +28,7 @@ pub struct PositionListResponse {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClaimWinningsResponse {
     pub market_id: String,
     pub claimed_amount: u64,

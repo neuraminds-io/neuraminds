@@ -108,6 +108,9 @@ function hasAuthHardeningSignals(routeText) {
 
 function buildReport() {
   const gates = [];
+  const chainMode = String(process.env.CHAIN_MODE || 'base').toLowerCase();
+  const expectsBase = chainMode === 'base' || chainMode === 'dual';
+  const expectsSolana = chainMode === 'solana' || chainMode === 'dual';
   const legacyBrandCheckFiles = [
     'web/src/app/layout.tsx',
     'web/src/app/page.tsx',
@@ -196,6 +199,7 @@ function buildReport() {
 
   const xmtpBridgeFile = path.join(ROOT, 'services', 'xmtp-bridge', 'server.mjs');
   const mcpServerScript = path.join(ROOT, 'scripts', 'mcp-server.mjs');
+  const addressManifestPath = path.join(ROOT, 'config', 'deployments', 'base-addresses.json');
   const packageJsonText = readText('package.json');
   const mcpStdioReady =
     fs.existsSync(mcpServerScript) &&
@@ -210,6 +214,34 @@ function buildReport() {
       : 'stdio mcp process missing (scripts/mcp-server.mjs or npm script)',
   });
 
+  const payoutWorkerScript = path.join(ROOT, 'scripts', 'base-global-payout-worker.sh');
+  const payoutWorkerReady =
+    fs.existsSync(payoutWorkerScript) &&
+    packageJsonText.includes('"payouts:worker"') &&
+    packageJsonText.includes('base-global-payout-worker.sh');
+  addGate(gates, {
+    id: 'base_global_payout_worker_present',
+    required: expectsBase,
+    status: payoutWorkerReady ? 'pass' : 'fail',
+    details: payoutWorkerReady
+      ? 'global base payout worker script and npm wiring present'
+      : 'missing global base payout worker script or npm wiring',
+  });
+
+  const matcherWorkerScript = path.join(ROOT, 'scripts', 'base-matcher-worker.sh');
+  const matcherWorkerReady =
+    fs.existsSync(matcherWorkerScript) &&
+    packageJsonText.includes('"matcher:worker"') &&
+    packageJsonText.includes('base-matcher-worker.sh');
+  addGate(gates, {
+    id: 'base_matcher_worker_present',
+    required: expectsBase,
+    status: matcherWorkerReady ? 'pass' : 'fail',
+    details: matcherWorkerReady
+      ? 'base matcher worker script and npm wiring present'
+      : 'missing base matcher worker script or npm wiring',
+  });
+
   const xmtpServiceText = readText('app/src/services/xmtp_swarm.rs');
   const xmtpBridgeReady =
     fs.existsSync(xmtpBridgeFile) &&
@@ -222,6 +254,57 @@ function buildReport() {
     details: xmtpBridgeReady
       ? 'xmtp http bridge process and backend transport wiring present'
       : 'xmtp bridge transport wiring missing',
+  });
+
+  addGate(gates, {
+    id: 'canonical_address_manifest_present',
+    required: expectsBase,
+    status: fs.existsSync(addressManifestPath) ? 'pass' : 'fail',
+    details: fs.existsSync(addressManifestPath)
+      ? 'config/deployments/base-addresses.json present'
+      : 'missing config/deployments/base-addresses.json',
+  });
+
+  const solanaProgramSourcesPresent =
+    fs.existsSync(path.join(ROOT, 'programs', 'polyguard-market', 'src', 'lib.rs')) &&
+    fs.existsSync(path.join(ROOT, 'programs', 'polyguard-orderbook', 'src', 'lib.rs')) &&
+    fs.existsSync(path.join(ROOT, 'programs', 'polyguard-privacy', 'src', 'lib.rs')) &&
+    fs.existsSync(path.join(ROOT, 'Anchor.toml'));
+  addGate(gates, {
+    id: 'solana_program_sources_present',
+    required: expectsSolana,
+    status: solanaProgramSourcesPresent ? 'pass' : 'fail',
+    details: solanaProgramSourcesPresent
+      ? 'anchor workspace and core Solana program sources present'
+      : 'missing Anchor.toml or one of polyguard-market/orderbook/privacy program sources',
+  });
+
+  const solanaApiText = readText('app/src/api/solana.rs');
+  const mainText = readText('app/src/main.rs');
+  const solanaApiPresent =
+    solanaApiText.includes('get_solana_programs') &&
+    mainText.includes('web::scope("/solana")') &&
+    mainText.includes('/programs');
+  addGate(gates, {
+    id: 'solana_api_surface_present',
+    required: expectsSolana,
+    status: solanaApiPresent ? 'pass' : 'fail',
+    details: solanaApiPresent
+      ? 'solana program metadata route is registered'
+      : 'solana program route missing in app api surface',
+  });
+
+  const syntheticMonitorText = readText('scripts/synthetic-monitor.mjs');
+  const syntheticChainAware =
+    syntheticMonitorText.includes("args['chain-mode']") &&
+    syntheticMonitorText.includes('api_solana_programs_public');
+  addGate(gates, {
+    id: 'synthetic_monitor_chain_mode_support',
+    required: true,
+    status: syntheticChainAware ? 'pass' : 'fail',
+    details: syntheticChainAware
+      ? 'synthetic monitor checks honor chain mode and include Solana probe'
+      : 'synthetic monitor is still hardcoded to base-only checks',
   });
 
   if (strictMode) {
@@ -263,6 +346,23 @@ function buildReport() {
       stdout: forgeTests.stdout.slice(-6000),
       stderr: forgeTests.stderr.slice(-6000),
     });
+
+    const addressManifest = runCommand(
+      'node',
+      ['scripts/validate-address-manifest.mjs', '--environment=production', '--write-report'],
+      strictTimeoutMs
+    );
+    addGate(gates, {
+      id: 'canonical_address_manifest_drift_check',
+      required: expectsBase,
+      status: addressManifest.status === 0 ? 'pass' : 'fail',
+      details: addressManifest.status === 0
+        ? `ok (${addressManifest.durationMs}ms)`
+        : `failed (${addressManifest.durationMs}ms)${addressManifest.timedOut ? ', timed out' : ''}`,
+      command: addressManifest.command,
+      stdout: addressManifest.stdout.slice(-6000),
+      stderr: addressManifest.stderr.slice(-6000),
+    });
   } else {
     addGate(gates, {
       id: 'web_build',
@@ -278,6 +378,12 @@ function buildReport() {
     });
     addGate(gates, {
       id: 'evm_forge_tests',
+      required: false,
+      status: 'skip',
+      details: 'run with --strict',
+    });
+    addGate(gates, {
+      id: 'canonical_address_manifest_drift_check',
       required: false,
       status: 'skip',
       details: 'run with --strict',

@@ -1,11 +1,13 @@
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::api::ApiError;
+use crate::services::database::PayoutJobRecord;
 use crate::services::x402::{self, X402Resource};
 use crate::AppState;
 
@@ -20,6 +22,7 @@ const ORDER_BOOK_ORDERS_SELECTOR: &str = "0xa85c38ef";
 const ORDER_BOOK_PLACE_SELECTOR: &str = "0xa8dd6515";
 const ORDER_BOOK_CANCEL_SELECTOR: &str = "0x514fcac7";
 const ORDER_BOOK_CLAIM_SELECTOR: &str = "0x379607f5";
+const ORDER_BOOK_CLAIM_FOR_SELECTOR: &str = "0x0de05659";
 const ORDER_BOOK_MATCH_SELECTOR: &str = "0xc6437097";
 const AGENT_RUNTIME_COUNT_SELECTOR: &str = "0xb7dc1284";
 const AGENT_RUNTIME_AGENTS_SELECTOR: &str = "0x513856c8";
@@ -27,6 +30,10 @@ const AGENT_RUNTIME_CREATE_SELECTOR: &str = "0x325993ba";
 const AGENT_RUNTIME_EXECUTE_SELECTOR: &str = "0xe2a343a5";
 const ERC8004_IDENTITY_PROFILE_SELECTOR: &str = "0x9dd9d0fd";
 const ERC8004_REPUTATION_OF_SELECTOR: &str = "0xdb89c044";
+const ERC8004_IDENTITY_REGISTER_SELECTOR: &str = "0x07e49598";
+const ERC8004_IDENTITY_SET_TIER_SELECTOR: &str = "0x93e2282d";
+const ERC8004_IDENTITY_SET_ACTIVE_SELECTOR: &str = "0x2ce962cf";
+const ERC8004_REPUTATION_SUBMIT_OUTCOME_SELECTOR: &str = "0x30a51426";
 const ORDER_FILLED_TOPIC: &str =
     "0x5aac01386940f75e601757cfe5dc1d4ab2bac84f98d30664486114a8abb38a45";
 const MAX_MARKETS_PAGE_SIZE: u64 = 200;
@@ -36,6 +43,10 @@ const MAX_AGENTS_PAGE_SIZE: u64 = 200;
 const ORDERBOOK_SCAN_WINDOW: u64 = 150;
 const TRADES_BLOCK_SCAN_WINDOW: u64 = 25_000;
 const MAX_MARKET_TEXT_LENGTH: usize = 2_048;
+const ERC8004_MAX_TIER: u8 = 100;
+const MATCHER_STATE_REDIS_KEY: &str = "ops:matcher:state";
+const MATCHER_STATS_REDIS_KEY: &str = "ops:matcher:stats";
+const INDEXER_CURSOR_KEY: &str = "evm_indexer_main";
 
 #[derive(Serialize)]
 pub struct BaseTokenStateResponse {
@@ -71,6 +82,52 @@ pub struct BaseAgentsQuery {
     pub owner: Option<String>,
     pub market_id: Option<u64>,
     pub active: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct BasePayoutCandidatesQuery {
+    pub limit: Option<u64>,
+}
+
+#[derive(Deserialize)]
+pub struct BasePayoutJobsQuery {
+    pub status: Option<String>,
+    pub limit: Option<u64>,
+    pub offset: Option<u64>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatcherReportRequest {
+    pub attempted: u64,
+    pub matched: u64,
+    pub failed: u64,
+    pub backlog: u64,
+    pub tx_latency_ms: u64,
+    pub last_tx_hash: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatcherPauseRequest {
+    pub reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PayoutReportRequest {
+    pub market_id: u64,
+    pub wallet: String,
+    pub status: String,
+    pub last_tx: Option<String>,
+    pub last_error: Option<String>,
+    pub retry_after_seconds: Option<i64>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexerBackfillRequest {
+    pub from_block: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -145,6 +202,84 @@ pub struct BaseAgentsResponse {
     pub limit: u64,
     pub offset: u64,
     pub source: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BasePayoutCandidate {
+    pub owner: String,
+    pub market_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BasePayoutCandidatesResponse {
+    pub candidates: Vec<BasePayoutCandidate>,
+    pub total: u64,
+    pub limit: u64,
+    pub source: String,
+}
+
+#[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatcherRuntimeState {
+    pub paused: bool,
+    pub reason: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatcherRuntimeStats {
+    pub attempted: u64,
+    pub matched: u64,
+    pub failed: u64,
+    pub backlog: u64,
+    pub tx_latency_ms: u64,
+    pub success_ratio: f64,
+    pub last_tx_hash: Option<String>,
+    pub last_cycle_at: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatcherHealthResponse {
+    pub running: bool,
+    pub paused: bool,
+    pub reason: Option<String>,
+    pub backlog: u64,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BasePayoutHealthResponse {
+    pub seed_inserted: u64,
+    pub pending: u64,
+    pub processing: u64,
+    pub retry: u64,
+    pub failed: u64,
+    pub oldest_pending_seconds: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BasePayoutJobsResponse {
+    pub jobs: Vec<PayoutJobRecord>,
+    pub total: u64,
+    pub limit: u64,
+    pub offset: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexerHealthResponse {
+    pub enabled: bool,
+    pub lag_blocks: u64,
+    pub latest_block: u64,
+    pub last_indexed_block: u64,
+    pub confirmations: u64,
+    pub source_block: u64,
 }
 
 #[derive(Serialize)]
@@ -256,6 +391,14 @@ pub struct PrepareClaimWriteRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PrepareClaimForWriteRequest {
+    pub from: Option<String>,
+    pub user: String,
+    pub market_id: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PrepareMatchOrdersWriteRequest {
     pub from: Option<String>,
     pub first_order_id: u64,
@@ -281,6 +424,40 @@ pub struct PrepareCreateAgentWriteRequest {
 pub struct PrepareExecuteAgentWriteRequest {
     pub from: Option<String>,
     pub agent_id: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareErc8004RegisterIdentityWriteRequest {
+    pub from: Option<String>,
+    pub wallet: String,
+    pub tier: u8,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareErc8004SetTierWriteRequest {
+    pub from: Option<String>,
+    pub wallet: String,
+    pub tier: u8,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareErc8004SetActiveWriteRequest {
+    pub from: Option<String>,
+    pub wallet: String,
+    pub active: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareErc8004SubmitOutcomeWriteRequest {
+    pub from: Option<String>,
+    pub wallet: String,
+    pub success: bool,
+    pub notional_microusdc: String,
+    pub confidence_weight_bps: u16,
 }
 
 #[derive(Deserialize)]
@@ -598,6 +775,315 @@ pub async fn get_base_agents(
         offset,
         source: "agent_runtime".to_string(),
     }))
+}
+
+pub async fn get_base_payout_candidates(
+    state: web::Data<Arc<AppState>>,
+    query: web::Query<BasePayoutCandidatesQuery>,
+) -> Result<impl Responder, ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
+        return Err(ApiError::bad_request(
+            "EVM_DISABLED",
+            "EVM services are disabled",
+        ));
+    }
+
+    let limit = query.limit.unwrap_or(1000).clamp(1, 5000);
+    let rows = state
+        .db
+        .list_base_payout_candidates(limit as i64)
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
+
+    let candidates: Vec<BasePayoutCandidate> = rows
+        .into_iter()
+        .map(|(owner, market_id)| BasePayoutCandidate { owner, market_id })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(BasePayoutCandidatesResponse {
+        total: candidates.len() as u64,
+        candidates,
+        limit,
+        source: "database".to_string(),
+    }))
+}
+
+pub async fn report_matcher_cycle(
+    req: HttpRequest,
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<MatcherReportRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_admin_control(&req, &state)?;
+    let now = Utc::now().to_rfc3339();
+    let attempted = body.attempted;
+    let matched = body.matched;
+    let failed = body.failed;
+    let ratio = if attempted == 0 {
+        1.0
+    } else {
+        matched as f64 / attempted as f64
+    };
+
+    let stats = MatcherRuntimeStats {
+        attempted,
+        matched,
+        failed,
+        backlog: body.backlog,
+        tx_latency_ms: body.tx_latency_ms,
+        success_ratio: ratio,
+        last_tx_hash: body.last_tx_hash.clone(),
+        last_cycle_at: Some(now.clone()),
+    };
+
+    state
+        .redis
+        .set(MATCHER_STATS_REDIS_KEY, &stats, Some(3600))
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
+
+    let runtime = matcher_runtime_state(&state).await?;
+    if runtime.updated_at.is_none() {
+        let ready_state = MatcherRuntimeState {
+            paused: false,
+            reason: None,
+            updated_at: Some(now),
+        };
+        state
+            .redis
+            .set(MATCHER_STATE_REDIS_KEY, &ready_state, Some(86400))
+            .await
+            .map_err(|err| ApiError::internal(&err.to_string()))?;
+    }
+
+    Ok(HttpResponse::Ok().json(json!({ "ok": true })))
+}
+
+pub async fn get_matcher_health(
+    state: web::Data<Arc<AppState>>,
+) -> Result<impl Responder, ApiError> {
+    let runtime = matcher_runtime_state(&state).await?;
+    let stats = matcher_runtime_stats(&state).await?;
+
+    Ok(HttpResponse::Ok().json(MatcherHealthResponse {
+        running: state.config.matcher_enabled,
+        paused: runtime.paused,
+        reason: runtime.reason,
+        backlog: stats.backlog,
+        updated_at: stats.last_cycle_at.or(runtime.updated_at),
+    }))
+}
+
+pub async fn get_matcher_stats(
+    state: web::Data<Arc<AppState>>,
+) -> Result<impl Responder, ApiError> {
+    let stats = matcher_runtime_stats(&state).await?;
+    Ok(HttpResponse::Ok().json(stats))
+}
+
+pub async fn pause_matcher(
+    req: HttpRequest,
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<MatcherPauseRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_admin_control(&req, &state)?;
+    let runtime = MatcherRuntimeState {
+        paused: true,
+        reason: body
+            .reason
+            .clone()
+            .or_else(|| Some("paused_by_admin".to_string())),
+        updated_at: Some(Utc::now().to_rfc3339()),
+    };
+    state
+        .redis
+        .set(MATCHER_STATE_REDIS_KEY, &runtime, Some(86400))
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
+
+    Ok(HttpResponse::Ok().json(runtime))
+}
+
+pub async fn resume_matcher(
+    req: HttpRequest,
+    state: web::Data<Arc<AppState>>,
+) -> Result<impl Responder, ApiError> {
+    ensure_admin_control(&req, &state)?;
+    let runtime = MatcherRuntimeState {
+        paused: false,
+        reason: None,
+        updated_at: Some(Utc::now().to_rfc3339()),
+    };
+    state
+        .redis
+        .set(MATCHER_STATE_REDIS_KEY, &runtime, Some(86400))
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
+
+    Ok(HttpResponse::Ok().json(runtime))
+}
+
+pub async fn report_payout_job(
+    req: HttpRequest,
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PayoutReportRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_admin_control(&req, &state)?;
+    let normalized_status = body.status.trim().to_ascii_lowercase();
+    if !matches!(
+        normalized_status.as_str(),
+        "pending" | "processing" | "retry" | "failed" | "paid"
+    ) {
+        return Err(ApiError::bad_request(
+            "INVALID_PAYOUT_STATUS",
+            "status must be one of pending|processing|retry|failed|paid",
+        ));
+    }
+
+    let wallet = normalize_required_address(
+        body.wallet.as_str(),
+        "INVALID_WALLET",
+        "wallet must be a valid 0x EVM address",
+    )?;
+
+    state
+        .db
+        .update_payout_job_result(
+            body.market_id,
+            wallet.as_str(),
+            normalized_status.as_str(),
+            body.last_tx.as_deref(),
+            body.last_error.as_deref(),
+            body.retry_after_seconds,
+        )
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
+
+    Ok(HttpResponse::Ok().json(json!({ "ok": true })))
+}
+
+pub async fn get_payout_health(
+    state: web::Data<Arc<AppState>>,
+) -> Result<impl Responder, ApiError> {
+    let seeded = state
+        .db
+        .seed_payout_jobs_from_positions(5_000)
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
+    let summary = state
+        .db
+        .payout_backlog_summary()
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
+
+    Ok(HttpResponse::Ok().json(BasePayoutHealthResponse {
+        seed_inserted: seeded,
+        pending: summary.pending,
+        processing: summary.processing,
+        retry: summary.retry,
+        failed: summary.failed,
+        oldest_pending_seconds: summary.oldest_pending_seconds,
+    }))
+}
+
+pub async fn get_payout_backlog(
+    state: web::Data<Arc<AppState>>,
+) -> Result<impl Responder, ApiError> {
+    let summary = state
+        .db
+        .payout_backlog_summary()
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
+    Ok(HttpResponse::Ok().json(summary))
+}
+
+pub async fn get_payout_jobs(
+    state: web::Data<Arc<AppState>>,
+    query: web::Query<BasePayoutJobsQuery>,
+) -> Result<impl Responder, ApiError> {
+    let limit = query.limit.unwrap_or(100).clamp(1, 1_000);
+    let offset = query.offset.unwrap_or(0);
+    let (jobs, total) = state
+        .db
+        .list_payout_jobs(query.status.as_deref(), limit as i64, offset as i64)
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
+
+    Ok(HttpResponse::Ok().json(BasePayoutJobsResponse {
+        jobs,
+        total: total.max(0) as u64,
+        limit,
+        offset,
+    }))
+}
+
+pub async fn get_indexer_health(state: web::Data<Arc<AppState>>) -> Result<HttpResponse, ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
+        return Err(ApiError::bad_request(
+            "EVM_DISABLED",
+            "EVM services are disabled",
+        ));
+    }
+
+    let latest_block = state
+        .evm_rpc
+        .eth_block_number()
+        .await
+        .map_err(map_evm_rpc_error)?;
+    let cursor = state
+        .db
+        .get_chain_sync_cursor(INDEXER_CURSOR_KEY)
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
+    let last_indexed = cursor.as_ref().map(|entry| entry.last_block).unwrap_or(0);
+    let confirmations = state.config.indexer_confirmations;
+    let source_block = latest_block.saturating_sub(confirmations);
+    let lag_blocks = source_block.saturating_sub(last_indexed);
+
+    Ok(HttpResponse::Ok().json(IndexerHealthResponse {
+        enabled: true,
+        lag_blocks,
+        latest_block,
+        last_indexed_block: last_indexed,
+        confirmations,
+        source_block,
+    }))
+}
+
+pub async fn get_indexer_lag(state: web::Data<Arc<AppState>>) -> Result<HttpResponse, ApiError> {
+    get_indexer_health(state).await
+}
+
+pub async fn trigger_indexer_backfill(
+    req: HttpRequest,
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<IndexerBackfillRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_admin_control(&req, &state)?;
+    let latest_block = state
+        .evm_rpc
+        .eth_block_number()
+        .await
+        .map_err(map_evm_rpc_error)?;
+    let from_block = body
+        .from_block
+        .unwrap_or_else(|| latest_block.saturating_sub(state.config.indexer_lookback_blocks));
+    let cursor_block = from_block.saturating_sub(1);
+
+    let meta = json!({
+        "requested_at": Utc::now().to_rfc3339(),
+        "mode": "backfill",
+    });
+    state
+        .db
+        .upsert_chain_sync_cursor(INDEXER_CURSOR_KEY, cursor_block, meta)
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
+    state.evm_indexer.set_last_synced_block(cursor_block).await;
+
+    Ok(HttpResponse::Accepted().json(json!({
+        "ok": true,
+        "fromBlock": from_block,
+    })))
 }
 
 pub async fn get_base_agent(
@@ -924,6 +1410,7 @@ pub async fn get_base_trades(
             order_book,
             TRADES_BLOCK_SCAN_WINDOW,
             &[ORDER_FILLED_TOPIC],
+            Some(latest_block),
         )
         .await;
 
@@ -1289,6 +1776,41 @@ pub async fn prepare_claim_write(
     )))
 }
 
+pub async fn prepare_claim_for_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareClaimForWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    let order_book = configured_address(
+        &state.config.order_book_address,
+        "ORDER_BOOK_ADDRESS_NOT_CONFIGURED",
+        "ORDER_BOOK_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+    let user = normalize_required_address(
+        body.user.as_str(),
+        "INVALID_USER_ADDRESS",
+        "user must be a valid 0x EVM address",
+    )?;
+
+    let user_word = encode_address_word(user.as_str())?;
+    let data = format!(
+        "{}{}{}",
+        ORDER_BOOK_CLAIM_FOR_SELECTOR,
+        user_word,
+        encode_u256_hex(body.market_id)
+    );
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        order_book,
+        data,
+        "claimFor",
+    )))
+}
+
 pub async fn prepare_match_orders_write(
     state: web::Data<Arc<AppState>>,
     body: web::Json<PrepareMatchOrdersWriteRequest>,
@@ -1418,6 +1940,162 @@ pub async fn prepare_execute_agent_write(
     )))
 }
 
+pub async fn prepare_erc8004_register_identity_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareErc8004RegisterIdentityWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    if body.tier > ERC8004_MAX_TIER {
+        return Err(ApiError::bad_request(
+            "INVALID_TIER",
+            "tier must be between 0 and 100",
+        ));
+    }
+
+    let registry = configured_address(
+        &state.config.erc8004_identity_registry_address,
+        "ERC8004_IDENTITY_REGISTRY_NOT_CONFIGURED",
+        "ERC8004_IDENTITY_REGISTRY_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+    let wallet = normalize_required_address(
+        body.wallet.as_str(),
+        "INVALID_WALLET",
+        "wallet must be a valid 0x EVM address",
+    )?;
+    let data = format!(
+        "{}{}{}",
+        ERC8004_IDENTITY_REGISTER_SELECTOR,
+        encode_address_word(wallet.as_str())?,
+        encode_u256_hex_u128(body.tier as u128),
+    );
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        registry,
+        data,
+        "registerIdentity",
+    )))
+}
+
+pub async fn prepare_erc8004_set_tier_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareErc8004SetTierWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    if body.tier > ERC8004_MAX_TIER {
+        return Err(ApiError::bad_request(
+            "INVALID_TIER",
+            "tier must be between 0 and 100",
+        ));
+    }
+
+    let registry = configured_address(
+        &state.config.erc8004_identity_registry_address,
+        "ERC8004_IDENTITY_REGISTRY_NOT_CONFIGURED",
+        "ERC8004_IDENTITY_REGISTRY_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+    let wallet = normalize_required_address(
+        body.wallet.as_str(),
+        "INVALID_WALLET",
+        "wallet must be a valid 0x EVM address",
+    )?;
+    let data = format!(
+        "{}{}{}",
+        ERC8004_IDENTITY_SET_TIER_SELECTOR,
+        encode_address_word(wallet.as_str())?,
+        encode_u256_hex_u128(body.tier as u128),
+    );
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        registry,
+        data,
+        "setIdentityTier",
+    )))
+}
+
+pub async fn prepare_erc8004_set_active_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareErc8004SetActiveWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    let registry = configured_address(
+        &state.config.erc8004_identity_registry_address,
+        "ERC8004_IDENTITY_REGISTRY_NOT_CONFIGURED",
+        "ERC8004_IDENTITY_REGISTRY_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+    let wallet = normalize_required_address(
+        body.wallet.as_str(),
+        "INVALID_WALLET",
+        "wallet must be a valid 0x EVM address",
+    )?;
+    let data = format!(
+        "{}{}{}",
+        ERC8004_IDENTITY_SET_ACTIVE_SELECTOR,
+        encode_address_word(wallet.as_str())?,
+        encode_bool_word(body.active),
+    );
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        registry,
+        data,
+        "setIdentityActive",
+    )))
+}
+
+pub async fn prepare_erc8004_submit_outcome_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareErc8004SubmitOutcomeWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    if body.confidence_weight_bps > 10_000 {
+        return Err(ApiError::bad_request(
+            "INVALID_CONFIDENCE_WEIGHT",
+            "confidenceWeightBps must be between 0 and 10000",
+        ));
+    }
+
+    let registry = configured_address(
+        &state.config.erc8004_reputation_registry_address,
+        "ERC8004_REPUTATION_REGISTRY_NOT_CONFIGURED",
+        "ERC8004_REPUTATION_REGISTRY_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+    let wallet = normalize_required_address(
+        body.wallet.as_str(),
+        "INVALID_WALLET",
+        "wallet must be a valid 0x EVM address",
+    )?;
+    let notional = parse_u128_decimal(body.notional_microusdc.as_str(), "notionalMicrousdc")?;
+    let data = format!(
+        "{}{}{}{}{}",
+        ERC8004_REPUTATION_SUBMIT_OUTCOME_SELECTOR,
+        encode_address_word(wallet.as_str())?,
+        encode_bool_word(body.success),
+        encode_u256_hex_u128(notional),
+        encode_u256_hex_u128(body.confidence_weight_bps as u128),
+    );
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        registry,
+        data,
+        "submitOutcome",
+    )))
+}
+
 pub async fn relay_raw_transaction(
     state: web::Data<Arc<AppState>>,
     body: web::Json<RelayRawTransactionRequest>,
@@ -1441,6 +2119,51 @@ pub async fn relay_raw_transaction(
         chain_id: state.config.base_chain_id,
         tx_hash,
     }))
+}
+
+async fn matcher_runtime_state(state: &AppState) -> Result<MatcherRuntimeState, ApiError> {
+    match state
+        .redis
+        .get::<MatcherRuntimeState>(MATCHER_STATE_REDIS_KEY)
+        .await
+    {
+        Ok(Some(runtime)) => Ok(runtime),
+        Ok(None) => Ok(MatcherRuntimeState::default()),
+        Err(err) => Err(ApiError::internal(&err.to_string())),
+    }
+}
+
+async fn matcher_runtime_stats(state: &AppState) -> Result<MatcherRuntimeStats, ApiError> {
+    match state
+        .redis
+        .get::<MatcherRuntimeStats>(MATCHER_STATS_REDIS_KEY)
+        .await
+    {
+        Ok(Some(stats)) => Ok(stats),
+        Ok(None) => Ok(MatcherRuntimeStats::default()),
+        Err(err) => Err(ApiError::internal(&err.to_string())),
+    }
+}
+
+fn ensure_admin_control(req: &HttpRequest, state: &AppState) -> Result<(), ApiError> {
+    let expected = state.config.admin_control_key.trim();
+    if expected.is_empty() {
+        return Err(ApiError::forbidden(
+            "admin control key is not configured for this environment",
+        ));
+    }
+
+    let provided = req
+        .headers()
+        .get("x-admin-key")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .unwrap_or("");
+    if provided != expected {
+        return Err(ApiError::unauthorized("invalid admin key"));
+    }
+
+    Ok(())
 }
 
 fn is_valid_evm_address(address: &str) -> bool {

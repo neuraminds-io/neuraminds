@@ -96,6 +96,16 @@ export const ORDER_BOOK_ABI = [
   },
   {
     type: 'function',
+    name: 'claimFor',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'user', type: 'address' },
+      { name: 'marketId', type: 'uint256' },
+    ],
+    outputs: [{ name: 'payout', type: 'uint256' }],
+  },
+  {
+    type: 'function',
     name: 'claimable',
     stateMutability: 'view',
     inputs: [
