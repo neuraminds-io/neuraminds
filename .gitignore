@@ -43,6 +43,7 @@ Thumbs.db
 # Logs
 logs/
 *.log
+docs/reports/launch-ops-phase2-workers-*.log
 
 # Build artifacts
 dist/
@@ -53,3 +54,7 @@ build/
 coverage/
 .nyc_output/
 research/
+
+# Timestamped launch evidence artifacts (canonical non-timestamp reports stay tracked)
+docs/reports/*-20??????T??????Z.json
+docs/reports/*-20??????T??????Z.md

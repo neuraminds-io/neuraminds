@@ -792,8 +792,11 @@ impl DatabaseService {
               COALESCE(SUM(CASE WHEN status = 'retry' THEN 1 ELSE 0 END), 0) AS retry,
               COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
               COALESCE(
-                EXTRACT(EPOCH FROM (NOW() - MIN(updated_at)))
-                FILTER (WHERE status IN ('pending', 'retry')),
+                EXTRACT(
+                  EPOCH FROM (
+                    NOW() - MIN(CASE WHEN status IN ('pending', 'retry') THEN updated_at END)
+                  )
+                ),
                 0
               )::bigint AS oldest_pending_seconds
             FROM payout_jobs

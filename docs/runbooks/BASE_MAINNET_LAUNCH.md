@@ -1,6 +1,6 @@
 # Base Mainnet Launch Runbook
 
-Last updated: February 26, 2026
+Last updated: February 28, 2026
 Owner: Protocol + Backend + Frontend release team
 
 ## 1. Objective
@@ -12,6 +12,10 @@ Launch NeuralMinds on Base with production programs only:
 - `AgentRuntime`
 
 Native token launch is out of scope for this runbook. If token support is required at launch, use the externally launched token address in config.
+
+For launch-ops closure steps and timestamped evidence workflow, use:
+- `docs/runbooks/LAUNCH_OPS_FOCUS_2026-03-01.md`
+- `scripts/launch-ops-execute.sh`
 
 ## 2. Preconditions
 

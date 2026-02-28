@@ -73,6 +73,60 @@ npm run evm:handoff:timelock:base
 Base launch runbook:
 - `docs/runbooks/BASE_MAINNET_LAUNCH.md`
 - `docs/reports/BASE_PLAN_EXECUTION_REPORT_2026-02-26.md`
+- `docs/runbooks/LAUNCH_OPS_FOCUS_2026-03-01.md`
+
+## Launch Ops Focus (March 1 Cutover)
+
+Phase 1 (staging stabilize + freeze):
+
+```bash
+npm run launch:ops:phase1 -- \
+  --staging-api-url https://neuraminds-api-base-staging-v1.onrender.com \
+  --staging-web-url https://neuraminds-web-base-staging-v4.onrender.com \
+  --strict
+```
+
+Phase 2 (worker reliability evidence):
+
+```bash
+npm run launch:ops:phase2 -- \
+  --staging-api-url https://neuraminds-api-base-staging-v1.onrender.com \
+  --staging-web-url https://neuraminds-web-base-staging-v4.onrender.com
+```
+
+Phase 3 (soak + chaos + compliance probes):
+
+```bash
+npm run launch:ops:phase3 -- \
+  --staging-api-url https://neuraminds-api-base-staging-v1.onrender.com \
+  --staging-web-url https://neuraminds-web-base-staging-v4.onrender.com \
+  --soak-samples 96 \
+  --soak-interval-sec 900
+```
+
+Phase 4 (mainnet preflight):
+
+```bash
+npm run launch:ops:phase4 -- \
+  --production-api-url https://api.neuraminds.ai \
+  --production-web-url https://app.neuraminds.ai
+```
+
+All phases:
+
+```bash
+npm run launch:ops:all -- \
+  --staging-api-url https://neuraminds-api-base-staging-v1.onrender.com \
+  --staging-web-url https://neuraminds-web-base-staging-v4.onrender.com \
+  --production-api-url https://api.neuraminds.ai \
+  --production-web-url https://app.neuraminds.ai
+```
+
+Freeze guard while soak is active:
+
+```bash
+npm run launch:freeze:guard -- --freeze-report docs/reports/launch-freeze-staging-<timestamp>.json
+```
 
 ## Local End-to-End Launch Rehearsal
 

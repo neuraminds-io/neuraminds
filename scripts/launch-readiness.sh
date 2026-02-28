@@ -108,6 +108,44 @@ fi
 ADDRESS_ENV="production"
 if [[ "${MODE}" == "staging" ]]; then
   ADDRESS_ENV="staging"
+
+  # Staging readiness should validate against canonical staging addresses,
+  # independent of local production-oriented .env defaults.
+  while IFS='=' read -r key value; do
+    if [[ -n "${key}" && -n "${value}" ]]; then
+      export "${key}=${value}"
+    fi
+  done < <(
+    cd "${ROOT_DIR}" && node -e '
+const fs = require("fs");
+const manifestPath = "config/deployments/base-addresses.json";
+let data = null;
+try {
+  data = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+} catch {
+  process.exit(0);
+}
+const staging = data?.environments?.staging || {};
+const contracts = staging.contracts || {};
+const chainId = String(staging.chainId || 84532);
+const vars = {
+  BASE_CHAIN_ID: chainId,
+  NEXT_PUBLIC_BASE_CHAIN_ID: chainId,
+  MARKET_CORE_ADDRESS: contracts.marketCore || "",
+  ORDER_BOOK_ADDRESS: contracts.orderBook || "",
+  COLLATERAL_VAULT_ADDRESS: contracts.collateralVault || "",
+  COLLATERAL_TOKEN_ADDRESS: contracts.collateralToken || "",
+  NEXT_PUBLIC_MARKET_CORE_ADDRESS: contracts.marketCore || "",
+  NEXT_PUBLIC_ORDER_BOOK_ADDRESS: contracts.orderBook || "",
+  NEXT_PUBLIC_COLLATERAL_VAULT_ADDRESS: contracts.collateralVault || "",
+  NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS: contracts.collateralToken || "",
+};
+for (const [key, value] of Object.entries(vars)) {
+  if (!value) continue;
+  console.log(`${key}=${value}`);
+}
+'
+  )
 fi
 (
   cd "${ROOT_DIR}"
