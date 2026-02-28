@@ -414,7 +414,7 @@ async function main() {
     {
       description: 'Scan active markets and return ranked opportunities.',
       argsSchema: {
-        limit: z.number().int().min(1).max(50).optional(),
+        limit: z.coerce.number().int().min(1).max(50).optional(),
       },
     },
     async (args) => {
@@ -427,7 +427,7 @@ async function main() {
     {
       description: 'Analyze market structure, liquidity and executable opportunities.',
       argsSchema: {
-        market_id: z.number().int().min(1),
+        market_id: z.coerce.number().int().min(1),
       },
     },
     async (args) => {
@@ -440,7 +440,7 @@ async function main() {
     {
       description: 'Generate agent launch params from risk budget and target outcome.',
       argsSchema: {
-        market_id: z.number().int().min(1),
+        market_id: z.coerce.number().int().min(1),
         outcome: z.enum(['yes', 'no']),
         budget_usdc: z.string().min(1),
       },

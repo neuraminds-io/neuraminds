@@ -501,7 +501,7 @@ async function runDirectHttpMcpChecks(config, sampleMarketId) {
   const getPrompt = await jsonRpc('direct-prompt-get', 'prompts/get', {
     name: 'market-scan',
     arguments: {
-      limit: 3,
+      limit: '3',
     },
   });
   checks.push(
@@ -692,7 +692,7 @@ async function runStdioMcpChecks(config, sampleMarketId) {
     const prompt = await client.getPrompt({
       name: 'market-scan',
       arguments: {
-        limit: 3,
+        limit: '3',
       },
     });
     checks.push(
