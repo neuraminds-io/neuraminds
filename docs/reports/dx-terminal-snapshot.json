@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-02-28T01:09:14Z",
+  "fetchedAt": "2026-02-28T01:20:38Z",
   "source": "terminal.markets",
   "apiUrl": "https://api.terminal.markets",
   "ownerAddress": "",
@@ -25,119 +25,119 @@
   "positions": {
     "vaultAddress": "0x496D1400BB933fF4683dBe42445D5c89cFc10F95",
     "ethBalance": "173195476212",
-    "overallValueEth": "63734091941281600506",
-    "overallValueUsd": "123233.804324402198896912",
-    "overallPnlEth": "94362170941281600506",
-    "overallPnlUsd": "187700.558881024316338428",
-    "overallPnlPercent": 11.57108166048824,
+    "overallValueEth": "63976827846907051118",
+    "overallValueUsd": "123513.010662777398827713",
+    "overallPnlEth": "94604906846907051118",
+    "overallPnlUsd": "188067.489340773903460762",
+    "overallPnlPercent": 11.600846946279221,
     "positions": [
       {
         "tokenAddress": "0xFcc897aaC0073A94ca3D91E567f0129822558C1d",
         "tokenSymbol": "HOLE",
         "tokenName": "Hole",
         "balance": "52911071311590164830144648",
-        "currentValueEth": "10897831129191473870",
-        "currentValueUsd": "21071.62976719670730609216247000",
+        "currentValueEth": "10685496237107740790",
+        "currentValueUsd": "20629.30994061096703161255300810",
         "totalCostEth": "4801448264677189095",
         "totalBoughtEth": "4801448264677189095",
         "totalBoughtUsd": "9921.36252936",
         "realizedPnlEth": "0",
         "realizedPnlUsd": "0.00000000",
-        "unrealizedPnlEth": "6096382864514284775",
-        "unrealizedPnlUsd": "11787.73290916812216949018427500",
-        "totalPnlEth": "6096382864514284775",
-        "totalPnlUsd": "11787.73290916812216949018427500",
-        "totalPnlPercent": 126.96966682664353
+        "unrealizedPnlEth": "5884047972430551695",
+        "unrealizedPnlUsd": "11359.68294173940329568210921105",
+        "totalPnlEth": "5884047972430551695",
+        "totalPnlUsd": "11359.68294173940329568210921105",
+        "totalPnlPercent": 122.54735754871552
       },
       {
         "tokenAddress": "0x2Ad250B4A33Ba89e9372C6d4B8b0BF2D2e5E0012",
         "tokenSymbol": "AIGF",
         "tokenName": "AI GF",
         "balance": "61446295671212906149257819",
-        "currentValueEth": "10043011398926259485",
-        "currentValueUsd": "19418.78300711115977748474278500",
+        "currentValueEth": "9492384444664259149",
+        "currentValueUsd": "18325.90049532566862439254977811",
         "totalCostEth": "5829410687590156178",
         "totalBoughtEth": "9158009092716424950",
         "totalBoughtUsd": "18652.71592588",
         "realizedPnlEth": "2700995721521825339",
         "realizedPnlUsd": "5469.45012688",
-        "unrealizedPnlEth": "4213600711336103307",
-        "unrealizedPnlUsd": "8147.25729583390279988290976700",
-        "totalPnlEth": "6914596432857928646",
-        "totalPnlUsd": "13616.70742271390279988290976700",
-        "totalPnlPercent": 75.5032711024197
+        "unrealizedPnlEth": "3662973757074102971",
+        "unrealizedPnlUsd": "7071.69973787376323448016624869",
+        "totalPnlEth": "6363969478595928310",
+        "totalPnlUsd": "12541.14986475376323448016624869",
+        "totalPnlPercent": 69.49075300282612
       },
       {
         "tokenAddress": "0x781BAe1c8E0DbB4950845A6d776d94C33b326D8a",
         "tokenSymbol": "HOTDOGZ",
         "tokenName": "Hotdogz",
         "balance": "54392377824572360657263719",
-        "currentValueEth": "9531052944727254910",
-        "currentValueUsd": "18428.87970661212556302059471000",
+        "currentValueEth": "9344670352374867511",
+        "currentValueUsd": "18040.72517685504290676551101929",
         "totalCostEth": "7076812866548587549",
         "totalBoughtEth": "14937174147653276472",
         "totalBoughtUsd": "30292.63694794",
         "realizedPnlEth": "32046059162596012088",
         "realizedPnlUsd": "64922.58430854",
-        "unrealizedPnlEth": "2454240078178667361",
-        "unrealizedPnlUsd": "4745.42481656472329874172994100",
-        "totalPnlEth": "34500299240774679449",
-        "totalPnlUsd": "69668.00912510472329874172994100",
-        "totalPnlPercent": 230.9693848363875
+        "unrealizedPnlEth": "2267857485826279962",
+        "unrealizedPnlUsd": "4378.30250819575022779103716518",
+        "totalPnlEth": "34313916648422292050",
+        "totalPnlUsd": "69300.88681673575022779103716518",
+        "totalPnlPercent": 229.72160804467305
       },
       {
         "tokenAddress": "0x2DD5F88Bd9814052Ae37614394762c1fFf6A1c44",
         "tokenSymbol": "LOOKSMAX",
         "tokenName": "Looksmax",
         "balance": "63525907781010405682077793",
-        "currentValueEth": "10374895332103512378",
-        "currentValueUsd": "20060.50109603065386996122521800",
+        "currentValueEth": "8868110262969624715",
+        "currentValueUsd": "17120.68313374193555746881348885",
         "totalCostEth": "5554471701877373067",
         "totalBoughtEth": "12909699176567010478",
         "totalBoughtUsd": "26050.50258392",
         "realizedPnlEth": "10691720451619581610",
         "realizedPnlUsd": "21771.02901984",
-        "unrealizedPnlEth": "4820423630226139311",
-        "unrealizedPnlUsd": "9320.58689963453935893127289100",
-        "totalPnlEth": "15512144081845720921",
-        "totalPnlUsd": "31091.61591947453935893127289100",
-        "totalPnlPercent": 120.15883460710323
+        "unrealizedPnlEth": "3313638561092251648",
+        "unrealizedPnlUsd": "6397.27677508731131856545206272",
+        "totalPnlEth": "14005359012711833258",
+        "totalPnlUsd": "28168.30579492731131856545206272",
+        "totalPnlPercent": 108.48710586636756
       },
       {
         "tokenAddress": "0x5d065DAF8667A2Da5124bf10F9F3B72fE09fBC6F",
         "tokenSymbol": "LMAO",
         "tokenName": "LMAO",
         "balance": "54743154190425414346077133",
-        "currentValueEth": "8814615959584818705",
-        "currentValueUsd": "17043.60453364584607580191360500",
+        "currentValueEth": "8530105361423462260",
+        "currentValueUsd": "16468.13432171513719656147568140",
         "totalCostEth": "4561929515868784529",
         "totalBoughtEth": "8442387992795156593",
         "totalBoughtUsd": "17160.79195934",
         "realizedPnlEth": "3609616973807922227",
         "realizedPnlUsd": "6934.58227187",
-        "unrealizedPnlEth": "4252686443716034176",
-        "unrealizedPnlUsd": "8222.83197414613129960342745600",
-        "totalPnlEth": "7862303417523956403",
-        "totalPnlUsd": "15157.41424601613129960342745600",
-        "totalPnlPercent": 93.12890409957168
+        "unrealizedPnlEth": "3968175845554677731",
+        "unrealizedPnlUsd": "7660.91977390006629397529080509",
+        "totalPnlEth": "7577792819362599958",
+        "totalPnlUsd": "14595.50204577006629397529080509",
+        "totalPnlPercent": 89.75887895497799
       },
       {
         "tokenAddress": "0xbDa4FC392f761787f7F16D3C554ED8b9a15e91B1",
         "tokenSymbol": "POOPCOIN",
         "tokenName": "Poop Coin",
         "balance": "20314614909372717566298719",
-        "currentValueEth": "14072685003552804946",
-        "currentValueUsd": "27210.40587892155285893336882600",
+        "currentValueEth": "17056061015171620481",
+        "currentValueUsd": "32928.25726015922939429042097759",
         "totalCostEth": "1692884575781059797",
         "totalBoughtEth": "2611108363241523582",
         "totalBoughtUsd": "10245.98957239",
         "realizedPnlEth": "11096644475993285163",
         "realizedPnlUsd": "22441.97029500",
-        "unrealizedPnlEth": "12379800427771745149",
-        "unrealizedPnlUsd": "23937.10896354689741177855036900",
-        "totalPnlEth": "23476444903765030312",
-        "totalPnlUsd": "46379.07925854689741177855036900",
-        "totalPnlPercent": 899.0988361210918
+        "unrealizedPnlEth": "15363176439390560684",
+        "unrealizedPnlUsd": "29659.99158184760909026813502676",
+        "totalPnlEth": "26459820915383845847",
+        "totalPnlUsd": "52101.96187684760909026813502676",
+        "totalPnlPercent": 1013.3559099989124
       }
     ]
   },
@@ -2433,12 +2433,12 @@
         "nftId": "10875",
         "nftName": "NetSpy60",
         "realizedPnlEth": "60145036785538626427",
-        "unrealizedPnlEth": "34217134155742974079",
-        "totalPnlEth": "94362170941281600506",
+        "unrealizedPnlEth": "34442117540257000949",
+        "totalPnlEth": "94587154325795627376",
         "realizedPnlUsd": 121539.61602213,
-        "unrealizedPnlUsd": 66160.94285889431,
-        "totalPnlUsd": 187700.5588810243,
-        "totalPnlPercent": 11.57108166048824
+        "unrealizedPnlUsd": 66493.60048263251,
+        "totalPnlUsd": 188033.2165047625,
+        "totalPnlPercent": 11.598670058344037
       },
       {
         "cursor": "2",
@@ -2493,12 +2493,12 @@
         "nftId": "32393",
         "nftName": "OctagonOracle",
         "realizedPnlEth": "31807160241325897742",
-        "unrealizedPnlEth": "8592071861105814446",
-        "totalPnlEth": "40399232102431712188",
+        "unrealizedPnlEth": "11173432478596472033",
+        "totalPnlEth": "42980592719922369775",
         "realizedPnlUsd": 64526.09072623,
-        "unrealizedPnlUsd": 16613.301770239745,
-        "totalPnlUsd": 81139.39249646974,
-        "totalPnlPercent": 6.214310429538796
+        "unrealizedPnlUsd": 21571.314666790382,
+        "totalPnlUsd": 86097.40539302038,
+        "totalPnlPercent": 6.611381744335082
       },
       {
         "cursor": "6",
@@ -2508,12 +2508,12 @@
         "nftId": "19415",
         "nftName": "RetroNautX",
         "realizedPnlEth": "16737291127890228584",
-        "unrealizedPnlEth": "22360368881206407875",
-        "totalPnlEth": "39097660009096636459",
+        "unrealizedPnlEth": "24410574765742762572",
+        "totalPnlEth": "41147865893632991156",
         "realizedPnlUsd": 33839.31497495,
-        "unrealizedPnlUsd": 43235.15467776244,
-        "totalPnlUsd": 77074.46965271243,
-        "totalPnlPercent": 5.835471643148752
+        "unrealizedPnlUsd": 47126.80642029474,
+        "totalPnlUsd": 80966.12139524474,
+        "totalPnlPercent": 6.14147252143776
       },
       {
         "cursor": "7",
@@ -2523,12 +2523,12 @@
         "nftId": "27916",
         "nftName": "FunyunEcho",
         "realizedPnlEth": "16953266732116722234",
-        "unrealizedPnlEth": "20887142532469848074",
-        "totalPnlEth": "37840409264586570308",
+        "unrealizedPnlEth": "24056475143797387422",
+        "totalPnlEth": "41009741875914109656",
         "realizedPnlUsd": 34298.28451753,
-        "unrealizedPnlUsd": 40386.58051508325,
-        "totalPnlUsd": 74684.86503261325,
-        "totalPnlPercent": 6.0544654823338515
+        "unrealizedPnlUsd": 46443.18530538605,
+        "totalPnlUsd": 80741.46982291604,
+        "totalPnlPercent": 6.561558700146257
       },
       {
         "cursor": "8",
@@ -2538,12 +2538,12 @@
         "nftId": "1295",
         "nftName": "SportsGuru29",
         "realizedPnlEth": "24237996742583695522",
-        "unrealizedPnlEth": "12114577288003025148",
-        "totalPnlEth": "36352574030586720670",
+        "unrealizedPnlEth": "13189640547559387047",
+        "totalPnlEth": "37427637290143082569",
         "realizedPnlUsd": 49040.5633474,
-        "unrealizedPnlUsd": 23424.28363705328,
-        "totalPnlUsd": 72464.84698445328,
-        "totalPnlPercent": 8.749115290153242
+        "unrealizedPnlUsd": 25463.78538003212,
+        "totalPnlUsd": 74504.34872743212,
+        "totalPnlPercent": 9.007854943476072
       },
       {
         "cursor": "9",
@@ -2553,12 +2553,12 @@
         "nftId": "794",
         "nftName": "Wiizard",
         "realizedPnlEth": "26484654390188822345",
-        "unrealizedPnlEth": "7641795081852388787",
-        "totalPnlEth": "34126449472041211132",
+        "unrealizedPnlEth": "9875983939298692860",
+        "totalPnlEth": "36360638329487515205",
         "realizedPnlUsd": 53686.39026306,
-        "unrealizedPnlUsd": 14775.882908503545,
-        "totalPnlUsd": 68462.27317156355,
-        "totalPnlPercent": 6.797962086819229
+        "unrealizedPnlUsd": 19066.47376326567,
+        "totalPnlUsd": 72752.86402632567,
+        "totalPnlPercent": 7.243010762631724
       },
       {
         "cursor": "10",
@@ -2583,12 +2583,12 @@
         "nftId": "25882",
         "nftName": "Chocobo_Chz",
         "realizedPnlEth": "22038359002207949153",
-        "unrealizedPnlEth": "3927811034663796374",
-        "totalPnlEth": "25966170036871745527",
+        "unrealizedPnlEth": "3780139352414508348",
+        "totalPnlEth": "25818498354622457501",
         "realizedPnlUsd": 44402.45492475,
-        "unrealizedPnlUsd": 7594.665299615983,
-        "totalPnlUsd": 51997.120224365986,
-        "totalPnlPercent": 37.30771557021802
+        "unrealizedPnlUsd": 7297.898440022916,
+        "totalPnlUsd": 51700.35336477291,
+        "totalPnlPercent": 37.095543612963304
       },
       {
         "cursor": "12",
@@ -2688,16 +2688,46 @@
         "nftId": "31132",
         "nftName": "Cubicle_Crusader",
         "realizedPnlEth": "22763910161272629361",
-        "unrealizedPnlEth": "-6048971630727631984",
-        "totalPnlEth": "16714938530544997377",
+        "unrealizedPnlEth": "-7323277278429232092",
+        "totalPnlEth": "15440632882843397269",
         "realizedPnlUsd": 46105.3069061,
-        "unrealizedPnlUsd": -11696.060359528194,
-        "totalPnlUsd": 34409.246546571805,
-        "totalPnlPercent": 167.14938530544998
+        "unrealizedPnlUsd": -14138.244345930541,
+        "totalPnlUsd": 31967.06256016946,
+        "totalPnlPercent": 154.40632882843397
       },
       {
         "cursor": "19",
         "rank": 19,
+        "vaultAddress": "0x0Df38d94C99C080ae9216855241B1729f745fadF",
+        "ownerAddress": "0x1Ad8D758A8eeF04E0ec73245AE9e2B042cbdBDc2",
+        "nftId": "5259",
+        "nftName": "WildFlower93",
+        "realizedPnlEth": "7927630833883324809",
+        "unrealizedPnlEth": "8202961450688809352",
+        "totalPnlEth": "16130592284572134161",
+        "realizedPnlUsd": 16053.23283218,
+        "unrealizedPnlUsd": 15836.553627662559,
+        "totalPnlUsd": 31889.78645984256,
+        "totalPnlPercent": 7.169152126476504
+      },
+      {
+        "cursor": "20",
+        "rank": 20,
+        "vaultAddress": "0x63BEf9bc01C87c4Bf34e1E9118C8223a95B01f93",
+        "ownerAddress": "0xA0c5897c212226827611f689ef36C4618000b871",
+        "nftId": "21767",
+        "nftName": "Mrs_Manners",
+        "realizedPnlEth": "2439251882101019059",
+        "unrealizedPnlEth": "13542635895396386739",
+        "totalPnlEth": "15981887777497405798",
+        "realizedPnlUsd": 4938.01387138,
+        "unrealizedPnlUsd": 26145.2745946214,
+        "totalPnlUsd": 31083.2884660014,
+        "totalPnlPercent": 4.686633171313863
+      },
+      {
+        "cursor": "21",
+        "rank": 21,
         "vaultAddress": "0xD5876aD24c90FbEe5693997d21ff6FA5962A8E03",
         "ownerAddress": "0x860B15d380b19ca3D37EA7C3af0e2Bb26b420c27",
         "nftId": "15678",
@@ -2711,23 +2741,23 @@
         "totalPnlPercent": 9.477685101765124
       },
       {
-        "cursor": "20",
-        "rank": 20,
-        "vaultAddress": "0x0Df38d94C99C080ae9216855241B1729f745fadF",
-        "ownerAddress": "0x1Ad8D758A8eeF04E0ec73245AE9e2B042cbdBDc2",
-        "nftId": "5259",
-        "nftName": "WildFlower93",
-        "realizedPnlEth": "7927630833883324809",
-        "unrealizedPnlEth": "6793175476696045635",
-        "totalPnlEth": "14720806310579370444",
-        "realizedPnlUsd": 16053.23283218,
-        "unrealizedPnlUsd": 13135.02447336593,
-        "totalPnlUsd": 29188.25730554593,
-        "totalPnlPercent": 6.5425805824797205
+        "cursor": "22",
+        "rank": 22,
+        "vaultAddress": "0x7D6E8B781dFC68b64437cCd8A14DB234dDFD310e",
+        "ownerAddress": "0x78B1094269465E61B08Fe6040DB5cB754E85a159",
+        "nftId": "4534",
+        "nftName": "SoloSolver",
+        "realizedPnlEth": "12533903923161671144",
+        "unrealizedPnlEth": "1165578437462165628",
+        "totalPnlEth": "13699482360623836772",
+        "realizedPnlUsd": 25337.92075717,
+        "unrealizedPnlUsd": 2250.253831263186,
+        "totalPnlUsd": 27588.174588433187,
+        "totalPnlPercent": 10.950825228316416
       },
       {
-        "cursor": "21",
-        "rank": 21,
+        "cursor": "23",
+        "rank": 23,
         "vaultAddress": "0x1EE5e911b816Bf7A461280B5b6267E67Fd07e695",
         "ownerAddress": "0xbD10369E2a1BC157fEc63592f292597Ce9F09Ac6",
         "nftId": "32714",
@@ -2741,8 +2771,8 @@
         "totalPnlPercent": 8.82041838651047
       },
       {
-        "cursor": "22",
-        "rank": 22,
+        "cursor": "24",
+        "rank": 24,
         "vaultAddress": "0x7cC79714b0A38ee8D89A48b52e346aC9fD36E9d6",
         "ownerAddress": "0xB10caF05b0a7677061Dcb4CBcfB70C8508519023",
         "nftId": "15290",
@@ -2756,8 +2786,8 @@
         "totalPnlPercent": 17.854642823734828
       },
       {
-        "cursor": "23",
-        "rank": 23,
+        "cursor": "25",
+        "rank": 25,
         "vaultAddress": "0x42827523A256229528eC3A8EEC55c6A249c718cF",
         "ownerAddress": "0xc672604D798d8cBd0cf2cC654099F82bD02647AB",
         "nftId": "22406",
@@ -2769,36 +2799,6 @@
         "unrealizedPnlUsd": 0,
         "totalPnlUsd": 26147.10111383,
         "totalPnlPercent": 10.309983731634672
-      },
-      {
-        "cursor": "24",
-        "rank": 24,
-        "vaultAddress": "0x63BEf9bc01C87c4Bf34e1E9118C8223a95B01f93",
-        "ownerAddress": "0xA0c5897c212226827611f689ef36C4618000b871",
-        "nftId": "21767",
-        "nftName": "Mrs_Manners",
-        "realizedPnlEth": "2439251882101019059",
-        "unrealizedPnlEth": "10925415325364717787",
-        "totalPnlEth": "13364667207465736846",
-        "realizedPnlUsd": 4938.01387138,
-        "unrealizedPnlUsd": 21124.965514676896,
-        "totalPnlUsd": 26062.979386056897,
-        "totalPnlPercent": 3.9191423147314555
-      },
-      {
-        "cursor": "25",
-        "rank": 25,
-        "vaultAddress": "0x7D6E8B781dFC68b64437cCd8A14DB234dDFD310e",
-        "ownerAddress": "0x78B1094269465E61B08Fe6040DB5cB754E85a159",
-        "nftId": "4534",
-        "nftName": "SoloSolver",
-        "realizedPnlEth": "12533903923161671144",
-        "unrealizedPnlEth": "2064634686095048",
-        "totalPnlEth": "12535968557847766192",
-        "realizedPnlUsd": 25337.92075717,
-        "unrealizedPnlUsd": 3.9920987207603167,
-        "totalPnlUsd": 25341.91285589076,
-        "totalPnlPercent": 10.020758239686463
       }
     ]
   },
@@ -2809,759 +2809,754 @@
       "pnlUsd": 72869.71108428175
     },
     {
-      "timestamp": 1772130073,
+      "timestamp": 1772130078,
       "pnlEth": "134786099013399235553",
       "pnlUsd": 268518.40849519236
     },
     {
-      "timestamp": 1772130817,
+      "timestamp": 1772130827,
       "pnlEth": "134786099013399235553",
-      "pnlUsd": 268592.7379069265
+      "pnlUsd": 269183.92227230646
     },
     {
-      "timestamp": 1772131561,
+      "timestamp": 1772131576,
       "pnlEth": "134786099013399235553",
       "pnlUsd": 270773.937406992
     },
     {
-      "timestamp": 1772132305,
+      "timestamp": 1772132325,
       "pnlEth": "134786099013399235553",
       "pnlUsd": 270080.341620079
     },
     {
-      "timestamp": 1772133049,
-      "pnlEth": "259930110593625533044",
-      "pnlUsd": 524986.8487514999
+      "timestamp": 1772133074,
+      "pnlEth": "242807134609025061403",
+      "pnlUsd": 490403.17861465714
     },
     {
-      "timestamp": 1772133793,
-      "pnlEth": "197595259772838748654",
-      "pnlUsd": 400610.4423935768
+      "timestamp": 1772133823,
+      "pnlEth": "198589234895193409998",
+      "pnlUsd": 402625.93663718377
     },
     {
-      "timestamp": 1772134537,
-      "pnlEth": "185266892787542818674",
-      "pnlUsd": 375803.603278838
+      "timestamp": 1772134572,
+      "pnlEth": "185212351217208090841",
+      "pnlUsd": 375692.9498863586
     },
     {
-      "timestamp": 1772135281,
-      "pnlEth": "105418158332703604189",
-      "pnlUsd": 213437.52967153923
+      "timestamp": 1772135321,
+      "pnlEth": "99111987029080117270",
+      "pnlUsd": 200667.64239702167
     },
     {
-      "timestamp": 1772136025,
-      "pnlEth": "121297624047539895870",
-      "pnlUsd": 245980.48073519033
+      "timestamp": 1772136070,
+      "pnlEth": "122991281677964157589",
+      "pnlUsd": 249416.12099793236
     },
     {
-      "timestamp": 1772136769,
-      "pnlEth": "93113929749440579654",
-      "pnlUsd": 189126.29599050345
+      "timestamp": 1772136819,
+      "pnlEth": "90968053257332705829",
+      "pnlUsd": 184764.89546152038
     },
     {
-      "timestamp": 1772137513,
-      "pnlEth": "132816807286138861805",
-      "pnlUsd": 269565.9954480015
+      "timestamp": 1772137568,
+      "pnlEth": "133063193097140391589",
+      "pnlUsd": 270066.2431631188
     },
     {
-      "timestamp": 1772138257,
-      "pnlEth": "126079428663431381314",
-      "pnlUsd": 255863.1738487744
+      "timestamp": 1772138317,
+      "pnlEth": "129270708304782470059",
+      "pnlUsd": 261993.70387967778
     },
     {
-      "timestamp": 1772139001,
-      "pnlEth": "170567262216855510936",
-      "pnlUsd": 345705.08136802603
+      "timestamp": 1772139066,
+      "pnlEth": "172128179592346385520",
+      "pnlUsd": 348869.18421123293
     },
     {
-      "timestamp": 1772139745,
-      "pnlEth": "136500647651886785094",
-      "pnlUsd": 276219.6891565774
+      "timestamp": 1772139815,
+      "pnlEth": "126621054681797537855",
+      "pnlUsd": 256580.35932568976
     },
     {
-      "timestamp": 1772140489,
-      "pnlEth": "117768228346185249697",
-      "pnlUsd": 238252.67462575596
+      "timestamp": 1772140564,
+      "pnlEth": "117660689851591884001",
+      "pnlUsd": 238035.19466609324
     },
     {
-      "timestamp": 1772141233,
-      "pnlEth": "115933738491030422977",
-      "pnlUsd": 235025.9407080579
+      "timestamp": 1772141313,
+      "pnlEth": "112149385962384070509",
+      "pnlUsd": 227348.53991828416
     },
     {
-      "timestamp": 1772141977,
-      "pnlEth": "112833261101956298616",
-      "pnlUsd": 228735.9327409441
+      "timestamp": 1772142062,
+      "pnlEth": "113057635920839294992",
+      "pnlUsd": 229191.12696470047
     },
     {
-      "timestamp": 1772142721,
-      "pnlEth": "108506287665891440550",
-      "pnlUsd": 220235.93921947316
+      "timestamp": 1772142811,
+      "pnlEth": "108961651568621445768",
+      "pnlUsd": 221161.7384068227
     },
     {
-      "timestamp": 1772143465,
-      "pnlEth": "108753045208805258242",
-      "pnlUsd": 220494.19513084443
+      "timestamp": 1772143560,
+      "pnlEth": "108876354782188322581",
+      "pnlUsd": 220744.42545321528
     },
     {
-      "timestamp": 1772144209,
-      "pnlEth": "107819543433184212377",
-      "pnlUsd": 218806.71991163213
+      "timestamp": 1772144309,
+      "pnlEth": "107520539688769987071",
+      "pnlUsd": 218198.968013894
     },
     {
-      "timestamp": 1772144953,
-      "pnlEth": "108548605575940152151",
-      "pnlUsd": 220089.76011176515
+      "timestamp": 1772145058,
+      "pnlEth": "111871733750548362305",
+      "pnlUsd": 226833.84461183968
     },
     {
-      "timestamp": 1772145697,
-      "pnlEth": "117819784891714279005",
-      "pnlUsd": 239155.8694052143
+      "timestamp": 1772145807,
+      "pnlEth": "120204784320616354200",
+      "pnlUsd": 244004.39042588085
     },
     {
-      "timestamp": 1772146441,
-      "pnlEth": "125245063337514382970",
-      "pnlUsd": 254276.0737245174
+      "timestamp": 1772146556,
+      "pnlEth": "128127283193090262010",
+      "pnlUsd": 260136.31986477843
     },
     {
-      "timestamp": 1772147185,
-      "pnlEth": "131636071481689252013",
-      "pnlUsd": 266605.67675482325
+      "timestamp": 1772147305,
+      "pnlEth": "132342150538487382268",
+      "pnlUsd": 268035.8334837612
     },
     {
-      "timestamp": 1772147929,
-      "pnlEth": "125976236948509915695",
-      "pnlUsd": 255388.91364567788
+      "timestamp": 1772148054,
+      "pnlEth": "131902318296853947986",
+      "pnlUsd": 267718.8877889113
     },
     {
-      "timestamp": 1772148673,
-      "pnlEth": "126917066644903416173",
-      "pnlUsd": 257588.0587918835
+      "timestamp": 1772148803,
+      "pnlEth": "125998156544214850998",
+      "pnlUsd": 255720.68644166822
     },
     {
-      "timestamp": 1772149417,
-      "pnlEth": "133835132973224029422",
-      "pnlUsd": 271370.77861761814
+      "timestamp": 1772149552,
+      "pnlEth": "128169970425489081764",
+      "pnlUsd": 259876.02505710282
     },
     {
-      "timestamp": 1772150161,
-      "pnlEth": "135107893482719664038",
-      "pnlUsd": 273901.5219038741
+      "timestamp": 1772150301,
+      "pnlEth": "135203554589419234755",
+      "pnlUsd": 274095.5652070194
     },
     {
-      "timestamp": 1772150905,
-      "pnlEth": "134104250851962117146",
-      "pnlUsd": 271838.7596331027
+      "timestamp": 1772151050,
+      "pnlEth": "131584633107670736029",
+      "pnlUsd": 266728.62210119556
     },
     {
-      "timestamp": 1772151649,
-      "pnlEth": "127908746950473220948",
-      "pnlUsd": 258960.89540620137
+      "timestamp": 1772151799,
+      "pnlEth": "125900267854051366808",
+      "pnlUsd": 254895.06717514514
     },
     {
-      "timestamp": 1772152393,
-      "pnlEth": "132764629085551648976",
-      "pnlUsd": 268489.78771488933
+      "timestamp": 1772152548,
+      "pnlEth": "133743449015848415857",
+      "pnlUsd": 270467.8542381097
     },
     {
-      "timestamp": 1772153137,
-      "pnlEth": "133137003753689559484",
-      "pnlUsd": 268389.9986104415
+      "timestamp": 1772153297,
+      "pnlEth": "132151213978054535747",
+      "pnlUsd": 266407.471943355
     },
     {
-      "timestamp": 1772153881,
-      "pnlEth": "134084147927323696404",
-      "pnlUsd": 270549.38574030047
+      "timestamp": 1772154046,
+      "pnlEth": "135672495635685041914",
+      "pnlUsd": 273748.3021414631
     },
     {
-      "timestamp": 1772154625,
-      "pnlEth": "138833198461378520042",
-      "pnlUsd": 279144.9594979771
+      "timestamp": 1772154795,
+      "pnlEth": "138795453230195898101",
+      "pnlUsd": 279069.33429160947
     },
     {
-      "timestamp": 1772155369,
-      "pnlEth": "141378932282365032443",
-      "pnlUsd": 284351.1180174696
+      "timestamp": 1772155544,
+      "pnlEth": "148800532787128341801",
+      "pnlUsd": 299541.2008332543
     },
     {
-      "timestamp": 1772156113,
-      "pnlEth": "139902709173559468612",
-      "pnlUsd": 282415.5398472235
+      "timestamp": 1772156293,
+      "pnlEth": "140615371069804498256",
+      "pnlUsd": 283851.95233527065
     },
     {
-      "timestamp": 1772156857,
-      "pnlEth": "141235851773880537106",
-      "pnlUsd": 285086.39478360675
+      "timestamp": 1772157042,
+      "pnlEth": "142124819132162124291",
+      "pnlUsd": 287181.9404097045
     },
     {
-      "timestamp": 1772157601,
-      "pnlEth": "146843287716511963106",
-      "pnlUsd": 297063.73109217983
+      "timestamp": 1772157791,
+      "pnlEth": "147250560629395224570",
+      "pnlUsd": 298206.2476291207
     },
     {
-      "timestamp": 1772158345,
-      "pnlEth": "144486444738543243365",
-      "pnlUsd": 292158.52011113754
+      "timestamp": 1772158540,
+      "pnlEth": "138888815412463063276",
+      "pnlUsd": 280848.0054371064
     },
     {
-      "timestamp": 1772159089,
-      "pnlEth": "137130209450408964618",
-      "pnlUsd": 278089.9689929712
+      "timestamp": 1772159289,
+      "pnlEth": "137052404697255628699",
+      "pnlUsd": 277932.06658058905
     },
     {
-      "timestamp": 1772159833,
-      "pnlEth": "131890868792871443701",
-      "pnlUsd": 267631.7802443574
+      "timestamp": 1772160038,
+      "pnlEth": "132568386664036410753",
+      "pnlUsd": 269008.2214919527
     },
     {
-      "timestamp": 1772160577,
-      "pnlEth": "139792621257286982739",
-      "pnlUsd": 283621.1998796448
+      "timestamp": 1772160787,
+      "pnlEth": "140524672808431912834",
+      "pnlUsd": 285107.91605434933
     },
     {
-      "timestamp": 1772161321,
-      "pnlEth": "146140328212514993185",
-      "pnlUsd": 295952.9850020464
+      "timestamp": 1772161536,
+      "pnlEth": "146240908494012887114",
+      "pnlUsd": 296156.66787871433
     },
     {
-      "timestamp": 1772162065,
-      "pnlEth": "145558537782959158454",
-      "pnlUsd": 294445.651840922
+      "timestamp": 1772162285,
+      "pnlEth": "145001812381219123268",
+      "pnlUsd": 293320.16688444524
     },
     {
-      "timestamp": 1772162809,
-      "pnlEth": "149230885053038694021",
-      "pnlUsd": 301869.7276860563
+      "timestamp": 1772163034,
+      "pnlEth": "146194236704294343535",
+      "pnlUsd": 295578.10254836065
     },
     {
-      "timestamp": 1772163553,
-      "pnlEth": "144364327922302722345",
-      "pnlUsd": 292555.51276750903
+      "timestamp": 1772163783,
+      "pnlEth": "146126838449778317093",
+      "pnlUsd": 296128.61326098774
     },
     {
-      "timestamp": 1772164297,
-      "pnlEth": "145562262384575187075",
-      "pnlUsd": 295281.64354391757
+      "timestamp": 1772164532,
+      "pnlEth": "140952976863338798728",
+      "pnlUsd": 286405.7195088358
     },
     {
-      "timestamp": 1772165041,
-      "pnlEth": "141136504807556137963",
-      "pnlUsd": 288617.4314882564
+      "timestamp": 1772165281,
+      "pnlEth": "139394641305160536327",
+      "pnlUsd": 284382.451751837
     },
     {
-      "timestamp": 1772165785,
-      "pnlEth": "139488490874913864890",
-      "pnlUsd": 284908.74493709597
+      "timestamp": 1772166030,
+      "pnlEth": "145041143539214488736",
+      "pnlUsd": 296854.91229921253
     },
     {
-      "timestamp": 1772166529,
-      "pnlEth": "145213464574680136282",
-      "pnlUsd": 297209.6937398706
+      "timestamp": 1772166779,
+      "pnlEth": "148792559874713031035",
+      "pnlUsd": 303774.2345143444
     },
     {
-      "timestamp": 1772167273,
-      "pnlEth": "143048084889061457263",
-      "pnlUsd": 291718.6457090301
+      "timestamp": 1772167528,
+      "pnlEth": "144115420659807194188",
+      "pnlUsd": 293903.7371484801
     },
     {
-      "timestamp": 1772168017,
-      "pnlEth": "148197135967064278655",
-      "pnlUsd": 302259.98400218785
+      "timestamp": 1772168277,
+      "pnlEth": "147635027368997288427",
+      "pnlUsd": 301109.2133456239
     },
     {
-      "timestamp": 1772168761,
-      "pnlEth": "144985371131654078650",
-      "pnlUsd": 295480.89268622326
+      "timestamp": 1772169026,
+      "pnlEth": "143757703359454490573",
+      "pnlUsd": 292970.3570084244
     },
     {
-      "timestamp": 1772169505,
-      "pnlEth": "145131297163464657238",
-      "pnlUsd": 295779.3060823195
+      "timestamp": 1772169775,
+      "pnlEth": "144852027179466403393",
+      "pnlUsd": 295534.1412041661
     },
     {
-      "timestamp": 1772170249,
-      "pnlEth": "141020383012663297820",
-      "pnlUsd": 287297.5733389752
+      "timestamp": 1772170524,
+      "pnlEth": "143840494626339914428",
+      "pnlUsd": 293062.0575505715
     },
     {
-      "timestamp": 1772170993,
-      "pnlEth": "143640322858794317383",
-      "pnlUsd": 292652.89396001404
+      "timestamp": 1772171273,
+      "pnlEth": "144300126948797237959",
+      "pnlUsd": 294001.5747147494
     },
     {
-      "timestamp": 1772171737,
-      "pnlEth": "149079802976512881688",
-      "pnlUsd": 303792.1552963254
+      "timestamp": 1772172022,
+      "pnlEth": "148878847370902345455",
+      "pnlUsd": 303045.519918085
     },
     {
-      "timestamp": 1772172481,
-      "pnlEth": "149653740622147110192",
-      "pnlUsd": 304626.8047463871
+      "timestamp": 1772172771,
+      "pnlEth": "151173464849797491722",
+      "pnlUsd": 307728.02786392794
     },
     {
-      "timestamp": 1772173225,
-      "pnlEth": "152024493805389082616",
-      "pnlUsd": 308844.1336144602
+      "timestamp": 1772173520,
+      "pnlEth": "152350279813674253422",
+      "pnlUsd": 309506.83122321346
     },
     {
-      "timestamp": 1772173969,
-      "pnlEth": "149624245726022012838",
-      "pnlUsd": 303873.290291449
+      "timestamp": 1772174269,
+      "pnlEth": "149706132912945691337",
+      "pnlUsd": 304343.3582768887
     },
     {
-      "timestamp": 1772174713,
-      "pnlEth": "145383396135114154218",
-      "pnlUsd": 295826.47409753874
+      "timestamp": 1772175018,
+      "pnlEth": "144216778713836881258",
+      "pnlUsd": 293173.23096095194
     },
     {
-      "timestamp": 1772175457,
-      "pnlEth": "142000188409226330649",
-      "pnlUsd": 288659.0156293794
+      "timestamp": 1772175767,
+      "pnlEth": "139170188433097165124",
+      "pnlUsd": 282895.55575408373
     },
     {
-      "timestamp": 1772176201,
-      "pnlEth": "139023044592087086796",
-      "pnlUsd": 282924.56901895255
+      "timestamp": 1772176516,
+      "pnlEth": "140603112019284353202",
+      "pnlUsd": 286148.7643542797
     },
     {
-      "timestamp": 1772176945,
-      "pnlEth": "140516181583316817151",
-      "pnlUsd": 285395.9557878718
+      "timestamp": 1772177265,
+      "pnlEth": "140510189861394684651",
+      "pnlUsd": 285383.7704767352
     },
     {
-      "timestamp": 1772177689,
-      "pnlEth": "141758633723839752550",
-      "pnlUsd": 287922.7195631834
+      "timestamp": 1772178014,
+      "pnlEth": "142915412889160838021",
+      "pnlUsd": 289511.3837537487
     },
     {
-      "timestamp": 1772178433,
-      "pnlEth": "152506097482326020715",
-      "pnlUsd": 308931.0615803208
+      "timestamp": 1772178763,
+      "pnlEth": "152726270098138945100",
+      "pnlUsd": 309688.12419753073
     },
     {
-      "timestamp": 1772179177,
-      "pnlEth": "153090813388937191272",
-      "pnlUsd": 310766.9713417127
+      "timestamp": 1772179512,
+      "pnlEth": "153166579305368259181",
+      "pnlUsd": 310920.8973775341
     },
     {
-      "timestamp": 1772179921,
-      "pnlEth": "153467587289457141185",
-      "pnlUsd": 312874.93571757554
+      "timestamp": 1772180261,
+      "pnlEth": "153456574527077404530",
+      "pnlUsd": 312225.3297917576
     },
     {
-      "timestamp": 1772180665,
-      "pnlEth": "153953786211525217403",
-      "pnlUsd": 313215.13730849937
+      "timestamp": 1772181010,
+      "pnlEth": "153033476056843562062",
+      "pnlUsd": 311014.28248987533
     },
     {
-      "timestamp": 1772181409,
-      "pnlEth": "152590059547546084516",
-      "pnlUsd": 309787.1011470395
+      "timestamp": 1772181759,
+      "pnlEth": "153330840386651277595",
+      "pnlUsd": 311351.4415529191
     },
     {
-      "timestamp": 1772182153,
-      "pnlEth": "153574122810267572357",
-      "pnlUsd": 312154.93378906
+      "timestamp": 1772182508,
+      "pnlEth": "152577694109584850106",
+      "pnlUsd": 309618.87171205285
     },
     {
-      "timestamp": 1772182897,
-      "pnlEth": "152837929866923968546",
-      "pnlUsd": 310487.6432270431
+      "timestamp": 1772183257,
+      "pnlEth": "153751920487587469227",
+      "pnlUsd": 312346.7315074032
     },
     {
-      "timestamp": 1772183641,
-      "pnlEth": "154252151386111353106",
-      "pnlUsd": 313364.2183173277
+      "timestamp": 1772184006,
+      "pnlEth": "154898567125954318089",
+      "pnlUsd": 314940.4632975217
     },
     {
-      "timestamp": 1772184385,
-      "pnlEth": "155019018887078774818",
-      "pnlUsd": 314967.18748245965
+      "timestamp": 1772184755,
+      "pnlEth": "156191669804840371014",
+      "pnlUsd": 317708.8366164616
     },
     {
-      "timestamp": 1772185129,
-      "pnlEth": "156300075241477760739",
-      "pnlUsd": 317139.0257744734
+      "timestamp": 1772185504,
+      "pnlEth": "155303064439093243763",
+      "pnlUsd": 314358.86615717434
     },
     {
-      "timestamp": 1772185873,
-      "pnlEth": "148524434020928601441",
-      "pnlUsd": 299971.709929355
+      "timestamp": 1772186253,
+      "pnlEth": "144934806320842034754",
+      "pnlUsd": 292574.97488058725
     },
     {
-      "timestamp": 1772186617,
-      "pnlEth": "142824419760580369299",
-      "pnlUsd": 287965.7199203534
+      "timestamp": 1772187002,
+      "pnlEth": "143984849330144875339",
+      "pnlUsd": 290297.10476142255
     },
     {
-      "timestamp": 1772187361,
-      "pnlEth": "146079622075167009569",
-      "pnlUsd": 292455.93740185193
+      "timestamp": 1772187751,
+      "pnlEth": "148424522807632933110",
+      "pnlUsd": 298002.28314219095
     },
     {
-      "timestamp": 1772188105,
-      "pnlEth": "150075304187402037867",
-      "pnlUsd": 301003.83214334777
+      "timestamp": 1772188500,
+      "pnlEth": "149443813855901003561",
+      "pnlUsd": 300170.3940717222
     },
     {
-      "timestamp": 1772188849,
-      "pnlEth": "148323396492266243164",
-      "pnlUsd": 297654.79730371304
+      "timestamp": 1772189249,
+      "pnlEth": "146840418592031759899",
+      "pnlUsd": 294697.3429201425
     },
     {
-      "timestamp": 1772189593,
-      "pnlEth": "146914423390298243610",
-      "pnlUsd": 294169.5618558995
+      "timestamp": 1772189998,
+      "pnlEth": "143423335877011896339",
+      "pnlUsd": 286893.20909099263
     },
     {
-      "timestamp": 1772190337,
-      "pnlEth": "143117756187565450019",
-      "pnlUsd": 286287.28171351517
+      "timestamp": 1772190747,
+      "pnlEth": "145784692481622734648",
+      "pnlUsd": 291575.49218812113
     },
     {
-      "timestamp": 1772191081,
-      "pnlEth": "141056343435285476869",
-      "pnlUsd": 281577.36103747203
+      "timestamp": 1772191496,
+      "pnlEth": "144046283237393856958",
+      "pnlUsd": 287011.91309908434
     },
     {
-      "timestamp": 1772191825,
-      "pnlEth": "145494922510950463699",
-      "pnlUsd": 290309.12874199596
+      "timestamp": 1772192245,
+      "pnlEth": "145006628547475887008",
+      "pnlUsd": 288696.3539485903
     },
     {
-      "timestamp": 1772192569,
-      "pnlEth": "145929235600891673504",
-      "pnlUsd": 289682.82197333174
+      "timestamp": 1772192994,
+      "pnlEth": "143891844840699268200",
+      "pnlUsd": 286080.7278435669
     },
     {
-      "timestamp": 1772193313,
-      "pnlEth": "143994091288007417673",
-      "pnlUsd": 286281.43180455116
+      "timestamp": 1772193743,
+      "pnlEth": "144767311230195688480",
+      "pnlUsd": 287377.44774046546
     },
     {
-      "timestamp": 1772194057,
-      "pnlEth": "144258696509882375451",
-      "pnlUsd": 286657.5192221558
+      "timestamp": 1772194492,
+      "pnlEth": "143382588322085482476",
+      "pnlUsd": 284939.2000151407
     },
     {
-      "timestamp": 1772194801,
-      "pnlEth": "143730678310337820656",
-      "pnlUsd": 285362.78305549687
+      "timestamp": 1772195241,
+      "pnlEth": "144538159250529434349",
+      "pnlUsd": 287407.4329191338
     },
     {
-      "timestamp": 1772195545,
-      "pnlEth": "144909773593906811066",
-      "pnlUsd": 288079.5475106943
+      "timestamp": 1772195990,
+      "pnlEth": "144284364380583322877",
+      "pnlUsd": 286851.89995753655
     },
     {
-      "timestamp": 1772196289,
-      "pnlEth": "143409535605350050465",
-      "pnlUsd": 284825.3169704796
+      "timestamp": 1772196739,
+      "pnlEth": "141639847885022462003",
+      "pnlUsd": 280962.0634822463
     },
     {
-      "timestamp": 1772197033,
-      "pnlEth": "140134211617904572131",
-      "pnlUsd": 278332.47331412934
+      "timestamp": 1772197488,
+      "pnlEth": "141395876512437315149",
+      "pnlUsd": 281132.33206082444
     },
     {
-      "timestamp": 1772197777,
-      "pnlEth": "142520992289503396446",
-      "pnlUsd": 283384.5774906854
+      "timestamp": 1772198237,
+      "pnlEth": "142537255364046808359",
+      "pnlUsd": 283143.61149671464
     },
     {
-      "timestamp": 1772198521,
-      "pnlEth": "141049899584961883099",
-      "pnlUsd": 280228.82687613
+      "timestamp": 1772198986,
+      "pnlEth": "140712577910501464089",
+      "pnlUsd": 279595.6307101746
     },
     {
-      "timestamp": 1772199265,
-      "pnlEth": "141204431256132294005",
-      "pnlUsd": 280139.216630912
+      "timestamp": 1772199735,
+      "pnlEth": "143655733903088836418",
+      "pnlUsd": 284654.9396003339
     },
     {
-      "timestamp": 1772200009,
-      "pnlEth": "140044508699348657890",
-      "pnlUsd": 277915.05872299866
+      "timestamp": 1772200484,
+      "pnlEth": "140599920726555672798",
+      "pnlUsd": 279494.37220355246
     },
     {
-      "timestamp": 1772200753,
-      "pnlEth": "137389322809832167680",
-      "pnlUsd": 273196.9058441858
+      "timestamp": 1772201233,
+      "pnlEth": "138688270552731797712",
+      "pnlUsd": 275452.10021606606
     },
     {
-      "timestamp": 1772201497,
-      "pnlEth": "135245918107555676694",
-      "pnlUsd": 268712.3183636557
+      "timestamp": 1772201982,
+      "pnlEth": "135426769996041900069",
+      "pnlUsd": 268822.12427126156
     },
     {
-      "timestamp": 1772202241,
-      "pnlEth": "131126728704787289434",
-      "pnlUsd": 260131.49479345247
+      "timestamp": 1772202731,
+      "pnlEth": "128867123097073111636",
+      "pnlUsd": 255723.0400776966
     },
     {
-      "timestamp": 1772202985,
-      "pnlEth": "127578788438356033408",
-      "pnlUsd": 253457.1664299404
+      "timestamp": 1772203480,
+      "pnlEth": "124283121314450162068",
+      "pnlUsd": 246512.46654398457
     },
     {
-      "timestamp": 1772203729,
-      "pnlEth": "124271745501042102450",
-      "pnlUsd": 246169.76263528797
+      "timestamp": 1772204229,
+      "pnlEth": "121343576403970393541",
+      "pnlUsd": 240566.0390364441
     },
     {
-      "timestamp": 1772204473,
-      "pnlEth": "119125590300410524031",
-      "pnlUsd": 236493.70215790858
+      "timestamp": 1772204978,
+      "pnlEth": "116971731931244434820",
+      "pnlUsd": 232731.43196657675
     },
     {
-      "timestamp": 1772205217,
-      "pnlEth": "116595709483417560752",
-      "pnlUsd": 231844.52099808288
+      "timestamp": 1772205727,
+      "pnlEth": "115856955747284806400",
+      "pnlUsd": 230146.18250729807
     },
     {
-      "timestamp": 1772205961,
-      "pnlEth": "115536614712592721325",
-      "pnlUsd": 229522.25107061796
+      "timestamp": 1772206476,
+      "pnlEth": "116042733287410489455",
+      "pnlUsd": 230342.3885474379
     },
     {
-      "timestamp": 1772206705,
-      "pnlEth": "116510424531897006525",
-      "pnlUsd": 231252.0136731091
+      "timestamp": 1772207225,
+      "pnlEth": "114576445527713491403",
+      "pnlUsd": 227811.84642941604
     },
     {
-      "timestamp": 1772207449,
-      "pnlEth": "114997850116719868797",
-      "pnlUsd": 228425.63032652414
+      "timestamp": 1772207974,
+      "pnlEth": "115902509564415944133",
+      "pnlUsd": 230364.92205902096
     },
     {
-      "timestamp": 1772208193,
-      "pnlEth": "115910674106743795449",
-      "pnlUsd": 230198.54648673718
+      "timestamp": 1772208723,
+      "pnlEth": "116865133862692078794",
+      "pnlUsd": 231333.37767074627
     },
     {
-      "timestamp": 1772208937,
-      "pnlEth": "117884013997866774100",
-      "pnlUsd": 233514.9893576394
+      "timestamp": 1772209472,
+      "pnlEth": "118478564861806496618",
+      "pnlUsd": 234665.64577695046
     },
     {
-      "timestamp": 1772209681,
-      "pnlEth": "118419670737245676585",
-      "pnlUsd": 234737.45247286692
+      "timestamp": 1772210221,
+      "pnlEth": "115490934556254493720",
+      "pnlUsd": 228809.35579490755
     },
     {
-      "timestamp": 1772210425,
-      "pnlEth": "114457422435332378573",
-      "pnlUsd": 226807.31151446473
+      "timestamp": 1772210970,
+      "pnlEth": "114793147235720161572",
+      "pnlUsd": 226942.6559199769
     },
     {
-      "timestamp": 1772211169,
-      "pnlEth": "115132401679217749270",
-      "pnlUsd": 227420.1531264731
+      "timestamp": 1772211719,
+      "pnlEth": "116214891906169454372",
+      "pnlUsd": 229680.40189561193
     },
     {
-      "timestamp": 1772211913,
-      "pnlEth": "116260135235823970560",
-      "pnlUsd": 229969.29406343854
+      "timestamp": 1772212468,
+      "pnlEth": "116497816550917296407",
+      "pnlUsd": 229988.8749235746
     },
     {
-      "timestamp": 1772212657,
-      "pnlEth": "116195968886576127330",
-      "pnlUsd": 229121.14946261235
+      "timestamp": 1772213217,
+      "pnlEth": "115107556537488841383",
+      "pnlUsd": 226761.16650439074
     },
     {
-      "timestamp": 1772213401,
-      "pnlEth": "115109108100917695972",
-      "pnlUsd": 226764.1374964636
+      "timestamp": 1772213966,
+      "pnlEth": "114078603409778697841",
+      "pnlUsd": 225151.97455890168
     },
     {
-      "timestamp": 1772214145,
-      "pnlEth": "113933551914944265045",
-      "pnlUsd": 224692.52986145546
+      "timestamp": 1772214715,
+      "pnlEth": "114473965182669004570",
+      "pnlUsd": 225886.43907331378
     },
     {
-      "timestamp": 1772214889,
-      "pnlEth": "114465773613763419107",
-      "pnlUsd": 226112.80215309796
+      "timestamp": 1772215464,
+      "pnlEth": "113182830807064546955",
+      "pnlUsd": 223980.07684290744
     },
     {
-      "timestamp": 1772215633,
-      "pnlEth": "113269837085140371540",
-      "pnlUsd": 224148.06890550422
+      "timestamp": 1772216213,
+      "pnlEth": "107841469768480326558",
+      "pnlUsd": 213314.747514422
     },
     {
-      "timestamp": 1772216377,
-      "pnlEth": "106389363536551326401",
-      "pnlUsd": 210520.9836088066
+      "timestamp": 1772216962,
+      "pnlEth": "105654757635051261572",
+      "pnlUsd": 209098.02096444194
     },
     {
-      "timestamp": 1772217121,
-      "pnlEth": "104706432706436835766",
-      "pnlUsd": 207451.0015645175
+      "timestamp": 1772217711,
+      "pnlEth": "107002176227700219580",
+      "pnlUsd": 211678.58700388233
     },
     {
-      "timestamp": 1772217865,
-      "pnlEth": "107089063894837440921",
-      "pnlUsd": 212007.5896589537
+      "timestamp": 1772218460,
+      "pnlEth": "106924529310111516360",
+      "pnlUsd": 211311.89790842246
     },
     {
-      "timestamp": 1772218609,
-      "pnlEth": "107107702552253288830",
-      "pnlUsd": 211509.32349661444
+      "timestamp": 1772219209,
+      "pnlEth": "107272908468316729495",
+      "pnlUsd": 211974.52726858403
     },
     {
-      "timestamp": 1772219353,
-      "pnlEth": "108962320783222650583",
-      "pnlUsd": 215030.4865970069
+      "timestamp": 1772219958,
+      "pnlEth": "110627026266590758345",
+      "pnlUsd": 218388.30654094805
     },
     {
-      "timestamp": 1772220097,
-      "pnlEth": "109985282996603579697",
-      "pnlUsd": 217157.03686878926
+      "timestamp": 1772220707,
+      "pnlEth": "111742618724822532948",
+      "pnlUsd": 220685.14313233283
     },
     {
-      "timestamp": 1772220841,
-      "pnlEth": "111748156085050703755",
-      "pnlUsd": 220695.78344687927
+      "timestamp": 1772221456,
+      "pnlEth": "110949740424714252420",
+      "pnlUsd": 218984.30804016985
     },
     {
-      "timestamp": 1772221585,
-      "pnlEth": "110141953298132568226",
-      "pnlUsd": 217286.15046994033
+      "timestamp": 1772222205,
+      "pnlEth": "108109287875897782653",
+      "pnlUsd": 213689.01531088108
     },
     {
-      "timestamp": 1772222329,
-      "pnlEth": "108710477896533101956",
-      "pnlUsd": 214844.08169752773
+      "timestamp": 1772222954,
+      "pnlEth": "108583956164398626128",
+      "pnlUsd": 214745.72806600554
     },
     {
-      "timestamp": 1772223073,
-      "pnlEth": "108890925184101445712",
-      "pnlUsd": 215336.40587328334
+      "timestamp": 1772223703,
+      "pnlEth": "109470109338752145439",
+      "pnlUsd": 216450.88715485224
     },
     {
-      "timestamp": 1772223817,
-      "pnlEth": "109955179547990951746",
-      "pnlUsd": 217384.27192392878
+      "timestamp": 1772224452,
+      "pnlEth": "104788077129646329805",
+      "pnlUsd": 207296.06033784422
     },
     {
-      "timestamp": 1772224561,
-      "pnlEth": "104529790840595377788",
-      "pnlUsd": 206799.88979371445
+      "timestamp": 1772225201,
+      "pnlEth": "101655053450397717338",
+      "pnlUsd": 201277.4905197703
     },
     {
-      "timestamp": 1772225305,
-      "pnlEth": "101799442936683226652",
-      "pnlUsd": 201554.86416681964
+      "timestamp": 1772225950,
+      "pnlEth": "101374900220124261009",
+      "pnlUsd": 200771.41790989786
     },
     {
-      "timestamp": 1772226049,
-      "pnlEth": "101163387015107519836",
-      "pnlUsd": 200364.93604314083
+      "timestamp": 1772226699,
+      "pnlEth": "101566061591820445578",
+      "pnlUsd": 201531.60261474916
     },
     {
-      "timestamp": 1772226793,
-      "pnlEth": "101705212365758139297",
-      "pnlUsd": 201651.56979697786
+      "timestamp": 1772227448,
+      "pnlEth": "102493426330832679984",
+      "pnlUsd": 203309.6005134509
     },
     {
-      "timestamp": 1772227537,
-      "pnlEth": "101961903125625750462",
-      "pnlUsd": 202283.29528219692
+      "timestamp": 1772228197,
+      "pnlEth": "103379421642171113702",
+      "pnlUsd": 204872.19554732082
     },
     {
-      "timestamp": 1772228281,
-      "pnlEth": "103493596242711335909",
-      "pnlUsd": 205092.26260762074
+      "timestamp": 1772228946,
+      "pnlEth": "102969153563740915221",
+      "pnlUsd": 204081.41993235974
     },
     {
-      "timestamp": 1772229025,
-      "pnlEth": "102931875176345936641",
-      "pnlUsd": 204009.56730412264
+      "timestamp": 1772229695,
+      "pnlEth": "104365757887748306765",
+      "pnlUsd": 206501.81195464302
     },
     {
-      "timestamp": 1772229769,
-      "pnlEth": "104033944065806424660",
-      "pnlUsd": 205864.291121643
+      "timestamp": 1772230444,
+      "pnlEth": "103244779894706228324",
+      "pnlUsd": 204202.11858886865
     },
     {
-      "timestamp": 1772230513,
-      "pnlEth": "103238584475285758320",
-      "pnlUsd": 204190.2361775872
+      "timestamp": 1772231193,
+      "pnlEth": "103728169043797555419",
+      "pnlUsd": 204935.50189291118
     },
     {
-      "timestamp": 1772231257,
-      "pnlEth": "104027162542885173209",
-      "pnlUsd": 205507.62295062363
+      "timestamp": 1772231942,
+      "pnlEth": "103653203314180991013",
+      "pnlUsd": 204459.1244011114
     },
     {
-      "timestamp": 1772232001,
-      "pnlEth": "103648413214927760481",
-      "pnlUsd": 204577.96795674
+      "timestamp": 1772232691,
+      "pnlEth": "104007156425313228845",
+      "pnlUsd": 205843.8037212249
     },
     {
-      "timestamp": 1772232745,
-      "pnlEth": "103928028150348429870",
-      "pnlUsd": 205691.71702318743
+      "timestamp": 1772233440,
+      "pnlEth": "103360005560389540982",
+      "pnlUsd": 204692.1755220613
     },
     {
-      "timestamp": 1772233489,
-      "pnlEth": "103367065924244966643",
-      "pnlUsd": 204705.7607991591
+      "timestamp": 1772234189,
+      "pnlEth": "103593277893411001449",
+      "pnlUsd": 205115.5662808609
     },
     {
-      "timestamp": 1772234233,
-      "pnlEth": "103415493384284127118",
-      "pnlUsd": 204773.5844442505
+      "timestamp": 1772234938,
+      "pnlEth": "103133638099649751163",
+      "pnlUsd": 204530.42351596264
     },
     {
-      "timestamp": 1772234977,
-      "pnlEth": "103125256058504954697",
-      "pnlUsd": 204514.241729587
+      "timestamp": 1772235687,
+      "pnlEth": "103028768421970922415",
+      "pnlUsd": 204324.44598313214
     },
     {
-      "timestamp": 1772235721,
-      "pnlEth": "103099527048632487763",
-      "pnlUsd": 204461.0418588389
+      "timestamp": 1772236436,
+      "pnlEth": "103038625347808465026",
+      "pnlUsd": 204343.47426957692
     },
     {
-      "timestamp": 1772236465,
-      "pnlEth": "103221632737167418374",
-      "pnlUsd": 204696.76058659176
+      "timestamp": 1772237185,
+      "pnlEth": "101732874038427690446",
+      "pnlUsd": 201818.6976632444
     },
     {
-      "timestamp": 1772237209,
-      "pnlEth": "101859241907312790094",
-      "pnlUsd": 202062.63187894676
+      "timestamp": 1772237934,
+      "pnlEth": "102710212995871143060",
+      "pnlUsd": 203754.09310158846
     },
     {
-      "timestamp": 1772237953,
-      "pnlEth": "102708119822513317767",
-      "pnlUsd": 203750.05014515383
+      "timestamp": 1772238683,
+      "pnlEth": "102868997851544158465",
+      "pnlUsd": 203802.7488348134
     },
     {
-      "timestamp": 1772238697,
-      "pnlEth": "102766282423366921158",
-      "pnlUsd": 203604.9747357077
+      "timestamp": 1772239432,
+      "pnlEth": "100323943337095077160",
+      "pnlUsd": 199144.11085241503
     },
     {
-      "timestamp": 1772239441,
-      "pnlEth": "100333939236040698360",
-      "pnlUsd": 199163.417666727
+      "timestamp": 1772240181,
+      "pnlEth": "97261163791378140786",
+      "pnlUsd": 193228.43320407232
     },
     {
-      "timestamp": 1772240185,
-      "pnlEth": "97303877014555942471",
-      "pnlUsd": 193310.93266440564
-    },
-    {
-      "timestamp": 1772240929,
+      "timestamp": 1772240930,
       "pnlEth": "94340322017990011535",
       "pnlUsd": 187658.3126379917
     },
     {
-      "timestamp": 1772240955,
-      "pnlEth": "94355941765226084496",
-      "pnlUsd": 187688.51438427626
+      "timestamp": 1772241638,
+      "pnlEth": "94604881765439396273",
+      "pnlUsd": 188067.44091874853
     }
   ]
 }
