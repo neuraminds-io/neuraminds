@@ -96,6 +96,6 @@
     "@xmtp/agent-sdk": "^2.2.0",
     "express": "^5.2.1",
     "http-proxy-middleware": "^3.0.5",
-    "zod": "^3.25.76"
+    "zod": "^4.3.6"
   }
 }
