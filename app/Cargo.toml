@@ -39,7 +39,7 @@ log = "0.4"
 serde_derive = "1"
 thiserror = "1"
 anyhow = "1"
-base64 = "0.21"
+base64 = "0.22"
 bs58 = "0.5"
 ed25519-dalek = { version = "2.1", default-features = false, features = ["std"] }
 regex = "1"
