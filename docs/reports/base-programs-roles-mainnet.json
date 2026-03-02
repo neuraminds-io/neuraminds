@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-02-26T23:41:43Z",
+  "network": "mainnet",
+  "contracts": {
+    "marketCore": "0x4d66ab11e147f6d8c395b36d6b0da867eb1f7a13",
+    "orderBook": "0x391050b6a7e3be5b699772880fe6d3d249d49b7b",
+    "collateralVault": "0x139290d00aebe1df9f5d40b796c0d30dea1e93a0",
+    "agentRuntime": "0xbf5d884648bd799092f5b1663c950a85dee1e825"
+  },
+  "roleChecks": {
+    "marketCore": {
+      "adminDefaultRole": true,
+      "marketCreatorRole": true,
+      "resolverRole": true,
+      "pauserRole": true
+    },
+    "orderBook": {
+      "adminDefaultRole": true,
+      "pauserRole": true,
+      "agentRuntimeRoleForRuntime": true,
+      "agentRuntimeRoleForOptionalOperator": null
+    },
+    "collateralVault": {
+      "adminDefaultRole": true,
+      "operatorRole": true,
+      "orderBookOperatorRole": true,
+      "pauserRole": true
+    },
+    "agentRuntime": {
+      "adminDefaultRole": true,
+      "pauserRole": true
+    }
+  }
+}

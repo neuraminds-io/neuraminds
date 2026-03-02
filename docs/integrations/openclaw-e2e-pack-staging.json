@@ -1,0 +1,73 @@
+{
+  "generatedAt": "2026-02-28T22:25:51.624Z",
+  "environment": "staging",
+  "network": {
+    "name": "base-sepolia",
+    "chainId": 84532,
+    "collateralSymbol": "USDC",
+    "collateralDecimals": 6
+  },
+  "endpoints": {
+    "apiBaseUrl": "https://neuraminds-api-base-staging-v1.onrender.com",
+    "webBaseUrl": "https://neuraminds-web-base-staging-v4.onrender.com",
+    "mcpJsonRpc": "https://neuraminds-api-base-staging-v1.onrender.com/v1/web4/mcp",
+    "mcpManifest": "https://neuraminds-api-base-staging-v1.onrender.com/v1/web4/mcp",
+    "web4RuntimeHealth": "https://neuraminds-api-base-staging-v1.onrender.com/v1/web4/runtime/health",
+    "x402Quote": "https://neuraminds-api-base-staging-v1.onrender.com/v1/payments/x402/quote",
+    "x402Verify": "https://neuraminds-api-base-staging-v1.onrender.com/v1/payments/x402/verify",
+    "xmtpHealth": "https://neuraminds-api-base-staging-v1.onrender.com/v1/web4/xmtp/health",
+    "xmtpSend": "https://neuraminds-api-base-staging-v1.onrender.com/v1/web4/xmtp/swarm/send"
+  },
+  "addresses": {
+    "marketCore": "0x823d54726ddc48a784ee6eb53235f5d68c94f1c0",
+    "orderBook": "0xc6ec840da50fc708bf155b5b15a585c5d0004ebf",
+    "collateralVault": "0x588e19e5831ddc8aed5c8e0d687f86884ff98ee2",
+    "agentRuntime": null,
+    "collateralToken": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+  },
+  "headers": {
+    "required": [
+      {
+        "name": "content-type: application/json",
+        "required": true,
+        "purpose": "JSON-RPC and API POST requests"
+      },
+      {
+        "name": "x-payment",
+        "required": false,
+        "purpose": "x402 payment proof for premium reads/tool calls"
+      },
+      {
+        "name": "x-client-id",
+        "required": false,
+        "purpose": "stable client identity for MCP policy/rate controls"
+      }
+    ]
+  },
+  "authAndPolicy": {
+    "geofence": "US-restricted write policy",
+    "sanctions": "write-path sanctions screening enforced",
+    "errorEnvelope": {
+      "fields": [
+        "code",
+        "reason",
+        "retryable",
+        "quote"
+      ]
+    }
+  },
+  "transportProfiles": {
+    "directHttp": {
+      "path": "config/openclaw/neuraminds-mcp.direct-http.json",
+      "method": "POST /v1/web4/mcp"
+    },
+    "stdioBridge": {
+      "path": "config/openclaw/neuraminds-mcp.stdio.json",
+      "command": "npm run mcp:server"
+    }
+  },
+  "acceptanceCommands": {
+    "directAndStdio": "npm run openclaw:e2e -- --mode both --api-url https://neuraminds-api-base-staging-v1.onrender.com --require-full-web4",
+    "strictReadiness": "bash scripts/launch-readiness.sh --strict --mode=staging --api-url=https://neuraminds-api-base-staging-v1.onrender.com --web-url=https://neuraminds-web-base-staging-v4.onrender.com --chain-mode=base --require-full-web4"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "generatedAt": "2026-02-28T22:48:36.318Z",
+  "env": "production-live-no-market-gate",
+  "chainMode": "base",
+  "requireFullWeb4": true,
+  "minEvmMarkets": 0,
+  "minEvmAgents": 0,
+  "summary": {
+    "ready": true,
+    "totalChecks": 8,
+    "requiredChecks": 7,
+    "passedRequired": 7,
+    "failedRequired": 0
+  },
+  "checks": [
+    {
+      "id": "api_health",
+      "required": true,
+      "status": "pass",
+      "latencyMs": 301,
+      "details": "status=healthy",
+      "url": "https://neuraminds-api-base-prod-v1.onrender.com/health"
+    },
+    {
+      "id": "api_health_detailed",
+      "required": true,
+      "status": "pass",
+      "latencyMs": 339,
+      "details": "http=200 db=healthy redis=healthy base=healthy solana=healthy",
+      "url": "https://neuraminds-api-base-prod-v1.onrender.com/health/detailed"
+    },
+    {
+      "id": "api_evm_markets_public",
+      "required": true,
+      "status": "pass",
+      "latencyMs": 231,
+      "details": "markets=0 required>=0",
+      "url": "https://neuraminds-api-base-prod-v1.onrender.com/v1/evm/markets?limit=1"
+    },
+    {
+      "id": "web4_runtime_health",
+      "required": true,
+      "status": "pass",
+      "latencyMs": 223,
+      "details": "status=healthy mcp=true x402=true xmtp=true fullWeb4Ready=true",
+      "url": "https://neuraminds-api-base-prod-v1.onrender.com/v1/web4/runtime/health"
+    },
+    {
+      "id": "web4_mcp_ping",
+      "required": true,
+      "status": "pass",
+      "latencyMs": 227,
+      "details": "mcp ping ok=true",
+      "url": "https://neuraminds-api-base-prod-v1.onrender.com/v1/web4/mcp"
+    },
+    {
+      "id": "x402_quote",
+      "required": true,
+      "status": "pass",
+      "latencyMs": 231,
+      "details": "receiver=0x39e4939dF3763e342DB531a2A58867bC26a22B98 amount=5000",
+      "url": "https://neuraminds-api-base-prod-v1.onrender.com/v1/payments/x402/quote?resource=mcp_tool_call"
+    },
+    {
+      "id": "xmtp_health",
+      "required": true,
+      "status": "pass",
+      "latencyMs": 226,
+      "details": "enabled=true transport=redis bridgeConfigured=false",
+      "url": "https://neuraminds-api-base-prod-v1.onrender.com/v1/web4/xmtp/health"
+    },
+    {
+      "id": "web_health",
+      "required": false,
+      "status": "pass",
+      "latencyMs": 275,
+      "details": "http=200",
+      "url": "https://neuraminds-web-base-prod-v1.onrender.com"
+    }
+  ]
+}

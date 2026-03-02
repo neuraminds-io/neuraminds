@@ -1,0 +1,65 @@
+{
+  "generatedAt": "2026-02-28T22:47:49.943Z",
+  "env": "staging-live",
+  "chainMode": "base",
+  "requireFullWeb4": false,
+  "minEvmMarkets": 1,
+  "minEvmAgents": 0,
+  "summary": {
+    "ready": false,
+    "totalChecks": 6,
+    "requiredChecks": 5,
+    "passedRequired": 4,
+    "failedRequired": 1
+  },
+  "checks": [
+    {
+      "id": "api_health",
+      "required": true,
+      "status": "pass",
+      "latencyMs": 306,
+      "details": "status=healthy",
+      "url": "https://neuraminds-api-base-staging-v1.onrender.com/health"
+    },
+    {
+      "id": "api_health_detailed",
+      "required": true,
+      "status": "pass",
+      "latencyMs": 693,
+      "details": "http=200 db=healthy redis=healthy base=healthy solana=healthy",
+      "url": "https://neuraminds-api-base-staging-v1.onrender.com/health/detailed"
+    },
+    {
+      "id": "api_evm_markets_public",
+      "required": true,
+      "status": "fail",
+      "latencyMs": 233,
+      "details": "markets=0 required>=1",
+      "url": "https://neuraminds-api-base-staging-v1.onrender.com/v1/evm/markets?limit=1"
+    },
+    {
+      "id": "web4_runtime_health",
+      "required": true,
+      "status": "pass",
+      "latencyMs": 221,
+      "details": "status=degraded mcp=true x402=false xmtp=false fullWeb4Ready=false",
+      "url": "https://neuraminds-api-base-staging-v1.onrender.com/v1/web4/runtime/health"
+    },
+    {
+      "id": "web4_mcp_ping",
+      "required": true,
+      "status": "pass",
+      "latencyMs": 315,
+      "details": "mcp ping ok=true",
+      "url": "https://neuraminds-api-base-staging-v1.onrender.com/v1/web4/mcp"
+    },
+    {
+      "id": "web_health",
+      "required": false,
+      "status": "pass",
+      "latencyMs": 286,
+      "details": "http=200",
+      "url": "https://neuraminds-web-base-staging-v4.onrender.com"
+    }
+  ]
+}

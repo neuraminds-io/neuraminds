@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+cd "$ROOT_DIR"
+
+if [[ ! -x ./scripts/verify-commit-hygiene.sh ]]; then
+  echo "Missing commit hygiene checker: scripts/verify-commit-hygiene.sh"
+  exit 1
+fi
+
+./scripts/verify-commit-hygiene.sh --commit-msg-file "$1"

@@ -1,0 +1,76 @@
+# Production environment overlay
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: polyguard-production
+
+resources:
+  - ../base
+
+configMapGenerator:
+  - name: polyguard-config
+    behavior: merge
+    literals:
+      - base-rpc-url=https://mainnet.base.org
+      - base-chain-id=8453
+      - environment=production
+      - log-level=info
+
+replicas:
+  - name: polyguard-api-blue
+    count: 3
+
+images:
+  - name: polyguard/api
+    newName: ghcr.io/polyguard/polyguard/backend
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 250m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 2Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 1000m
+    target:
+      kind: Deployment
+      name: polyguard-api-blue
+
+  - patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.polyguard.cc
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: api.polyguard.cc
+      - op: replace
+        path: /spec/tls/0/secretName
+        value: polyguard-api-tls
+    target:
+      kind: Ingress
+      name: polyguard-api
+
+  - patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 20
+    target:
+      kind: HorizontalPodAutoscaler
+      name: polyguard-api-blue
+
+  - patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 2
+    target:
+      kind: PodDisruptionBudget
+      name: polyguard-api

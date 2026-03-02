@@ -1,0 +1,75 @@
+{
+  "generatedAt": "2026-02-28T22:54:03Z",
+  "network": "mainnet",
+  "rpcUrl": "https://base-mainnet.g.alchemy.com/v2/ezbkII66mmExHt3B6aeKM",
+  "fixture": "config/pilot/base-mainnet-markets.json",
+  "dryRun": true,
+  "contracts": {
+    "marketCore": "0x4d66ab11E147f6D8C395B36D6B0Da867Eb1F7A13",
+    "orderBook": "0x391050B6A7E3Be5B699772880Fe6D3d249D49B7B",
+    "collateralVault": "0x139290d00aEbE1DF9f5d40b796C0D30dea1e93A0",
+    "collateralToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "agentRuntime": "0xBf5d884648bD799092F5B1663c950A85DeE1E825"
+  },
+  "actors": {
+    "creator": "0x39e4939df3763e342db531a2a58867bc26a22b98",
+    "resolver": "0x39e4939df3763e342db531a2a58867bc26a22b98",
+    "yesTrader": "0x39e4939df3763e342db531a2a58867bc26a22b98",
+    "noTrader": "0x39e4939df3763e342db531a2a58867bc26a22b98",
+    "agentOwner": "0x39e4939df3763e342db531a2a58867bc26a22b98"
+  },
+  "config": {
+    "marketCount": 1,
+    "agentCount": 1,
+    "orderSize": 100000,
+    "yesPriceBps": 5300,
+    "noPriceBps": 4700,
+    "agentSize": 50000,
+    "agentPriceBps": 5100,
+    "agentCadence": 3600,
+    "agentExpiryWindow": 7200
+  },
+  "funding": [
+    {
+      "label": "yes_trader",
+      "wallet": "0x39e4939df3763e342db531a2a58867bc26a22b98",
+      "requiredAmount": 250000,
+      "availableBefore": 0,
+      "depositAmount": 250000,
+      "txs": {
+        "approve": "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "deposit": "0x0000000000000000000000000000000000000000000000000000000000000001"
+      }
+    }
+  ],
+  "markets": [
+    {
+      "index": 1,
+      "marketId": 1,
+      "question": "Which crypto exchange will ZachXBT investigate next for insider trading by June 2026?",
+      "category": "crypto",
+      "closeTime": 1774911243,
+      "expiryTime": 1774911243,
+      "txs": {
+        "createMarket": "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "placeYes": "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "placeNo": "0x0000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "orders": {
+        "yesOrderId": 1,
+        "noOrderId": 2
+      }
+    }
+  ],
+  "agents": [
+    {
+      "index": 1,
+      "agentId": 1,
+      "marketId": 1,
+      "owner": "0x39e4939df3763e342db531a2a58867bc26a22b98",
+      "isYes": true,
+      "strategy": "pilot_ref_agent_market_1",
+      "txHash": "0x0000000000000000000000000000000000000000000000000000000000000001"
+    }
+  ]
+}

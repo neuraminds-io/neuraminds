@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-02-28T22:47:56.805Z",
+  "mode": "production",
+  "chainMode": "base",
+  "allowMissingSecrets": false,
+  "missing": [],
+  "warnings": [],
+  "errors": [],
+  "summary": {
+    "ready": true,
+    "missingCount": 0,
+    "warningCount": 0,
+    "errorCount": 0,
+    "missingTolerated": false
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "project": "neuraminds",
+  "openCore": {
+    "sourceRoots": [
+      "app/src",
+      "evm/src",
+      "evm/test",
+      "programs",
+      "sdk",
+      "web/src",
+      "scripts",
+      "config",
+      "migrations"
+    ],
+    "allowClosedEdgeReferences": [
+      "scripts/verify-open-core-boundary.mjs",
+      "scripts/push-safe.sh",
+      "scripts/launch-readiness.sh",
+      "package.json",
+      ".githooks/pre-commit",
+      ".githooks/pre-push",
+      "docs/OPEN_CORE_CLOSED_EDGE.md"
+    ]
+  },
+  "closedEdge": {
+    "paths": [
+      "edge",
+      "services/xmtp-bridge",
+      "scripts/dx-terminal-pro.sh",
+      "docs/runbooks/DX_TERMINAL_OPERATIONS.md"
+    ]
+  },
+  "requiredFiles": [
+    "LICENSE",
+    "edge/README.md",
+    "edge/LICENSE",
+    "docs/OPEN_CORE_CLOSED_EDGE.md"
+  ],
+  "excludePrefixes": [
+    ".git/",
+    "node_modules/",
+    "target/",
+    ".next/",
+    "vendor/",
+    "docs/reports/"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "neuraminds",
+  "short_name": "neuraminds",
+  "description": "Autonomous prediction market infrastructure on Solana",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f6f4",
+  "theme_color": "#ff5a1f",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/neuraminds.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/neuraminds.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-02-28T03:29:22.002Z",
+  "go": true,
+  "checks": [
+    {
+      "id": "launch_config",
+      "status": "pass",
+      "details": "ready=true"
+    },
+    {
+      "id": "address_manifest",
+      "status": "pass",
+      "details": "ready=true"
+    },
+    {
+      "id": "fast_gates",
+      "status": "pass",
+      "details": "ready=true"
+    },
+    {
+      "id": "strict_gates",
+      "status": "pass",
+      "details": "ready=true"
+    }
+  ]
+}
