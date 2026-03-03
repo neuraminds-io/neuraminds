@@ -7,3 +7,4 @@ export { FeaturedSlider } from './FeaturedSlider';
 export { FeaturedBanner } from './FeaturedBanner';
 export { CreateMarketForm } from './CreateMarketForm';
 export { PriceChart } from './PriceChart';
+export { MarketRow } from './MarketRow';

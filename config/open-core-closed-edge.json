@@ -20,15 +20,14 @@
       "package.json",
       ".githooks/pre-commit",
       ".githooks/pre-push",
-      "docs/OPEN_CORE_CLOSED_EDGE.md"
+      "config/OPEN_CORE_CLOSED_EDGE.md"
     ]
   },
   "closedEdge": {
     "paths": [
       "edge",
       "services/xmtp-bridge",
-      "scripts/dx-terminal-pro.sh",
-      "docs/runbooks/DX_TERMINAL_OPERATIONS.md"
+      "scripts/dx-terminal-pro.sh"
     ]
   },
   "requiredFiles": [
@@ -36,7 +35,7 @@
     "edge/README.md",
     "edge/LICENSE",
     "edge/.gitignore",
-    "docs/OPEN_CORE_CLOSED_EDGE.md"
+    "config/OPEN_CORE_CLOSED_EDGE.md"
   ],
   "excludePrefixes": [
     ".git/",

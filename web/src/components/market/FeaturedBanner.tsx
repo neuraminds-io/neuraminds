@@ -1,404 +1,93 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { Market } from "@/types";
+import { useMemo } from "react";
 
-export interface FeaturedBannerProps {
-  markets: Market[];
+export interface SignalChartProps {
+  label?: string;
+  latency?: string;
 }
 
-// Generate timeframe labels from the current market state
-function generateTimeframes(market: Market) {
-  const yesPercent = Math.round(market.yesPrice * 100);
-  return [
-    { label: "Before January 21, 2029", percent: yesPercent, color: "#ff5a1f" }, // yes color (primary orange)
-    {
-      label: "Before 2027",
-      percent: Math.max(10, yesPercent - 21),
-      color: "#ff8b5f",
-    }, // no color (indigo)
-    {
-      label: "Before April 2026",
-      percent: Math.max(5, yesPercent - 43),
-      color: "#ffd2bf",
-    }, // accent amber
-  ];
+function generateSignalData(points: number, seed: number): number[] {
+  const data: number[] = [];
+  let current = 50;
+  for (let i = 0; i < points; i++) {
+    const noise =
+      Math.sin(i * 0.4 + seed) * 8 +
+      Math.cos(i * 0.15 + seed * 2) * 12 +
+      Math.sin(i * 0.08 + seed * 0.5) * 6;
+    current += noise * 0.12;
+    current = Math.max(15, Math.min(85, current));
+    data.push(current);
+  }
+  return data;
 }
 
-// Simple SVG line chart - Kalshi style
-function PriceChart({
-  timeframes,
-}: {
-  timeframes: { label: string; percent: number; color: string }[];
-}) {
-  // Use useMemo to generate consistent data per render
-  const lines = useMemo(() => {
-    const points = 60;
-    const generateLine = (
-      basePercent: number,
-      volatility: number,
-      seed: number,
-    ) => {
-      const data: number[] = [];
-      let current = basePercent * 0.3;
-      for (let i = 0; i < points; i++) {
-        const noise =
-          Math.sin(i * 0.5 + seed) * volatility +
-          Math.cos(i * 0.3 + seed * 2) * volatility * 0.5;
-        current += noise * 0.15;
-        current = Math.max(5, Math.min(70, current));
-        if (i > points * 0.8) {
-          current += (basePercent - current) * 0.15;
-        }
-        data.push(current);
-      }
-      return data;
-    };
+export function SignalChart({
+  label = "ORACLE_A",
+  latency = "4MS",
+}: SignalChartProps) {
+  const signalData = useMemo(() => generateSignalData(120, 42), []);
 
-    return timeframes.map((tf, idx) => ({
-      color: tf.color,
-      percent: tf.percent,
-      data: generateLine(tf.percent, 6, idx * 100),
-    }));
-  }, [timeframes]);
-
-  const width = 600;
-  const height = 240;
-  const padding = { top: 50, right: 50, bottom: 30, left: 0 };
+  const width = 1000;
+  const height = 200;
+  const padding = { top: 10, right: 10, bottom: 10, left: 10 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
-  const points = 60;
 
   const toPath = (data: number[]) => {
     return data
       .map((val, i) => {
-        const x = padding.left + (i / (points - 1)) * chartWidth;
-        const y = padding.top + chartHeight - (val / 70) * chartHeight;
+        const x = padding.left + (i / (data.length - 1)) * chartWidth;
+        const y = padding.top + chartHeight - (val / 100) * chartHeight;
         return `${i === 0 ? "M" : "L"} ${x} ${y}`;
       })
       .join(" ");
   };
 
-  const yLabels = [12.5, 25, 37.5, 50, 62.5];
+  const gridLines = [25, 50, 75];
 
   return (
-    <div className="relative h-full">
-      {/* Legend - top right */}
-      <div className="absolute top-0 left-0 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        {timeframes.map((tf, i) => (
-          <div key={i} className="flex items-center gap-1.5">
-            <span className="w-2 h-2 " style={{ backgroundColor: tf.color }} />
-            <span className="text-text-secondary">{tf.label}</span>
-            <span className="font-semibold text-text-primary">
-              {tf.percent}%
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="w-full h-full"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        {/* Horizontal grid lines */}
-        {yLabels.map((val) => (
-          <line
-            key={val}
-            x1={padding.left}
-            y1={padding.top + chartHeight - (val / 70) * chartHeight}
-            x2={width - padding.right}
-            y2={padding.top + chartHeight - (val / 70) * chartHeight}
-            stroke="currentColor"
-            strokeOpacity={0.08}
-            strokeDasharray="4 4"
-          />
-        ))}
-
-        {/* Y-axis labels - right side */}
-        {yLabels.map((val) => (
-          <text
-            key={val}
-            x={width - padding.right + 8}
-            y={padding.top + chartHeight - (val / 70) * chartHeight + 4}
-            textAnchor="start"
-            className="fill-text-muted"
-            fontSize="11"
+    <div className="border border-border bg-bg-primary/80 relative overflow-hidden">
+      <div className="p-4 sm:p-5">
+        <div className="flex items-center gap-6 mb-4">
+          <span className="text-xs uppercase tracking-[0.16em] text-text-secondary font-mono">
+            SIGNAL_INPUT: {label}
+          </span>
+          <span className="text-xs uppercase tracking-[0.16em] text-text-muted font-mono">
+            LATENCY: {latency}
+          </span>
+        </div>
+        <div className="h-[180px] sm:h-[220px]">
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            className="w-full h-full"
+            preserveAspectRatio="none"
           >
-            {val}%
-          </text>
-        ))}
-
-        {/* X-axis labels */}
-        {["jan. 2025", "apr. 2025", "jul. 2025", "okt. 2025", "jan. 2026"].map(
-          (label, i) => (
-            <text
-              key={label}
-              x={padding.left + (i / 4) * chartWidth}
-              y={height - 8}
-              textAnchor="middle"
-              className="fill-text-muted"
-              fontSize="11"
-            >
-              {label}
-            </text>
-          ),
-        )}
-
-        {/* Lines - render in reverse so first line is on top */}
-        {[...lines].reverse().map((line, i) => (
-          <path
-            key={i}
-            d={toPath(line.data)}
-            fill="none"
-            stroke={line.color}
-            strokeWidth={2}
-          />
-        ))}
-
-        {/* End dots */}
-        {lines.map((line, i) => {
-          const lastVal = line.data[line.data.length - 1];
-          const x = width - padding.right;
-          const y = padding.top + chartHeight - (lastVal / 70) * chartHeight;
-          return (
-            <circle
-              key={i}
-              cx={x}
-              cy={y}
-              r={4}
-              fill={line.color}
-              stroke="white"
-              strokeWidth={2}
-            />
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
-
-function BannerCard({ market }: { market: Market }) {
-  const timeframes = generateTimeframes(market);
-
-  return (
-    <div className="relative bg-bg-primary/85 micro-surface p-6 lg:p-8 overflow-hidden min-h-[420px] border border-border/70">
-      <div className="micro-stripes" />
-      <div
-        className="micrographic-signal"
-        style={{ right: -50, top: -60, opacity: 0.18 }}
-        aria-hidden
-      />
-      <div className="absolute inset-0 bg-gradient-to-br from-[#d9e7ff]/40 via-transparent to-[#ffead8]/40 pointer-events-none" />
-      <div className="relative flex flex-col lg:flex-row gap-8 h-full">
-        {/* Left side - Market info */}
-        <div className="lg:w-[420px] flex flex-col">
-          {/* Image + Title */}
-          <div className="flex gap-4 mb-8">
-            <div className="w-[72px] h-[72px]  bg-gradient-to-br from-sky-400 to-emerald-400 flex-shrink-0 overflow-hidden relative">
-              {market.imageUrl ? (
-                <Image
-                  src={market.imageUrl}
-                  alt=""
-                  fill
-                  sizes="72px"
-                  className="object-cover"
-                  priority
-                />
-              ) : (
-                <Image
-                  src="https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=150&h=150&fit=crop"
-                  alt=""
-                  fill
-                  sizes="72px"
-                  className="object-cover"
-                  priority
-                />
-              )}
-            </div>
-            <h2 className="text-xl lg:text-2xl font-semibold text-text-primary leading-snug">
-              {market.question}
-            </h2>
-          </div>
-
-          {/* Timeframe rows with Yes/No - only first 2 */}
-          <div className="space-y-4 mb-8">
-            {timeframes.slice(0, 2).map((tf, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between gap-4 border border-border bg-bg-secondary/70 px-3 py-2"
-              >
-                <span className="text-text-primary text-sm">{tf.label}</span>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <span className="font-semibold text-text-primary text-lg">
-                    {tf.percent}%
-                  </span>
-                  <div className="flex shadow-[0_0_0_1px_var(--color-border)]">
-                    <button
-                      onClick={(e) => e.preventDefault()}
-                      className={cn(
-                        "px-3 py-1.5 text-sm font-semibold",
-                        "bg-transparent border border-yes text-yes",
-                        "hover:bg-yes hover:text-white",
-                        "transition-all cursor-pointer",
-                      )}
-                    >
-                      Yes
-                    </button>
-                    <button
-                      onClick={(e) => e.preventDefault()}
-                      className={cn(
-                        "px-3 py-1.5 text-sm font-semibold",
-                        "bg-transparent border border-l-0 border-no text-no",
-                        "hover:bg-no hover:text-white",
-                        "transition-all cursor-pointer",
-                      )}
-                    >
-                      No
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* News snippet */}
-          <div className="mt-auto space-y-3">
-            <p className="text-sm text-text-secondary leading-relaxed">
-              <span className="font-semibold text-text-primary">News</span>
-              <span className="text-text-muted"> · </span>
-              {market.description}
-            </p>
-            <div className="flex items-center gap-2 text-sm text-text-muted">
-              <span className="font-semibold text-text-primary">
-                ${market.totalVolume.toLocaleString()}
-              </span>
-              <span>volume</span>
-              <button
-                onClick={(e) => e.preventDefault()}
-                className="w-7 h-7 border border-border flex items-center justify-center text-text-muted hover:text-text-primary hover:border-accent transition-colors cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Right side - Chart */}
-        <div className="flex-1 min-w-0">
-          <div className="h-[260px] bg-bg-secondary/50 border border-border p-2">
-            <PriceChart timeframes={timeframes} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function FeaturedBanner({ markets }: FeaturedBannerProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  const goToPrev = useCallback(() => {
-    setCurrentIndex((prev) => (prev === 0 ? markets.length - 1 : prev - 1));
-  }, [markets.length]);
-
-  const goToNext = useCallback(() => {
-    setCurrentIndex((prev) => (prev === markets.length - 1 ? 0 : prev + 1));
-  }, [markets.length]);
-
-  // Auto-advance every 8 seconds
-  useEffect(() => {
-    if (markets.length <= 1) return;
-    const timer = setInterval(goToNext, 8000);
-    return () => clearInterval(timer);
-  }, [goToNext, markets.length]);
-
-  if (!markets || markets.length === 0) {
-    return (
-      <div className="bg-bg-primary  p-6 lg:p-8 animate-pulse">
-        <div className="flex gap-8">
-          <div className="lg:w-[420px]">
-            <div className="flex gap-4 mb-8">
-              <div className="w-[72px] h-[72px]  bg-bg-secondary" />
-              <div className="flex-1 space-y-2">
-                <div className="h-7 bg-bg-secondary  w-full" />
-                <div className="h-7 bg-bg-secondary  w-3/4" />
-              </div>
-            </div>
-            <div className="space-y-4">
-              <div className="h-10 bg-bg-secondary " />
-              <div className="h-10 bg-bg-secondary " />
-            </div>
-          </div>
-          <div className="hidden lg:block flex-1 h-[260px] bg-bg-secondary " />
-        </div>
-      </div>
-    );
-  }
-
-  const currentMarket = markets[currentIndex];
-  const prevIndex = currentIndex === 0 ? markets.length - 1 : currentIndex - 1;
-  const nextIndex = currentIndex === markets.length - 1 ? 0 : currentIndex + 1;
-
-  return (
-    <div className="relative">
-      <Link
-        href={`/markets/${encodeURIComponent(currentMarket.id)}`}
-        className="block"
-      >
-        <BannerCard market={currentMarket} />
-      </Link>
-
-      {/* Bottom Navigation - Kalshi style */}
-      {markets.length > 1 && (
-        <div className="flex items-center justify-between mt-4 px-2">
-          {/* Prev */}
-          <button
-            onClick={goToPrev}
-            className="flex items-center gap-2 text-text-muted hover:text-text-secondary transition-colors cursor-pointer group"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            <span className="text-sm hidden sm:inline group-hover:underline">
-              {markets[prevIndex]?.question.length > 25
-                ? markets[prevIndex]?.question.slice(0, 25) + "..."
-                : markets[prevIndex]?.question}
-            </span>
-          </button>
-
-          {/* Dots */}
-          <div className="flex items-center gap-2">
-            {markets.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentIndex(index)}
-                className={cn(
-                  "w-2 h-2  transition-all cursor-pointer",
-                  index === currentIndex
-                    ? "bg-text-primary"
-                    : "bg-border hover:bg-text-muted",
-                )}
+            {gridLines.map((val) => (
+              <line
+                key={val}
+                x1={padding.left}
+                y1={padding.top + chartHeight - (val / 100) * chartHeight}
+                x2={width - padding.right}
+                y2={padding.top + chartHeight - (val / 100) * chartHeight}
+                stroke="currentColor"
+                strokeOpacity={0.06}
               />
             ))}
-          </div>
-
-          {/* Next */}
-          <button
-            onClick={goToNext}
-            className="flex items-center gap-2 text-text-muted hover:text-text-secondary transition-colors cursor-pointer group"
-          >
-            <span className="text-sm hidden sm:inline group-hover:underline">
-              {markets[nextIndex]?.question.length > 25
-                ? markets[nextIndex]?.question.slice(0, 25) + "..."
-                : markets[nextIndex]?.question}
-            </span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
+            <path
+              d={toPath(signalData)}
+              fill="none"
+              stroke="var(--color-accent)"
+              strokeWidth={2.5}
+            />
+          </svg>
         </div>
-      )}
+      </div>
     </div>
   );
+}
+
+// Keep the named export for backwards compatibility
+export function FeaturedBanner() {
+  return <SignalChart />;
 }

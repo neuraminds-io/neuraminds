@@ -156,7 +156,7 @@ export function Header() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-sticky bg-bg-primary border-b border-border">
+    <header className="sticky top-0 z-sticky bg-transparent border-b border-border/40">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
         <div className="relative flex items-center justify-between h-14">
           <div className="flex items-center gap-8">
