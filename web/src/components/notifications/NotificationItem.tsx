@@ -66,7 +66,7 @@ const NOTIFICATION_COLORS: Record<NotificationType, string> = {
 
 function getNotificationLink(notification: Notification): string | null {
   if (notification.marketId) {
-    return `/markets/${notification.marketId}`;
+    return `/markets/${encodeURIComponent(notification.marketId)}`;
   }
   if (notification.orderId) {
     return '/orders';

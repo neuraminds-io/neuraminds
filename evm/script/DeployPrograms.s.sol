@@ -10,6 +10,7 @@ import {AgentIdentityRegistry} from "../src/AgentIdentityRegistry.sol";
 import {AgentReputationRegistry} from "../src/AgentReputationRegistry.sol";
 import {ERC8004IdentityRegistry} from "../src/ERC8004IdentityRegistry.sol";
 import {ERC8004ReputationRegistry} from "../src/ERC8004ReputationRegistry.sol";
+import {ERC8004ValidationRegistry} from "../src/ERC8004ValidationRegistry.sol";
 
 interface IAccessControlLike {
     function grantRole(bytes32 role, address account) external;
@@ -37,6 +38,8 @@ contract DeployProgramsScript is Script {
         address reputationOracle = _envAddressOr("BASE_REPUTATION_ORACLE", operator);
         address erc8004Issuer = _envAddressOr("BASE_IDENTITY_ISSUER", admin);
         address erc8004Attester = _envAddressOr("BASE_REPUTATION_ATTESTER", reputationOracle);
+        address erc8004ValidationManager = _envAddressOr("BASE_VALIDATION_MANAGER", admin);
+        address erc8004Validator = _envAddressOr("BASE_VALIDATION_VALIDATOR", erc8004Attester);
 
         address collateralToken = _resolveCollateralToken();
         if (collateralToken == address(0)) revert MissingCollateralToken();
@@ -53,6 +56,8 @@ contract DeployProgramsScript is Script {
         ERC8004IdentityRegistry erc8004IdentityRegistry = new ERC8004IdentityRegistry(bootstrapAdmin);
         ERC8004ReputationRegistry erc8004ReputationRegistry =
             new ERC8004ReputationRegistry(bootstrapAdmin, address(erc8004IdentityRegistry));
+        ERC8004ValidationRegistry erc8004ValidationRegistry =
+            new ERC8004ValidationRegistry(bootstrapAdmin, address(erc8004IdentityRegistry));
 
         _configureMarketCore(marketCore, bootstrapAdmin, admin, marketCreator, resolver, pauser);
         _configureCollateralVault(collateralVault, bootstrapAdmin, admin, operator, pauser, address(orderBook));
@@ -61,6 +66,14 @@ contract DeployProgramsScript is Script {
         _configureReputationRegistry(reputationRegistry, bootstrapAdmin, admin, pauser, reputationOracle);
         _configureErc8004IdentityRegistry(erc8004IdentityRegistry, bootstrapAdmin, admin, pauser, erc8004Issuer);
         _configureErc8004ReputationRegistry(erc8004ReputationRegistry, bootstrapAdmin, admin, pauser, erc8004Attester);
+        _configureErc8004ValidationRegistry(
+            erc8004ValidationRegistry,
+            bootstrapAdmin,
+            admin,
+            pauser,
+            erc8004ValidationManager,
+            erc8004Validator
+        );
         _configureAgentRuntime(agentRuntime, bootstrapAdmin, admin, pauser, address(identityRegistry));
 
         vm.stopBroadcast();
@@ -76,6 +89,7 @@ contract DeployProgramsScript is Script {
         console2.log("AgentReputationRegistry:", address(reputationRegistry));
         console2.log("ERC8004IdentityRegistry:", address(erc8004IdentityRegistry));
         console2.log("ERC8004ReputationRegistry:", address(erc8004ReputationRegistry));
+        console2.log("ERC8004ValidationRegistry:", address(erc8004ValidationRegistry));
         console2.log("collateralToken:", collateralToken);
         console2.log("marketCreator:", marketCreator);
         console2.log("resolver:", resolver);
@@ -85,6 +99,8 @@ contract DeployProgramsScript is Script {
         console2.log("reputationOracle:", reputationOracle);
         console2.log("erc8004Issuer:", erc8004Issuer);
         console2.log("erc8004Attester:", erc8004Attester);
+        console2.log("erc8004ValidationManager:", erc8004ValidationManager);
+        console2.log("erc8004Validator:", erc8004Validator);
     }
 
     function _configureMarketCore(
@@ -276,6 +292,40 @@ contract DeployProgramsScript is Script {
                 IAccessControlLike(address(reputationRegistry)), reputationRegistry.ATTESTER_ROLE(), bootstrapAdmin
             );
             _revokeRoleIfPresent(IAccessControlLike(address(reputationRegistry)), defaultAdminRole, bootstrapAdmin);
+        }
+    }
+
+    function _configureErc8004ValidationRegistry(
+        ERC8004ValidationRegistry validationRegistry,
+        address bootstrapAdmin,
+        address admin,
+        address pauser,
+        address validatorManager,
+        address validator
+    ) internal {
+        bytes32 defaultAdminRole = validationRegistry.DEFAULT_ADMIN_ROLE();
+
+        _grantRoleIfMissing(IAccessControlLike(address(validationRegistry)), validationRegistry.PAUSER_ROLE(), pauser);
+        _grantRoleIfMissing(
+            IAccessControlLike(address(validationRegistry)),
+            validationRegistry.VALIDATOR_MANAGER_ROLE(),
+            validatorManager
+        );
+        if (!validationRegistry.isValidator(validator)) {
+            validationRegistry.addValidator(validator);
+        }
+
+        if (bootstrapAdmin != admin) {
+            _grantRoleIfMissing(IAccessControlLike(address(validationRegistry)), defaultAdminRole, admin);
+            _revokeRoleIfPresent(
+                IAccessControlLike(address(validationRegistry)), validationRegistry.PAUSER_ROLE(), bootstrapAdmin
+            );
+            _revokeRoleIfPresent(
+                IAccessControlLike(address(validationRegistry)),
+                validationRegistry.VALIDATOR_MANAGER_ROLE(),
+                bootstrapAdmin
+            );
+            _revokeRoleIfPresent(IAccessControlLike(address(validationRegistry)), defaultAdminRole, bootstrapAdmin);
         }
     }
 

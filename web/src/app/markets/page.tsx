@@ -12,6 +12,7 @@ import { CATEGORIES } from '@/lib/constants';
 import type { MarketFilters } from '@/types';
 
 type SortTab = 'trending' | 'new' | 'ending';
+type SourceTab = 'all' | 'internal' | 'limitless' | 'polymarket';
 
 function MarketsContent() {
   const searchParams = useSearchParams();
@@ -21,8 +22,10 @@ function MarketsContent() {
     initialCategory.charAt(0).toUpperCase() + initialCategory.slice(1)
   );
   const [sortTab, setSortTab] = useState<SortTab>('trending');
+  const [sourceTab, setSourceTab] = useState<SourceTab>('all');
 
   const filters: MarketFilters = {
+    source: sourceTab,
     category: category === 'All' ? undefined : category.toLowerCase(),
     sort: sortTab === 'trending' ? 'volume' : sortTab === 'new' ? 'newest' : 'ending',
     limit: 50,
@@ -77,6 +80,25 @@ function MarketsContent() {
                 <Clock className="w-3.5 h-3.5" />
                 Ending Soon
               </button>
+            </div>
+
+            <div className="w-px h-5 bg-border flex-shrink-0" />
+
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {(['all', 'internal', 'limitless', 'polymarket'] as SourceTab[]).map((source) => (
+                <button
+                  key={source}
+                  onClick={() => setSourceTab(source)}
+                  className={cn(
+                    'px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors cursor-pointer border',
+                    sourceTab === source
+                      ? 'border-accent text-accent'
+                      : 'border-border text-text-secondary hover:border-border-hover'
+                  )}
+                >
+                  {source.toUpperCase()}
+                </button>
+              ))}
             </div>
 
             <div className="w-px h-5 bg-border flex-shrink-0" />

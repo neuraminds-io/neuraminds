@@ -36,3 +36,6 @@ export {
   Position,
   createDefaultRiskParams,
 } from './risk';
+
+// ERC-8004 modules
+export * from './erc8004';

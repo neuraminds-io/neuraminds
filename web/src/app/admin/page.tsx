@@ -47,7 +47,7 @@ export default function AdminDashboard() {
       setLoading(true);
       setError(null);
       try {
-        const page = await api.getBaseMarkets({ limit: 200, offset: 0 });
+        const page = await api.getBaseMarkets({ limit: 200, offset: 0, source: 'internal' });
         if (!mounted) return;
 
         const markets = page.data;

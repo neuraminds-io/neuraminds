@@ -2,12 +2,15 @@ use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha3::{Digest, Keccak256};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::api::ApiError;
 use crate::services::database::PayoutJobRecord;
+use crate::services::external::types::ExternalMarketId;
+use crate::services::external::{self, ExternalMarketSource, TradableFilter};
 use crate::services::x402::{self, X402Resource};
 use crate::AppState;
 
@@ -34,6 +37,9 @@ const ERC8004_IDENTITY_REGISTER_SELECTOR: &str = "0x07e49598";
 const ERC8004_IDENTITY_SET_TIER_SELECTOR: &str = "0x93e2282d";
 const ERC8004_IDENTITY_SET_ACTIVE_SELECTOR: &str = "0x2ce962cf";
 const ERC8004_REPUTATION_SUBMIT_OUTCOME_SELECTOR: &str = "0x30a51426";
+const ERC8004_VALIDATION_STATUS_SELECTOR: &str = "0xff2febfc";
+const ERC8004_VALIDATION_REQUEST_SELECTOR: &str = "0xaaf400c4";
+const ERC8004_VALIDATION_RESPONSE_SELECTOR: &str = "0x30e5993a";
 const ORDER_FILLED_TOPIC: &str =
     "0x5aac01386940f75e601757cfe5dc1d4ab2bac84f98d30664486114a8abb38a45";
 const MAX_MARKETS_PAGE_SIZE: u64 = 200;
@@ -60,6 +66,8 @@ pub struct BaseTokenStateResponse {
 pub struct BaseMarketsQuery {
     pub limit: Option<u64>,
     pub offset: Option<u64>,
+    pub source: Option<String>,
+    pub tradable: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -139,7 +147,13 @@ pub struct BaseMarketsResponse {
     pub source: String,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
+pub struct BaseMarketOutcome {
+    pub label: String,
+    pub probability: f64,
+}
+
+#[derive(Clone, Serialize)]
 pub struct BaseMarketSnapshot {
     pub id: String,
     pub question_hash: String,
@@ -153,6 +167,15 @@ pub struct BaseMarketSnapshot {
     pub resolved: bool,
     pub outcome: Option<String>,
     pub status: String,
+    pub source: String,
+    pub provider: String,
+    pub is_external: bool,
+    pub external_url: Option<String>,
+    pub chain_id: u64,
+    pub requires_credentials: bool,
+    pub execution_users: bool,
+    pub execution_agents: bool,
+    pub outcomes: Vec<BaseMarketOutcome>,
 }
 
 #[derive(Serialize)]
@@ -170,6 +193,10 @@ pub struct BaseOrderBookResponse {
     pub asks: Vec<BaseOrderBookLevel>,
     pub last_updated: String,
     pub source: String,
+    pub provider: String,
+    pub chain_id: u64,
+    pub provider_market_ref: String,
+    pub is_synthetic: bool,
 }
 
 #[derive(Serialize)]
@@ -193,6 +220,10 @@ pub struct BaseTradesResponse {
     pub offset: u64,
     pub has_more: bool,
     pub source: String,
+    pub provider: String,
+    pub chain_id: u64,
+    pub provider_market_ref: String,
+    pub is_synthetic: bool,
 }
 
 #[derive(Serialize)]
@@ -299,6 +330,19 @@ pub struct BaseReputationResponse {
     pub confidence_bps: Option<u32>,
     pub events: Option<u64>,
     pub notional_microusdc: Option<String>,
+    pub source: String,
+}
+
+#[derive(Serialize)]
+pub struct BaseValidationResponse {
+    pub request_hash: String,
+    pub validator: String,
+    pub agent_id: String,
+    pub response: u8,
+    pub response_hash: String,
+    pub tag: String,
+    pub last_update: u64,
+    pub responded: bool,
     pub source: String,
 }
 
@@ -462,6 +506,27 @@ pub struct PrepareErc8004SubmitOutcomeWriteRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PrepareErc8004ValidationRequestWriteRequest {
+    pub from: Option<String>,
+    pub validator: String,
+    pub agent_id: String,
+    pub request_uri: String,
+    pub request_hash: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareErc8004ValidationResponseWriteRequest {
+    pub from: Option<String>,
+    pub request_hash: String,
+    pub response: u8,
+    pub response_uri: String,
+    pub response_hash: String,
+    pub tag: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RelayRawTransactionRequest {
     pub raw_tx: String,
 }
@@ -508,6 +573,27 @@ struct Erc8004Reputation {
     confidence_bps: u32,
     events: u64,
     notional_microusdc: u128,
+}
+
+#[derive(Clone)]
+struct Erc8004Validation {
+    validator: String,
+    agent_id: u128,
+    response: u8,
+    response_hash: String,
+    tag: String,
+    last_update: u64,
+}
+
+impl Erc8004Validation {
+    fn responded(&self) -> bool {
+        self.response > 0
+            || self
+                .response_hash
+                .trim_start_matches("0x")
+                .chars()
+                .any(|ch| ch != '0')
+    }
 }
 
 #[derive(Clone)]
@@ -567,17 +653,55 @@ pub async fn get_neura_token_state(
     }))
 }
 
-pub async fn get_base_markets(
-    state: web::Data<Arc<AppState>>,
-    query: web::Query<BaseMarketsQuery>,
-) -> Result<impl Responder, ApiError> {
-    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
-        return Err(ApiError::bad_request(
-            "EVM_DISABLED",
-            "EVM services are disabled",
-        ));
-    }
+fn is_external_market_id(raw: &str) -> bool {
+    raw.trim().contains(':')
+}
 
+fn source_label(source: ExternalMarketSource) -> &'static str {
+    match source {
+        ExternalMarketSource::All => "all",
+        ExternalMarketSource::Internal => "internal",
+        ExternalMarketSource::Limitless => "limitless",
+        ExternalMarketSource::Polymarket => "polymarket",
+    }
+}
+
+fn from_external_market(snapshot: external::types::ExternalMarketSnapshot) -> BaseMarketSnapshot {
+    BaseMarketSnapshot {
+        id: snapshot.id,
+        question_hash: snapshot.provider_market_ref.clone(),
+        question: snapshot.question,
+        description: snapshot.description,
+        category: snapshot.category,
+        resolution_source: snapshot.external_url.clone(),
+        resolver: String::new(),
+        close_time: snapshot.close_time,
+        resolve_time: snapshot.close_time,
+        resolved: snapshot.resolved,
+        outcome: snapshot.outcome,
+        status: snapshot.status,
+        source: snapshot.source,
+        provider: snapshot.provider,
+        is_external: true,
+        external_url: Some(snapshot.external_url),
+        chain_id: snapshot.chain_id,
+        requires_credentials: snapshot.requires_credentials,
+        execution_users: snapshot.execution_users,
+        execution_agents: snapshot.execution_agents,
+        outcomes: snapshot
+            .outcomes
+            .into_iter()
+            .map(|entry| BaseMarketOutcome {
+                label: entry.label,
+                probability: entry.probability,
+            })
+            .collect(),
+    }
+}
+
+async fn fetch_internal_market_snapshots(
+    state: &AppState,
+) -> Result<Vec<BaseMarketSnapshot>, ApiError> {
     let market_core = state.config.market_core_address.trim();
     if market_core.is_empty() {
         return Err(ApiError::bad_request(
@@ -585,7 +709,6 @@ pub async fn get_base_markets(
             "MARKET_CORE_ADDRESS must be configured for Base markets",
         ));
     }
-
     if !is_valid_evm_address(market_core) {
         return Err(ApiError::bad_request(
             "INVALID_MARKET_CORE_ADDRESS",
@@ -599,23 +722,12 @@ pub async fn get_base_markets(
         .await
         .map_err(map_evm_rpc_error)?;
     let total = parse_u64_hex(&total_hex)?;
-
-    let limit = query.limit.unwrap_or(50).min(MAX_MARKETS_PAGE_SIZE);
-    let offset = query.offset.unwrap_or(0);
-
-    if total == 0 || offset >= total {
-        return Ok(HttpResponse::Ok().json(BaseMarketsResponse {
-            markets: vec![],
-            total,
-            limit,
-            offset,
-            source: "market_core".to_string(),
-        }));
+    if total == 0 {
+        return Ok(Vec::new());
     }
 
-    let end = (offset + limit).min(total);
-    let mut markets = Vec::new();
-    for index in (offset + 1)..=end {
+    let mut markets = Vec::with_capacity(total as usize);
+    for index in 1..=total {
         let calldata = format!("{}{}", MARKET_CORE_MARKETS_SELECTOR, encode_u256_hex(index));
         let slot = state
             .evm_rpc
@@ -643,17 +755,193 @@ pub async fn get_base_markets(
                 snapshot.resolution_source = resolution_source;
             }
         }
-
+        snapshot.source = "internal_market_core".to_string();
+        snapshot.provider = "internal".to_string();
+        snapshot.is_external = false;
+        snapshot.external_url = None;
+        snapshot.chain_id = state.config.base_chain_id;
+        snapshot.requires_credentials = false;
+        snapshot.execution_users = true;
+        snapshot.execution_agents = true;
         markets.push(snapshot);
     }
 
+    Ok(markets)
+}
+
+async fn fetch_internal_market_snapshot_by_id(
+    state: &AppState,
+    market_id: u64,
+) -> Result<BaseMarketSnapshot, ApiError> {
+    if market_id == 0 {
+        return Err(ApiError::bad_request(
+            "INVALID_MARKET_ID",
+            "market_id must be a positive integer",
+        ));
+    }
+
+    let market_core = state.config.market_core_address.trim();
+    if market_core.is_empty() {
+        return Err(ApiError::bad_request(
+            "MARKET_CORE_ADDRESS_NOT_CONFIGURED",
+            "MARKET_CORE_ADDRESS must be configured for Base markets",
+        ));
+    }
+    if !is_valid_evm_address(market_core) {
+        return Err(ApiError::bad_request(
+            "INVALID_MARKET_CORE_ADDRESS",
+            "MARKET_CORE_ADDRESS must be a valid 0x EVM address",
+        ));
+    }
+
+    let total_hex = state
+        .evm_rpc
+        .eth_call(market_core, MARKET_CORE_COUNT_SELECTOR)
+        .await
+        .map_err(map_evm_rpc_error)?;
+    let total = parse_u64_hex(&total_hex)?;
+    if market_id > total {
+        return Err(ApiError::not_found("Base market"));
+    }
+
+    let calldata = format!(
+        "{}{}",
+        MARKET_CORE_MARKETS_SELECTOR,
+        encode_u256_hex(market_id)
+    );
+    let slot = state
+        .evm_rpc
+        .eth_call(market_core, &calldata)
+        .await
+        .map_err(map_evm_rpc_error)?;
+    let mut snapshot = decode_market_snapshot(market_id, &slot)?;
+
+    let metadata_calldata = format!(
+        "{}{}",
+        MARKET_CORE_METADATA_SELECTOR,
+        encode_u256_hex(market_id)
+    );
+    if let Ok(payload) = state
+        .evm_rpc
+        .eth_call(market_core, &metadata_calldata)
+        .await
+    {
+        if let Ok((question, description, category, resolution_source)) =
+            decode_market_metadata_tuple(&payload)
+        {
+            snapshot.question = question;
+            snapshot.description = description;
+            snapshot.category = category;
+            snapshot.resolution_source = resolution_source;
+        }
+    }
+    snapshot.source = "internal_market_core".to_string();
+    snapshot.provider = "internal".to_string();
+    snapshot.is_external = false;
+    snapshot.external_url = None;
+    snapshot.chain_id = state.config.base_chain_id;
+    snapshot.requires_credentials = false;
+    snapshot.execution_users = true;
+    snapshot.execution_agents = true;
+
+    Ok(snapshot)
+}
+
+pub async fn get_base_markets(
+    state: web::Data<Arc<AppState>>,
+    query: web::Query<BaseMarketsQuery>,
+) -> Result<impl Responder, ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
+        return Err(ApiError::bad_request(
+            "EVM_DISABLED",
+            "EVM services are disabled",
+        ));
+    }
+
+    let source = ExternalMarketSource::from_query(query.source.as_deref())?;
+    let tradable = TradableFilter::from_query(query.tradable.as_deref())?;
+    let limit = query.limit.unwrap_or(50).min(MAX_MARKETS_PAGE_SIZE);
+    let offset = query.offset.unwrap_or(0);
+    let mut markets = Vec::new();
+
+    if matches!(
+        source,
+        ExternalMarketSource::All | ExternalMarketSource::Internal
+    ) {
+        markets.extend(fetch_internal_market_snapshots(&state).await?);
+    }
+
+    if matches!(
+        source,
+        ExternalMarketSource::All
+            | ExternalMarketSource::Limitless
+            | ExternalMarketSource::Polymarket
+    ) {
+        let external_markets =
+            external::fetch_markets(&state.config, &state.redis, source, tradable, 250, 0).await?;
+        markets.extend(external_markets.into_iter().map(from_external_market));
+    }
+
+    if !matches!(source, ExternalMarketSource::Internal) {
+        markets.sort_by(|a, b| {
+            b.close_time
+                .cmp(&a.close_time)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+    }
+
+    let total = markets.len() as u64;
+    if total == 0 || offset >= total {
+        return Ok(HttpResponse::Ok().json(BaseMarketsResponse {
+            markets: vec![],
+            total,
+            limit,
+            offset,
+            source: source_label(source).to_string(),
+        }));
+    }
+
+    let page = markets
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect::<Vec<_>>();
+
     Ok(HttpResponse::Ok().json(BaseMarketsResponse {
-        markets,
+        markets: page,
         total,
         limit,
         offset,
-        source: "market_core".to_string(),
+        source: source_label(source).to_string(),
     }))
+}
+
+pub async fn get_base_market(
+    state: web::Data<Arc<AppState>>,
+    path: web::Path<String>,
+) -> Result<impl Responder, ApiError> {
+    if !state.config.evm_enabled || !state.config.evm_reads_enabled {
+        return Err(ApiError::bad_request(
+            "EVM_DISABLED",
+            "EVM services are disabled",
+        ));
+    }
+
+    let market_id_raw = path.into_inner();
+    if is_external_market_id(&market_id_raw) {
+        let external_id = ExternalMarketId::parse(market_id_raw.as_str())?;
+        let market = external::fetch_market_by_id(&state.config, &external_id).await?;
+        return Ok(HttpResponse::Ok().json(from_external_market(market)));
+    }
+
+    let market_id = market_id_raw.parse::<u64>().map_err(|_| {
+        ApiError::bad_request(
+            "INVALID_MARKET_ID",
+            "market_id must be numeric or namespaced",
+        )
+    })?;
+    let market = fetch_internal_market_snapshot_by_id(&state, market_id).await?;
+    Ok(HttpResponse::Ok().json(market))
 }
 
 pub async fn get_base_agents(
@@ -1189,6 +1477,31 @@ pub async fn get_base_reputation(
     }))
 }
 
+pub async fn get_base_validation(
+    state: web::Data<Arc<AppState>>,
+    path: web::Path<String>,
+) -> Result<impl Responder, ApiError> {
+    let request_hash = normalize_required_bytes32(
+        path.as_str(),
+        "INVALID_REQUEST_HASH",
+        "request_hash must be a valid 0x-prefixed bytes32 value",
+    )?;
+    let validation = fetch_erc8004_validation(&state, request_hash.as_str()).await?;
+    let responded = validation.responded();
+
+    Ok(HttpResponse::Ok().json(BaseValidationResponse {
+        request_hash,
+        validator: validation.validator,
+        agent_id: validation.agent_id.to_string(),
+        response: validation.response,
+        response_hash: validation.response_hash,
+        tag: validation.tag,
+        last_update: validation.last_update,
+        responded,
+        source: "erc8004_validation_registry".to_string(),
+    }))
+}
+
 pub async fn get_base_orderbook(
     state: web::Data<Arc<AppState>>,
     req: HttpRequest,
@@ -1204,10 +1517,6 @@ pub async fn get_base_orderbook(
     x402::ensure_payment_for_request(&state, &req, X402Resource::OrderBook).await?;
 
     let market_id_raw = path.into_inner();
-    let market_id = market_id_raw.parse::<u64>().map_err(|_| {
-        ApiError::bad_request("INVALID_MARKET_ID", "market_id must be a positive integer")
-    })?;
-
     let outcome = match query.outcome.as_deref().unwrap_or("yes") {
         "yes" => "yes",
         "no" => "no",
@@ -1218,8 +1527,51 @@ pub async fn get_base_orderbook(
             ));
         }
     };
-    let outcome_is_yes = outcome == "yes";
     let depth = query.depth.unwrap_or(20).min(MAX_ORDERBOOK_DEPTH);
+
+    if is_external_market_id(&market_id_raw) {
+        let external_id = ExternalMarketId::parse(market_id_raw.as_str())?;
+        let snapshot =
+            external::fetch_orderbook(&state.config, &state.redis, &external_id, outcome, depth)
+                .await?;
+
+        return Ok(HttpResponse::Ok().json(BaseOrderBookResponse {
+            market_id: snapshot.market_id,
+            outcome: snapshot.outcome,
+            bids: snapshot
+                .bids
+                .into_iter()
+                .map(|entry| BaseOrderBookLevel {
+                    price: entry.price,
+                    quantity: entry.quantity,
+                    orders: entry.orders,
+                })
+                .collect(),
+            asks: snapshot
+                .asks
+                .into_iter()
+                .map(|entry| BaseOrderBookLevel {
+                    price: entry.price,
+                    quantity: entry.quantity,
+                    orders: entry.orders,
+                })
+                .collect(),
+            last_updated: snapshot.last_updated,
+            source: snapshot.source,
+            provider: snapshot.provider,
+            chain_id: snapshot.chain_id,
+            provider_market_ref: snapshot.provider_market_ref,
+            is_synthetic: snapshot.is_synthetic,
+        }));
+    }
+
+    let market_id = market_id_raw.parse::<u64>().map_err(|_| {
+        ApiError::bad_request(
+            "INVALID_MARKET_ID",
+            "market_id must be numeric or namespaced",
+        )
+    })?;
+    let outcome_is_yes = outcome == "yes";
 
     let order_book = state.config.order_book_address.trim();
     if order_book.is_empty() {
@@ -1250,6 +1602,10 @@ pub async fn get_base_orderbook(
             asks: vec![],
             last_updated: Utc::now().to_rfc3339(),
             source: "order_book_contract".to_string(),
+            provider: "internal".to_string(),
+            chain_id: state.config.base_chain_id,
+            provider_market_ref: market_id.to_string(),
+            is_synthetic: false,
         }));
     }
 
@@ -1335,6 +1691,10 @@ pub async fn get_base_orderbook(
         asks,
         last_updated: Utc::now().to_rfc3339(),
         source: "order_book_contract".to_string(),
+        provider: "internal".to_string(),
+        chain_id: state.config.base_chain_id,
+        provider_market_ref: market_id.to_string(),
+        is_synthetic: false,
     }))
 }
 
@@ -1353,13 +1713,11 @@ pub async fn get_base_trades(
     x402::ensure_payment_for_request(&state, &req, X402Resource::Trades).await?;
 
     let market_id_raw = path.into_inner();
-    let market_id = market_id_raw.parse::<u64>().map_err(|_| {
-        ApiError::bad_request("INVALID_MARKET_ID", "market_id must be a positive integer")
-    })?;
     let limit = query.limit.unwrap_or(50).min(MAX_TRADES_PAGE_SIZE);
     let offset = query.offset.unwrap_or(0);
 
-    let outcome_filter = match query.outcome.as_deref() {
+    let outcome_raw = query.outcome.as_deref();
+    let outcome_filter = match outcome_raw {
         None => None,
         Some("yes") => Some(true),
         Some("no") => Some(false),
@@ -1370,6 +1728,55 @@ pub async fn get_base_trades(
             ))
         }
     };
+
+    if is_external_market_id(&market_id_raw) {
+        let external_id = ExternalMarketId::parse(market_id_raw.as_str())?;
+        let snapshot = external::fetch_trades(
+            &state.config,
+            &state.redis,
+            &external_id,
+            outcome_raw,
+            limit,
+            offset,
+        )
+        .await?;
+
+        let trades = snapshot
+            .trades
+            .into_iter()
+            .map(|entry| BaseTradeSnapshot {
+                id: entry.id,
+                market_id: entry.market_id,
+                outcome: entry.outcome,
+                price: entry.price,
+                price_bps: entry.price_bps,
+                quantity: entry.quantity,
+                tx_hash: entry.tx_hash,
+                block_number: entry.block_number,
+                created_at: entry.created_at,
+            })
+            .collect::<Vec<_>>();
+
+        return Ok(HttpResponse::Ok().json(BaseTradesResponse {
+            trades,
+            total: snapshot.total,
+            limit: snapshot.limit,
+            offset: snapshot.offset,
+            has_more: snapshot.has_more,
+            source: snapshot.source,
+            provider: snapshot.provider,
+            chain_id: snapshot.chain_id,
+            provider_market_ref: snapshot.provider_market_ref,
+            is_synthetic: snapshot.is_synthetic,
+        }));
+    }
+
+    let market_id = market_id_raw.parse::<u64>().map_err(|_| {
+        ApiError::bad_request(
+            "INVALID_MARKET_ID",
+            "market_id must be numeric or namespaced",
+        )
+    })?;
 
     let order_book = state.config.order_book_address.trim();
     if order_book.is_empty() {
@@ -1399,6 +1806,10 @@ pub async fn get_base_trades(
             offset,
             has_more: false,
             source: "order_book_contract".to_string(),
+            provider: "internal".to_string(),
+            chain_id: state.config.base_chain_id,
+            provider_market_ref: market_id.to_string(),
+            is_synthetic: false,
         }));
     }
 
@@ -1543,6 +1954,10 @@ pub async fn get_base_trades(
             offset,
             has_more: false,
             source: "order_book_contract".to_string(),
+            provider: "internal".to_string(),
+            chain_id: state.config.base_chain_id,
+            provider_market_ref: market_id.to_string(),
+            is_synthetic: false,
         }));
     }
 
@@ -1573,6 +1988,10 @@ pub async fn get_base_trades(
         offset,
         has_more: end < total,
         source: "order_book_contract".to_string(),
+        provider: "internal".to_string(),
+        chain_id: state.config.base_chain_id,
+        provider_market_ref: market_id.to_string(),
+        is_synthetic: false,
     }))
 }
 
@@ -2096,6 +2515,106 @@ pub async fn prepare_erc8004_submit_outcome_write(
     )))
 }
 
+pub async fn prepare_erc8004_validation_request_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareErc8004ValidationRequestWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    let registry = configured_address(
+        &state.config.erc8004_validation_registry_address,
+        "ERC8004_VALIDATION_REGISTRY_NOT_CONFIGURED",
+        "ERC8004_VALIDATION_REGISTRY_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+    let validator = normalize_required_address(
+        body.validator.as_str(),
+        "INVALID_VALIDATOR",
+        "validator must be a valid 0x EVM address",
+    )?;
+    let agent_id = parse_u128_decimal(body.agent_id.as_str(), "agentId")?;
+    let request_uri = body.request_uri.trim();
+    let request_hash = match body.request_hash.as_ref() {
+        Some(raw) if !raw.trim().is_empty() => normalize_required_bytes32(
+            raw.as_str(),
+            "INVALID_REQUEST_HASH",
+            "requestHash must be a valid 0x-prefixed bytes32 value",
+        )?,
+        _ => {
+            let mut hasher = Keccak256::new();
+            hasher.update(request_uri.as_bytes());
+            format!("0x{}", hex::encode(hasher.finalize()))
+        }
+    };
+
+    let data = encode_validation_request_calldata(
+        validator.as_str(),
+        agent_id,
+        request_uri,
+        request_hash.as_str(),
+    )?;
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        registry,
+        data,
+        "validationRequest",
+    )))
+}
+
+pub async fn prepare_erc8004_validation_response_write(
+    state: web::Data<Arc<AppState>>,
+    body: web::Json<PrepareErc8004ValidationResponseWriteRequest>,
+) -> Result<impl Responder, ApiError> {
+    ensure_evm_writes_enabled(&state)?;
+
+    if body.response > 100 {
+        return Err(ApiError::bad_request(
+            "INVALID_VALIDATION_RESPONSE",
+            "response must be between 0 and 100",
+        ));
+    }
+
+    let registry = configured_address(
+        &state.config.erc8004_validation_registry_address,
+        "ERC8004_VALIDATION_REGISTRY_NOT_CONFIGURED",
+        "ERC8004_VALIDATION_REGISTRY_ADDRESS must be configured for write operations",
+    )?;
+    let from = normalize_optional_address(body.from.as_ref())?;
+    let request_hash = normalize_required_bytes32(
+        body.request_hash.as_str(),
+        "INVALID_REQUEST_HASH",
+        "requestHash must be a valid 0x-prefixed bytes32 value",
+    )?;
+    let response_hash = normalize_required_bytes32(
+        body.response_hash.as_str(),
+        "INVALID_RESPONSE_HASH",
+        "responseHash must be a valid 0x-prefixed bytes32 value",
+    )?;
+    let tag = normalize_required_bytes32(
+        body.tag.as_str(),
+        "INVALID_TAG",
+        "tag must be a valid 0x-prefixed bytes32 value",
+    )?;
+
+    let data = encode_validation_response_calldata(
+        request_hash.as_str(),
+        body.response,
+        body.response_uri.as_str(),
+        response_hash.as_str(),
+        tag.as_str(),
+    )?;
+
+    Ok(HttpResponse::Ok().json(prepared_write_response(
+        state.config.base_chain_id,
+        from,
+        registry,
+        data,
+        "validationResponse",
+    )))
+}
+
 pub async fn relay_raw_transaction(
     state: web::Data<Arc<AppState>>,
     body: web::Json<RelayRawTransactionRequest>,
@@ -2172,6 +2691,12 @@ fn is_valid_evm_address(address: &str) -> bool {
         && address[2..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
+fn is_valid_bytes32(value: &str) -> bool {
+    value.len() == 66
+        && value.starts_with("0x")
+        && value[2..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
 fn is_valid_hex_payload(value: &str) -> bool {
     value.len() >= 4
         && value.starts_with("0x")
@@ -2204,6 +2729,14 @@ fn normalize_required_address(
 ) -> Result<String, ApiError> {
     let trimmed = address.trim();
     if !is_valid_evm_address(trimmed) {
+        return Err(ApiError::bad_request(code, message));
+    }
+    Ok(trimmed.to_ascii_lowercase())
+}
+
+fn normalize_required_bytes32(value: &str, code: &str, message: &str) -> Result<String, ApiError> {
+    let trimmed = value.trim();
+    if !is_valid_bytes32(trimmed) {
         return Err(ApiError::bad_request(code, message));
     }
     Ok(trimmed.to_ascii_lowercase())
@@ -2301,6 +2834,16 @@ fn encode_address_word(value: &str) -> Result<String, ApiError> {
     Ok(format!("{:0>64}", value[2..].to_ascii_lowercase()))
 }
 
+fn encode_bytes32_word(value: &str) -> Result<String, ApiError> {
+    if !is_valid_bytes32(value) {
+        return Err(ApiError::bad_request(
+            "INVALID_BYTES32",
+            "value must be a valid 0x-prefixed bytes32 string",
+        ));
+    }
+    Ok(value.trim_start_matches("0x").to_ascii_lowercase())
+}
+
 fn encode_dynamic_string_tail(value: &str) -> String {
     let encoded = hex::encode(value.as_bytes());
     let padded_len = if encoded.is_empty() {
@@ -2373,6 +2916,48 @@ fn encode_create_agent_calldata(
         encode_u256_hex(expiry_window),
         encode_u256_hex_u128(head_len_bytes as u128),
         strategy_tail,
+    ))
+}
+
+fn encode_validation_request_calldata(
+    validator: &str,
+    agent_id: u128,
+    request_uri: &str,
+    request_hash: &str,
+) -> Result<String, ApiError> {
+    let request_uri_tail = encode_dynamic_string_tail(request_uri);
+    let head_len_bytes = 32usize * 4usize;
+
+    Ok(format!(
+        "{}{}{}{}{}{}",
+        ERC8004_VALIDATION_REQUEST_SELECTOR,
+        encode_address_word(validator)?,
+        encode_u256_hex_u128(agent_id),
+        encode_u256_hex_u128(head_len_bytes as u128),
+        encode_bytes32_word(request_hash)?,
+        request_uri_tail,
+    ))
+}
+
+fn encode_validation_response_calldata(
+    request_hash: &str,
+    response: u8,
+    response_uri: &str,
+    response_hash: &str,
+    tag: &str,
+) -> Result<String, ApiError> {
+    let response_uri_tail = encode_dynamic_string_tail(response_uri);
+    let head_len_bytes = 32usize * 5usize;
+
+    Ok(format!(
+        "{}{}{}{}{}{}{}",
+        ERC8004_VALIDATION_RESPONSE_SELECTOR,
+        encode_bytes32_word(request_hash)?,
+        encode_u256_hex_u128(response as u128),
+        encode_u256_hex_u128(head_len_bytes as u128),
+        encode_bytes32_word(response_hash)?,
+        encode_bytes32_word(tag)?,
+        response_uri_tail,
     ))
 }
 
@@ -2499,6 +3084,15 @@ fn decode_market_snapshot(index: u64, slot: &str) -> Result<BaseMarketSnapshot, 
             None
         },
         status,
+        source: "internal_market_core".to_string(),
+        provider: "internal".to_string(),
+        is_external: false,
+        external_url: None,
+        chain_id: 8453,
+        requires_credentials: false,
+        execution_users: true,
+        execution_agents: true,
+        outcomes: Vec::new(),
     })
 }
 
@@ -2659,6 +3253,45 @@ async fn fetch_erc8004_reputation(
         events,
         notional_microusdc,
     }))
+}
+
+async fn fetch_erc8004_validation(
+    state: &Arc<AppState>,
+    request_hash: &str,
+) -> Result<Erc8004Validation, ApiError> {
+    let registry = configured_address(
+        state.config.erc8004_validation_registry_address.as_str(),
+        "ERC8004_VALIDATION_REGISTRY_NOT_CONFIGURED",
+        "ERC8004_VALIDATION_REGISTRY_ADDRESS must be configured for read operations",
+    )?;
+
+    let calldata = format!(
+        "{}{}",
+        ERC8004_VALIDATION_STATUS_SELECTOR,
+        encode_bytes32_word(request_hash)?,
+    );
+    let payload = state
+        .evm_rpc
+        .eth_call(registry.as_str(), calldata.as_str())
+        .await
+        .map_err(map_evm_rpc_error)?;
+
+    let validator_word = word_at(payload.as_str(), 0)?;
+    let validator = format!("0x{}", &validator_word[24..]).to_ascii_lowercase();
+    let agent_id = parse_u128_hex(word_at(payload.as_str(), 1)?)?;
+    let response = parse_u8_hex(word_at(payload.as_str(), 2)?)?;
+    let response_hash = format!("0x{}", word_at(payload.as_str(), 3)?);
+    let tag = format!("0x{}", word_at(payload.as_str(), 4)?);
+    let last_update = parse_u64_hex(word_at(payload.as_str(), 5)?)?;
+
+    Ok(Erc8004Validation {
+        validator,
+        agent_id,
+        response,
+        response_hash,
+        tag,
+        last_update,
+    })
 }
 
 fn decode_agent_slot(slot: &str) -> Result<Option<BaseRawAgent>, ApiError> {

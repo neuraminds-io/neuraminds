@@ -1,5 +1,7 @@
 export type MarketStatus = 'active' | 'paused' | 'closed' | 'resolved' | 'cancelled';
 export type Outcome = 'yes' | 'no';
+export type MarketSource = 'all' | 'internal' | 'limitless' | 'polymarket';
+export type TradableFilter = 'all' | 'user' | 'agent';
 export type AgentStatus = 'ready' | 'cooldown' | 'inactive';
 export type OrderSide = 'buy' | 'sell';
 export type OrderStatus = 'open' | 'partially_filled' | 'filled' | 'cancelled' | 'expired';
@@ -15,6 +17,15 @@ export interface MarketOutcome {
 export interface Market {
   id: string;
   address: string;
+  source: MarketSource;
+  provider: string;
+  isExternal: boolean;
+  externalUrl?: string;
+  chainId: number;
+  requiresCredentials: boolean;
+  executionUsers: boolean;
+  executionAgents: boolean;
+  isSyntheticTrades: boolean;
   question: string;
   description: string;
   category: string;
@@ -211,6 +222,8 @@ export interface PaginatedResponse<T> {
 }
 
 export interface MarketFilters {
+  source?: MarketSource;
+  tradable?: TradableFilter;
   status?: MarketStatus;
   category?: string;
   limit?: number;

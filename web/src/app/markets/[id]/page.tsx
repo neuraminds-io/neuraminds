@@ -6,12 +6,12 @@ import { useBaseWallet } from '@/hooks/useBaseWallet';
 import { PageShell } from '@/components/layout';
 import { LoadingScreen } from '@/components/ui';
 import { MarketHeader, MarketStats, MarketInfo } from '@/components/market';
-import { OrderForm, OrderBookDisplay, OrderList } from '@/components/order';
+import { ExternalOrderForm, OrderForm, OrderBookDisplay, OrderList } from '@/components/order';
 import { useMarket } from '@/hooks';
 
 export default function MarketDetailPage() {
   const params = useParams();
-  const marketId = params.id as string;
+  const marketId = decodeURIComponent(params.id as string);
   const baseWallet = useBaseWallet();
   const walletConnected = baseWallet.isConnected;
 
@@ -54,7 +54,7 @@ export default function MarketDetailPage() {
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
         {market.status === 'active' ? (
           walletConnected ? (
-            <OrderForm market={market} />
+            market.isExternal ? <ExternalOrderForm market={market} /> : <OrderForm market={market} />
           ) : (
             <div className="card flex items-center justify-center py-12">
               <p className="text-text-secondary">Connect wallet to trade</p>
@@ -69,7 +69,7 @@ export default function MarketDetailPage() {
         <OrderBookDisplay marketId={marketId} />
       </div>
 
-      {walletConnected && (
+      {walletConnected && !market.isExternal && (
         <div className="mb-6">
           <h3 className="font-semibold mb-4">Your Orders</h3>
           <OrderList marketId={marketId} />

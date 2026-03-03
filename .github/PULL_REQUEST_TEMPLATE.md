@@ -1,32 +1,36 @@
-## Description
+## Summary
 
-Brief description of changes.
+Describe what changed and why.
 
-## Type of Change
+## Scope
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Breaking change
-- [ ] Documentation update
-- [ ] Refactoring
-- [ ] Security fix
+- [ ] API (`app/`)
+- [ ] Contracts (`evm/`)
+- [ ] Solana programs (`programs/`)
+- [ ] Web (`web/`)
+- [ ] SDK (`sdk/`)
+- [ ] Docs/ops
 
-## Testing
+## Validation
 
-- [ ] Unit tests pass (`cargo test`)
-- [ ] Contract tests pass (`forge test`)
-- [ ] Manual testing completed
+- [ ] `npm run ops:silo-check:strict`
+- [ ] `npm run ops:open-core-check`
+- [ ] `npm run ops:no-internal-assets:tracked`
+- [ ] `cargo test --manifest-path app/Cargo.toml --release`
+- [ ] `forge test --root evm`
 
-## Security Checklist
+## Security
 
-- [ ] No sensitive data exposed (keys, secrets)
-- [ ] Input validation added where needed
-- [ ] No new dependencies with known vulnerabilities
-- [ ] Checked for integer overflow/underflow
-- [ ] Access control verified
+- [ ] No secrets/credentials/internal assets added
+- [ ] Access control/auth implications reviewed
+- [ ] Dependency risk reviewed for new packages/crates
 
-## Documentation
+## Compatibility
 
-- [ ] Code comments added/updated
-- [ ] API documentation updated (if applicable)
-- [ ] README updated (if applicable)
+- [ ] No breaking API changes
+- [ ] Breaking changes documented
+- [ ] Migration/update notes included (if needed)
+
+## Linked Issues
+
+Reference issue numbers and related PRs.

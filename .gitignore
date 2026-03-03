@@ -5,6 +5,7 @@ Cargo.lock
 
 # Project-specific
 CLAUDE.md
+docs/
 
 # Local ledgers
 test-ledger/
@@ -28,6 +29,11 @@ web/.turbo/
 keys/
 *.keypair
 *-keypair.json
+edge/private/
+edge/.env*
+docs/internal/
+docs/private/
+.edge-private/
 
 # IDE
 .idea/
@@ -58,3 +64,6 @@ research/
 # Timestamped launch evidence artifacts (canonical non-timestamp reports stay tracked)
 docs/reports/*-20??????T??????Z.json
 docs/reports/*-20??????T??????Z.md
+
+.internal_assets_location
+.claude/

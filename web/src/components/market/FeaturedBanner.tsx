@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import type { Market } from '@/types';
+import { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { Market } from "@/types";
 
 export interface FeaturedBannerProps {
   markets: Market[];
@@ -15,22 +15,40 @@ export interface FeaturedBannerProps {
 function generateTimeframes(market: Market) {
   const yesPercent = Math.round(market.yesPrice * 100);
   return [
-    { label: 'Before January 21, 2029', percent: yesPercent, color: '#ff5a1f' },      // yes color (primary orange)
-    { label: 'Before 2027', percent: Math.max(10, yesPercent - 21), color: '#ff8b5f' }, // no color (indigo)
-    { label: 'Before April 2026', percent: Math.max(5, yesPercent - 43), color: '#ffd2bf' }, // accent amber
+    { label: "Before January 21, 2029", percent: yesPercent, color: "#ff5a1f" }, // yes color (primary orange)
+    {
+      label: "Before 2027",
+      percent: Math.max(10, yesPercent - 21),
+      color: "#ff8b5f",
+    }, // no color (indigo)
+    {
+      label: "Before April 2026",
+      percent: Math.max(5, yesPercent - 43),
+      color: "#ffd2bf",
+    }, // accent amber
   ];
 }
 
 // Simple SVG line chart - Kalshi style
-function PriceChart({ timeframes }: { timeframes: { label: string; percent: number; color: string }[] }) {
+function PriceChart({
+  timeframes,
+}: {
+  timeframes: { label: string; percent: number; color: string }[];
+}) {
   // Use useMemo to generate consistent data per render
   const lines = useMemo(() => {
     const points = 60;
-    const generateLine = (basePercent: number, volatility: number, seed: number) => {
+    const generateLine = (
+      basePercent: number,
+      volatility: number,
+      seed: number,
+    ) => {
       const data: number[] = [];
       let current = basePercent * 0.3;
       for (let i = 0; i < points; i++) {
-        const noise = Math.sin(i * 0.5 + seed) * volatility + Math.cos(i * 0.3 + seed * 2) * volatility * 0.5;
+        const noise =
+          Math.sin(i * 0.5 + seed) * volatility +
+          Math.cos(i * 0.3 + seed * 2) * volatility * 0.5;
         current += noise * 0.15;
         current = Math.max(5, Math.min(70, current));
         if (i > points * 0.8) {
@@ -60,9 +78,9 @@ function PriceChart({ timeframes }: { timeframes: { label: string; percent: numb
       .map((val, i) => {
         const x = padding.left + (i / (points - 1)) * chartWidth;
         const y = padding.top + chartHeight - (val / 70) * chartHeight;
-        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+        return `${i === 0 ? "M" : "L"} ${x} ${y}`;
       })
-      .join(' ');
+      .join(" ");
   };
 
   const yLabels = [12.5, 25, 37.5, 50, 62.5];
@@ -75,12 +93,18 @@ function PriceChart({ timeframes }: { timeframes: { label: string; percent: numb
           <div key={i} className="flex items-center gap-1.5">
             <span className="w-2 h-2 " style={{ backgroundColor: tf.color }} />
             <span className="text-text-secondary">{tf.label}</span>
-            <span className="font-semibold text-text-primary">{tf.percent}%</span>
+            <span className="font-semibold text-text-primary">
+              {tf.percent}%
+            </span>
           </div>
         ))}
       </div>
 
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full h-full"
+        preserveAspectRatio="xMidYMid meet"
+      >
         {/* Horizontal grid lines */}
         {yLabels.map((val) => (
           <line
@@ -110,18 +134,20 @@ function PriceChart({ timeframes }: { timeframes: { label: string; percent: numb
         ))}
 
         {/* X-axis labels */}
-        {['jan. 2025', 'apr. 2025', 'jul. 2025', 'okt. 2025', 'jan. 2026'].map((label, i) => (
-          <text
-            key={label}
-            x={padding.left + (i / 4) * chartWidth}
-            y={height - 8}
-            textAnchor="middle"
-            className="fill-text-muted"
-            fontSize="11"
-          >
-            {label}
-          </text>
-        ))}
+        {["jan. 2025", "apr. 2025", "jul. 2025", "okt. 2025", "jan. 2026"].map(
+          (label, i) => (
+            <text
+              key={label}
+              x={padding.left + (i / 4) * chartWidth}
+              y={height - 8}
+              textAnchor="middle"
+              className="fill-text-muted"
+              fontSize="11"
+            >
+              {label}
+            </text>
+          ),
+        )}
 
         {/* Lines - render in reverse so first line is on top */}
         {[...lines].reverse().map((line, i) => (
@@ -160,11 +186,14 @@ function BannerCard({ market }: { market: Market }) {
   const timeframes = generateTimeframes(market);
 
   return (
-    <div className="relative bg-bg-primary/80   p-6 lg:p-8 overflow-hidden min-h-[420px] border border-border/50">
-      {/* Gradient shadow background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-transparent to-[#ff8b5f]/12 pointer-events-none" />
-      <div className="absolute -top-24 -right-24 w-64 h-64 bg-accent/20   pointer-events-none" />
-      <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-[#ff8b5f]/15   pointer-events-none" />
+    <div className="relative bg-bg-primary/85 micro-surface p-6 lg:p-8 overflow-hidden min-h-[420px] border border-border/70">
+      <div className="micro-stripes" />
+      <div
+        className="micrographic-signal"
+        style={{ right: -50, top: -60, opacity: 0.18 }}
+        aria-hidden
+      />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#d9e7ff]/40 via-transparent to-[#ffead8]/40 pointer-events-none" />
       <div className="relative flex flex-col lg:flex-row gap-8 h-full">
         {/* Left side - Market info */}
         <div className="lg:w-[420px] flex flex-col">
@@ -199,18 +228,23 @@ function BannerCard({ market }: { market: Market }) {
           {/* Timeframe rows with Yes/No - only first 2 */}
           <div className="space-y-4 mb-8">
             {timeframes.slice(0, 2).map((tf, i) => (
-              <div key={i} className="flex items-center justify-between gap-4">
-                <span className="text-text-primary">{tf.label}</span>
+              <div
+                key={i}
+                className="flex items-center justify-between gap-4 border border-border bg-bg-secondary/70 px-3 py-2"
+              >
+                <span className="text-text-primary text-sm">{tf.label}</span>
                 <div className="flex items-center gap-3 flex-shrink-0">
-                  <span className="font-semibold text-text-primary text-lg">{tf.percent}%</span>
-                  <div className="flex">
+                  <span className="font-semibold text-text-primary text-lg">
+                    {tf.percent}%
+                  </span>
+                  <div className="flex shadow-[0_0_0_1px_var(--color-border)]">
                     <button
                       onClick={(e) => e.preventDefault()}
                       className={cn(
-                        'px-4 py-1.5  text-sm font-medium',
-                        'bg-transparent border border-yes text-yes',
-                        'hover:bg-yes hover:text-white',
-                        'transition-all cursor-pointer'
+                        "px-3 py-1.5 text-sm font-semibold",
+                        "bg-transparent border border-yes text-yes",
+                        "hover:bg-yes hover:text-white",
+                        "transition-all cursor-pointer",
                       )}
                     >
                       Yes
@@ -218,10 +252,10 @@ function BannerCard({ market }: { market: Market }) {
                     <button
                       onClick={(e) => e.preventDefault()}
                       className={cn(
-                        'px-4 py-1.5  text-sm font-medium',
-                        'bg-transparent border border-l-0 border-no text-no',
-                        'hover:bg-no hover:text-white',
-                        'transition-all cursor-pointer'
+                        "px-3 py-1.5 text-sm font-semibold",
+                        "bg-transparent border border-l-0 border-no text-no",
+                        "hover:bg-no hover:text-white",
+                        "transition-all cursor-pointer",
                       )}
                     >
                       No
@@ -233,19 +267,20 @@ function BannerCard({ market }: { market: Market }) {
           </div>
 
           {/* News snippet */}
-          <div className="mt-auto">
+          <div className="mt-auto space-y-3">
             <p className="text-sm text-text-secondary leading-relaxed">
               <span className="font-semibold text-text-primary">News</span>
               <span className="text-text-muted"> · </span>
               {market.description}
             </p>
-            <div className="flex items-center gap-2 mt-4">
-              <span className="text-text-muted text-sm">
+            <div className="flex items-center gap-2 text-sm text-text-muted">
+              <span className="font-semibold text-text-primary">
                 ${market.totalVolume.toLocaleString()}
               </span>
+              <span>volume</span>
               <button
                 onClick={(e) => e.preventDefault()}
-                className="w-6 h-6  border border-border flex items-center justify-center text-text-muted hover:text-text-primary hover:border-border-hover transition-colors cursor-pointer"
+                className="w-7 h-7 border border-border flex items-center justify-center text-text-muted hover:text-text-primary hover:border-accent transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -255,7 +290,7 @@ function BannerCard({ market }: { market: Market }) {
 
         {/* Right side - Chart */}
         <div className="flex-1 min-w-0">
-          <div className="h-[260px]">
+          <div className="h-[260px] bg-bg-secondary/50 border border-border p-2">
             <PriceChart timeframes={timeframes} />
           </div>
         </div>
@@ -311,7 +346,10 @@ export function FeaturedBanner({ markets }: FeaturedBannerProps) {
 
   return (
     <div className="relative">
-      <Link href={`/markets/${currentMarket.id}`} className="block">
+      <Link
+        href={`/markets/${encodeURIComponent(currentMarket.id)}`}
+        className="block"
+      >
         <BannerCard market={currentMarket} />
       </Link>
 
@@ -326,7 +364,7 @@ export function FeaturedBanner({ markets }: FeaturedBannerProps) {
             <ChevronLeft className="w-4 h-4" />
             <span className="text-sm hidden sm:inline group-hover:underline">
               {markets[prevIndex]?.question.length > 25
-                ? markets[prevIndex]?.question.slice(0, 25) + '...'
+                ? markets[prevIndex]?.question.slice(0, 25) + "..."
                 : markets[prevIndex]?.question}
             </span>
           </button>
@@ -338,10 +376,10 @@ export function FeaturedBanner({ markets }: FeaturedBannerProps) {
                 key={index}
                 onClick={() => setCurrentIndex(index)}
                 className={cn(
-                  'w-2 h-2  transition-all cursor-pointer',
+                  "w-2 h-2  transition-all cursor-pointer",
                   index === currentIndex
-                    ? 'bg-text-primary'
-                    : 'bg-border hover:bg-text-muted'
+                    ? "bg-text-primary"
+                    : "bg-border hover:bg-text-muted",
                 )}
               />
             ))}
@@ -354,7 +392,7 @@ export function FeaturedBanner({ markets }: FeaturedBannerProps) {
           >
             <span className="text-sm hidden sm:inline group-hover:underline">
               {markets[nextIndex]?.question.length > 25
-                ? markets[nextIndex]?.question.slice(0, 25) + '...'
+                ? markets[nextIndex]?.question.slice(0, 25) + "..."
                 : markets[nextIndex]?.question}
             </span>
             <ChevronRight className="w-4 h-4" />

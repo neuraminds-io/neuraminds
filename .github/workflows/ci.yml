@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
@@ -17,6 +24,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify tracked git hooks are executable
+        run: |
+          test -x .githooks/pre-commit
+          test -x .githooks/pre-push
+          test -x .githooks/commit-msg
+
+      - name: Verify project silo
+        run: SILO_CHECK_INCLUDE_DOCS=1 ./scripts/verify-project-silo.sh
+
+      - name: Verify open core boundary
+        run: node ./scripts/verify-open-core-boundary.mjs
+
+      - name: Verify no private edge assets are tracked
+        run: bash ./scripts/verify-no-internal-assets.sh tracked
+
+      - name: Verify commit hygiene
+        run: bash ./scripts/verify-commit-hygiene.sh --history-range "HEAD"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -61,7 +86,7 @@ jobs:
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('app/Cargo.lock') }}
 
       - name: Run unit tests
-        run: cargo test --manifest-path app/Cargo.toml --bin polyguard-api
+        run: cargo test --manifest-path app/Cargo.toml --release
 
   test-evm:
     name: EVM Contract Tests
@@ -100,9 +125,9 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: polyguard
-          POSTGRES_PASSWORD: polyguard
-          POSTGRES_DB: polyguard_test
+          POSTGRES_USER: neuraminds
+          POSTGRES_PASSWORD: neuraminds
+          POSTGRES_DB: neuraminds_test
         ports:
           - 5432:5432
         options: >-
@@ -138,7 +163,7 @@ jobs:
 
       - name: Run database migrations
         env:
-          DATABASE_URL: postgres://polyguard:polyguard@localhost:5432/polyguard_test
+          DATABASE_URL: postgres://neuraminds:neuraminds@localhost:5432/neuraminds_test
         run: |
           cargo install sqlx-cli --no-default-features --features postgres || true
           sqlx database create || true
@@ -147,7 +172,7 @@ jobs:
       - name: Run backend tests
         working-directory: app
         env:
-          DATABASE_URL: postgres://polyguard:polyguard@localhost:5432/polyguard_test
+          DATABASE_URL: postgres://neuraminds:neuraminds@localhost:5432/neuraminds_test
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: test-secret-key-for-ci
           EVM_ENABLED: "true"

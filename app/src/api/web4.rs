@@ -237,7 +237,13 @@ fn mcp_tool_limit_per_window(tool_name: &str) -> i64 {
         | "prepareRegisterIdentityTx"
         | "prepareSetIdentityTierTx"
         | "prepareSetIdentityActiveTx"
-        | "prepareSubmitReputationOutcomeTx" => MCP_WRITE_TOOL_LIMIT_PER_WINDOW,
+        | "prepareSubmitReputationOutcomeTx"
+        | "prepareValidationRequestTx"
+        | "prepareValidationResponseTx"
+        | "prepareExternalOrder"
+        | "submitExternalOrder"
+        | "cancelExternalOrder"
+        | "executeExternalAgent" => MCP_WRITE_TOOL_LIMIT_PER_WINDOW,
         "sendSwarmMessage" => MCP_SWARM_TOOL_LIMIT_PER_WINDOW,
         "listSwarmMessages" => MCP_QUERY_METHOD_LIMIT_PER_WINDOW,
         _ => MCP_DEFAULT_TOOL_LIMIT_PER_WINDOW,
@@ -274,7 +280,13 @@ async fn enforce_mcp_policy(
         request.method.as_str().to_ascii_lowercase(),
         client_id
     );
-    enforce_rate_limit(state, method_key.as_str(), method_limit, MCP_METHOD_WINDOW_SECONDS).await?;
+    enforce_rate_limit(
+        state,
+        method_key.as_str(),
+        method_limit,
+        MCP_METHOD_WINDOW_SECONDS,
+    )
+    .await?;
 
     if request.method == "tools/call" {
         if let Some(params) = request.params.as_ref() {
@@ -285,8 +297,13 @@ async fn enforce_mcp_policy(
                     tool_call.name.to_ascii_lowercase(),
                     client_id
                 );
-                enforce_rate_limit(state, tool_key.as_str(), tool_limit, MCP_TOOL_WINDOW_SECONDS)
-                    .await?;
+                enforce_rate_limit(
+                    state,
+                    tool_key.as_str(),
+                    tool_limit,
+                    MCP_TOOL_WINDOW_SECONDS,
+                )
+                .await?;
             }
         }
     }
@@ -358,12 +375,14 @@ fn mcp_tools() -> Vec<Value> {
     vec![
         json!({
             "name": "getMarkets",
-            "description": "List Base markets with pagination.",
+            "description": "List unified internal and external markets with source/tradable filters.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "limit": { "type": "integer", "minimum": 1, "maximum": 200 },
                     "offset": { "type": "integer", "minimum": 0 },
+                    "source": { "type": "string", "enum": ["all", "internal", "limitless", "polymarket"] },
+                    "tradable": { "type": "string", "enum": ["all", "user", "agent"] },
                     "payment": { "type": "object" }
                 }
             }
@@ -375,7 +394,7 @@ fn mcp_tools() -> Vec<Value> {
                 "type": "object",
                 "required": ["market_id", "outcome"],
                 "properties": {
-                    "market_id": { "type": "integer", "minimum": 1 },
+                    "market_id": { "type": "string", "description": "Numeric internal ID or namespaced ID (limitless:<slug>, polymarket:<id>)" },
                     "outcome": { "type": "string", "enum": ["yes", "no"] },
                     "depth": { "type": "integer", "minimum": 1, "maximum": 100 },
                     "payment": { "type": "object" }
@@ -389,7 +408,7 @@ fn mcp_tools() -> Vec<Value> {
                 "type": "object",
                 "required": ["market_id"],
                 "properties": {
-                    "market_id": { "type": "integer", "minimum": 1 },
+                    "market_id": { "type": "string", "description": "Numeric internal ID or namespaced ID (limitless:<slug>, polymarket:<id>)" },
                     "outcome": { "type": "string", "enum": ["yes", "no"] },
                     "limit": { "type": "integer", "minimum": 1, "maximum": 200 },
                     "offset": { "type": "integer", "minimum": 0 },
@@ -409,6 +428,76 @@ fn mcp_tools() -> Vec<Value> {
                     "market_id": { "type": "integer", "minimum": 1 },
                     "active": { "type": "boolean" },
                     "payment": { "type": "object" }
+                }
+            }
+        }),
+        json!({
+            "name": "prepareExternalOrder",
+            "description": "Create external order intent and return preflight + typed-data payload.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["provider", "market_id", "outcome", "side", "price", "quantity"],
+                "properties": {
+                    "provider": { "type": "string", "enum": ["limitless", "polymarket"] },
+                    "market_id": { "type": "string" },
+                    "outcome": { "type": "string", "enum": ["yes", "no"] },
+                    "side": { "type": "string", "enum": ["buy", "sell"] },
+                    "price": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+                    "quantity": { "type": "number", "exclusiveMinimum": 0 },
+                    "credential_id": { "type": "string" }
+                }
+            }
+        }),
+        json!({
+            "name": "submitExternalOrder",
+            "description": "Submit signed external order intent to venue.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["intent_id", "signed_order"],
+                "properties": {
+                    "intent_id": { "type": "string" },
+                    "signed_order": { "type": "object" },
+                    "credential_id": { "type": "string" }
+                }
+            }
+        }),
+        json!({
+            "name": "cancelExternalOrder",
+            "description": "Cancel venue order(s) for authenticated wallet.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["provider", "provider_order_id"],
+                "properties": {
+                    "provider": { "type": "string", "enum": ["limitless", "polymarket"] },
+                    "provider_order_id": { "type": "string" },
+                    "credential_id": { "type": "string" },
+                    "payload": { "type": "object" }
+                }
+            }
+        }),
+        json!({
+            "name": "listExternalAgents",
+            "description": "List external venue agents for authenticated wallet.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "provider": { "type": "string", "enum": ["limitless", "polymarket"] },
+                    "active": { "type": "boolean" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": 200 },
+                    "offset": { "type": "integer", "minimum": 0 }
+                }
+            }
+        }),
+        json!({
+            "name": "executeExternalAgent",
+            "description": "Force execution cycle for external agent.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["agent_id"],
+                "properties": {
+                    "agent_id": { "type": "string" },
+                    "force": { "type": "boolean" },
+                    "signed_order": { "type": "object" }
                 }
             }
         }),
@@ -503,6 +592,39 @@ fn mcp_tools() -> Vec<Value> {
             }
         }),
         json!({
+            "name": "prepareValidationRequestTx",
+            "description": "Prepare calldata for ERC-8004 validation validationRequest(address,uint256,string,bytes32).",
+            "inputSchema": {
+                "type": "object",
+                "required": ["validator", "agentId", "requestUri"],
+                "properties": {
+                    "from": { "type": "string" },
+                    "validator": { "type": "string" },
+                    "agentId": { "type": "string" },
+                    "requestUri": { "type": "string" },
+                    "requestHash": { "type": "string", "description": "Optional bytes32 hash; if omitted, API derives keccak(requestUri)." },
+                    "payment": { "type": "object" }
+                }
+            }
+        }),
+        json!({
+            "name": "prepareValidationResponseTx",
+            "description": "Prepare calldata for ERC-8004 validation validationResponse(bytes32,uint8,string,bytes32,bytes32).",
+            "inputSchema": {
+                "type": "object",
+                "required": ["requestHash", "response", "responseUri", "responseHash", "tag"],
+                "properties": {
+                    "from": { "type": "string" },
+                    "requestHash": { "type": "string" },
+                    "response": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    "responseUri": { "type": "string" },
+                    "responseHash": { "type": "string" },
+                    "tag": { "type": "string" },
+                    "payment": { "type": "object" }
+                }
+            }
+        }),
+        json!({
             "name": "getX402Quote",
             "description": "Get x402 quote for premium resources.",
             "inputSchema": {
@@ -553,7 +675,7 @@ fn mcp_resources(api_base: &str) -> Vec<Value> {
         json!({
             "uri": "neuraminds://markets/live",
             "name": "Live markets",
-            "description": "Current market list from MarketCore."
+            "description": "Unified internal + external market list."
         }),
         json!({
             "uri": "neuraminds://agents/active",
@@ -584,21 +706,22 @@ fn mcp_prompts() -> Vec<Value> {
             "name": "market-scan",
             "description": "Scan active markets and return ranked opportunities.",
             "arguments": [
-                { "name": "limit", "description": "Number of markets to scan", "required": false }
+                { "name": "limit", "description": "Number of markets to scan", "required": false },
+                { "name": "source", "description": "all | internal | limitless | polymarket", "required": false }
             ]
         }),
         json!({
             "name": "market-analysis",
             "description": "Analyze market structure, liquidity and executable opportunities.",
             "arguments": [
-                { "name": "market_id", "description": "Target market id", "required": true }
+                { "name": "market_id", "description": "Numeric or namespaced market id", "required": true }
             ]
         }),
         json!({
             "name": "agent-launch",
             "description": "Generate agent launch params from risk budget and target outcome.",
             "arguments": [
-                { "name": "market_id", "description": "Target market id", "required": true },
+                { "name": "market_id", "description": "Numeric or namespaced market id", "required": true },
                 { "name": "outcome", "description": "yes or no", "required": true },
                 { "name": "budget_usdc", "description": "Budget in USDC", "required": true }
             ]
@@ -684,30 +807,47 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             if let Some(offset) = args.get("offset").and_then(|v| v.as_u64()) {
                 path = append_query(path.as_str(), "offset", offset);
             }
+            if let Some(source) = args.get("source").and_then(|v| v.as_str()) {
+                path = append_query(path.as_str(), "source", source);
+            }
+            if let Some(tradable) = args.get("tradable").and_then(|v| v.as_str()) {
+                path = append_query(path.as_str(), "tradable", tradable);
+            }
             let (status, payload) =
                 call_internal_api(state, reqwest::Method::GET, path.as_str(), None, None).await?;
             if status >= 400 {
-                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
             }
             Ok(tool_result_payload(payload, false))
         }
         "getOrderBook" => {
             let market_id = args
                 .get("market_id")
-                .and_then(|v| v.as_u64())
+                .and_then(|v| v.as_str().map(ToOwned::to_owned))
+                .or_else(|| {
+                    args.get("market_id")
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v.to_string())
+                })
                 .ok_or_else(|| ApiError::bad_request("INVALID_ARGS", "market_id is required"))?;
             let outcome = args
                 .get("outcome")
                 .and_then(|v| v.as_str())
                 .unwrap_or("yes");
-            let mut path = format!("/evm/markets/{market_id}/orderbook?outcome={outcome}");
+            let mut path = format!("/evm/markets/{}/orderbook?outcome={outcome}", market_id);
             if let Some(depth) = args.get("depth").and_then(|v| v.as_u64()) {
                 path = append_query(path.as_str(), "depth", depth);
             }
 
             let payment = parse_payment_arg(&args)?;
             if state.config.x402_enabled && payment.is_none() {
-                return Ok(tool_payment_required_payload(state, X402Resource::OrderBook));
+                return Ok(tool_payment_required_payload(
+                    state,
+                    X402Resource::OrderBook,
+                ));
             }
             let (status, payload) = call_internal_api(
                 state,
@@ -718,16 +858,24 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
             }
             Ok(tool_result_payload(payload, false))
         }
         "getTrades" => {
             let market_id = args
                 .get("market_id")
-                .and_then(|v| v.as_u64())
+                .and_then(|v| v.as_str().map(ToOwned::to_owned))
+                .or_else(|| {
+                    args.get("market_id")
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v.to_string())
+                })
                 .ok_or_else(|| ApiError::bad_request("INVALID_ARGS", "market_id is required"))?;
-            let mut path = format!("/evm/markets/{market_id}/trades");
+            let mut path = format!("/evm/markets/{}/trades", market_id);
             if let Some(outcome) = args.get("outcome").and_then(|v| v.as_str()) {
                 path = append_query(path.as_str(), "outcome", outcome);
             }
@@ -751,7 +899,10 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -775,9 +926,114 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             let (status, payload) =
                 call_internal_api(state, reqwest::Method::GET, path.as_str(), None, None).await?;
             if status >= 400 {
-                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
             }
             Ok(tool_result_payload(payload, false))
+        }
+        "prepareExternalOrder" => {
+            let (status, payload) = call_internal_api(
+                state,
+                reqwest::Method::POST,
+                "/external/orders/intent",
+                Some(args),
+                None,
+            )
+            .await?;
+            if status >= 400 {
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
+            }
+            Ok(tool_result_payload(payload, false))
+        }
+        "submitExternalOrder" => {
+            let (status, payload) = call_internal_api(
+                state,
+                reqwest::Method::POST,
+                "/external/orders/submit",
+                Some(args),
+                None,
+            )
+            .await?;
+            if status >= 400 {
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
+            }
+            Ok(tool_result_payload(payload, false))
+        }
+        "cancelExternalOrder" => {
+            let (status, payload) = call_internal_api(
+                state,
+                reqwest::Method::POST,
+                "/external/orders/cancel",
+                Some(args),
+                None,
+            )
+            .await?;
+            if status >= 400 {
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
+            }
+            Ok(tool_result_payload(payload, false))
+        }
+        "listExternalAgents" => {
+            let mut path = "/external/agents".to_string();
+            if let Some(provider) = args.get("provider").and_then(|v| v.as_str()) {
+                path = append_query(path.as_str(), "provider", provider);
+            }
+            if let Some(active) = args.get("active").and_then(|v| v.as_bool()) {
+                path = append_query(path.as_str(), "active", active);
+            }
+            if let Some(limit) = args.get("limit").and_then(|v| v.as_u64()) {
+                path = append_query(path.as_str(), "limit", limit);
+            }
+            if let Some(offset) = args.get("offset").and_then(|v| v.as_u64()) {
+                path = append_query(path.as_str(), "offset", offset);
+            }
+            let (status, payload) =
+                call_internal_api(state, reqwest::Method::GET, path.as_str(), None, None).await?;
+            if status >= 400 {
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
+            }
+            Ok(tool_result_payload(payload, false))
+        }
+        "executeExternalAgent" => {
+            let agent_id = args
+                .get("agent_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| ApiError::bad_request("INVALID_ARGS", "agent_id is required"))?;
+
+            let mut payload = args.clone();
+            if let Some(obj) = payload.as_object_mut() {
+                obj.remove("agent_id");
+            }
+
+            let (status, response_payload) = call_internal_api(
+                state,
+                reqwest::Method::POST,
+                format!("/external/agents/{}/execute", agent_id).as_str(),
+                Some(payload),
+                None,
+            )
+            .await?;
+            if status >= 400 {
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &response_payload),
+                ));
+            }
+            Ok(tool_result_payload(response_payload, false))
         }
         "prepareCreateAgentTx" => {
             let (status, payload) = call_internal_api(
@@ -789,7 +1045,10 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -803,7 +1062,10 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -817,7 +1079,10 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -831,7 +1096,10 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -845,7 +1113,10 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -859,7 +1130,44 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             )
             .await?;
             if status >= 400 {
-                return Ok(tool_error_payload(status, web4_error_from_downstream(status, &payload)));
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
+            }
+            Ok(tool_result_payload(payload, false))
+        }
+        "prepareValidationRequestTx" => {
+            let (status, payload) = call_internal_api(
+                state,
+                reqwest::Method::POST,
+                "/evm/write/validation/request",
+                Some(args),
+                None,
+            )
+            .await?;
+            if status >= 400 {
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
+            }
+            Ok(tool_result_payload(payload, false))
+        }
+        "prepareValidationResponseTx" => {
+            let (status, payload) = call_internal_api(
+                state,
+                reqwest::Method::POST,
+                "/evm/write/validation/response",
+                Some(args),
+                None,
+            )
+            .await?;
+            if status >= 400 {
+                return Ok(tool_error_payload(
+                    status,
+                    web4_error_from_downstream(status, &payload),
+                ));
             }
             Ok(tool_result_payload(payload, false))
         }
@@ -892,7 +1200,10 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             })?;
             match xmtp_swarm::send_message(state, payload).await {
                 Ok(envelope) => Ok(tool_result_payload(json!(envelope), false)),
-                Err(err) => Ok(tool_error_payload(err.status, api_error_as_web4_payload(&err))),
+                Err(err) => Ok(tool_error_payload(
+                    err.status,
+                    api_error_as_web4_payload(&err),
+                )),
             }
         }
         "listSwarmMessages" => {
@@ -906,7 +1217,10 @@ async fn handle_tool_call(state: &AppState, params: McpToolCallParams) -> Result
             };
             match xmtp_swarm::list_messages(state, swarm_id, query).await {
                 Ok(data) => Ok(tool_result_payload(json!(data), false)),
-                Err(err) => Ok(tool_error_payload(err.status, api_error_as_web4_payload(&err))),
+                Err(err) => Ok(tool_error_payload(
+                    err.status,
+                    api_error_as_web4_payload(&err),
+                )),
             }
         }
         _ => Ok(tool_error_payload(
@@ -981,7 +1295,7 @@ async fn handle_mcp_method(
                     let (_, payload) = call_internal_api(
                         state,
                         reqwest::Method::GET,
-                        "/evm/markets?limit=50",
+                        "/evm/markets?source=all&limit=50",
                         None,
                         None,
                     )
@@ -1070,22 +1384,41 @@ async fn handle_mcp_method(
                         .get("limit")
                         .and_then(|v| v.as_u64())
                         .unwrap_or(5);
-                    format!("Scan top {limit} active markets and return ranked opportunities with: market_id, direction, confidence (0-100), expected edge, invalidation conditions, and execution notes.")
+                    let source = params
+                        .arguments
+                        .get("source")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("all");
+                    format!("Scan top {limit} active markets from source {source} and return ranked opportunities with: market_id, direction, confidence (0-100), expected edge, invalidation conditions, and execution notes.")
                 }
                 "market-analysis" => {
                     let market_id = params
                         .arguments
                         .get("market_id")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
+                        .and_then(|v| v.as_str().map(ToOwned::to_owned))
+                        .or_else(|| {
+                            params
+                                .arguments
+                                .get("market_id")
+                                .and_then(|v| v.as_u64())
+                                .map(|v| v.to_string())
+                        })
+                        .unwrap_or_else(|| "unknown".to_string());
                     format!("Analyze market {market_id} using order book depth, recent trades, and agent execution windows. Return: thesis, confidence (0-100), risk factors, and execution plan.")
                 }
                 "agent-launch" => {
                     let market_id = params
                         .arguments
                         .get("market_id")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
+                        .and_then(|v| v.as_str().map(ToOwned::to_owned))
+                        .or_else(|| {
+                            params
+                                .arguments
+                                .get("market_id")
+                                .and_then(|v| v.as_u64())
+                                .map(|v| v.to_string())
+                        })
+                        .unwrap_or_else(|| "unknown".to_string());
                     let outcome = params
                         .arguments
                         .get("outcome")
@@ -1252,7 +1585,8 @@ pub async fn get_web4_capabilities(state: web::Data<Arc<AppState>>) -> impl Resp
     let api_base = infer_api_base_url(&state);
     let chains = configured_chains(&state);
     let erc8004_ready = is_hex_address(state.config.erc8004_identity_registry_address.as_str())
-        && is_hex_address(state.config.erc8004_reputation_registry_address.as_str());
+        && is_hex_address(state.config.erc8004_reputation_registry_address.as_str())
+        && is_hex_address(state.config.erc8004_validation_registry_address.as_str());
     let x402_status = if state.config.x402_enabled {
         "implemented"
     } else {
@@ -1291,7 +1625,12 @@ pub async fn get_web4_capabilities(state: web::Data<Arc<AppState>>) -> impl Resp
             "evm_reads_enabled": state.config.evm_reads_enabled,
             "evm_writes_enabled": state.config.evm_writes_enabled,
             "solana_reads_enabled": state.config.solana_reads_enabled,
-            "solana_writes_enabled": state.config.solana_writes_enabled
+            "solana_writes_enabled": state.config.solana_writes_enabled,
+            "external_markets_enabled": state.config.external_markets_enabled,
+            "external_trading_enabled": state.config.external_trading_enabled,
+            "external_agents_enabled": state.config.external_agents_enabled,
+            "limitless_enabled": state.config.limitless_enabled,
+            "polymarket_enabled": state.config.polymarket_enabled
         },
         "policy": {
             "mcp_method_rate_window_seconds": MCP_METHOD_WINDOW_SECONDS,
@@ -1333,9 +1672,9 @@ pub async fn get_web4_capabilities(state: web::Data<Arc<AppState>>) -> impl Resp
                 "id": "erc-8004-identity",
                 "status": if erc8004_ready { "implemented" } else { "partial" },
                 "description": if erc8004_ready {
-                    "Onchain agent identity and reputation registries integrated into agent snapshots."
+                    "Onchain ERC-8004 identity, reputation, and validation registries integrated into runtime and write-prep flows."
                 } else {
-                    "ERC-8004 read integration is present, but one or both registry addresses are not configured."
+                    "ERC-8004 integration is present, but one or more registry addresses are not configured."
                 }
             },
             {
@@ -1347,6 +1686,11 @@ pub async fn get_web4_capabilities(state: web::Data<Arc<AppState>>) -> impl Resp
                 "id": "xmtp-swarm",
                 "status": xmtp_status,
                 "description": xmtp_description
+            },
+            {
+                "id": "external-venues",
+                "status": if state.config.external_markets_enabled { "implemented" } else { "disabled" },
+                "description": "Unified market aggregation and external execution surface for Limitless and Polymarket."
             }
         ]
     }))
@@ -1494,6 +1838,16 @@ pub async fn get_agent_card(state: web::Data<Arc<AppState>>) -> impl Responder {
                 "url": format!("{}/evm/write/agents/execute", api_base)
             },
             {
+                "name": "prepare_validation_request",
+                "method": "POST",
+                "url": format!("{}/evm/write/validation/request", api_base)
+            },
+            {
+                "name": "prepare_validation_response",
+                "method": "POST",
+                "url": format!("{}/evm/write/validation/response", api_base)
+            },
+            {
                 "name": "relay_solana_tx",
                 "method": "POST",
                 "url": format!("{}/solana/write/relay", api_base)
@@ -1522,27 +1876,25 @@ pub async fn get_web4_runtime_health(state: web::Data<Arc<AppState>>) -> impl Re
     let xmtp_transport_http = xmtp_transport == "xmtp_http";
     let xmtp_transport_redis = xmtp_transport == "redis";
     let xmtp_bridge_configured = !state.config.xmtp_swarm_bridge_url.trim().is_empty();
-    let xmtp_bridge_reachable = if state.config.xmtp_swarm_enabled
-        && xmtp_transport_http
-        && xmtp_bridge_configured
-    {
-        let url = format!(
-            "{}/health",
-            state
-                .config
-                .xmtp_swarm_bridge_url
-                .trim()
-                .trim_end_matches('/')
-        );
-        reqwest::Client::new()
-            .get(url)
-            .send()
-            .await
-            .map(|response| response.status().is_success())
-            .unwrap_or(false)
-    } else {
-        false
-    };
+    let xmtp_bridge_reachable =
+        if state.config.xmtp_swarm_enabled && xmtp_transport_http && xmtp_bridge_configured {
+            let url = format!(
+                "{}/health",
+                state
+                    .config
+                    .xmtp_swarm_bridge_url
+                    .trim()
+                    .trim_end_matches('/')
+            );
+            reqwest::Client::new()
+                .get(url)
+                .send()
+                .await
+                .map(|response| response.status().is_success())
+                .unwrap_or(false)
+        } else {
+            false
+        };
 
     let xmtp_ready = state.config.xmtp_swarm_enabled
         && if xmtp_transport_http {

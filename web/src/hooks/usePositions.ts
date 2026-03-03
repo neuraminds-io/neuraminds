@@ -28,7 +28,7 @@ export function usePositions() {
         ORDER_BOOK_ADDRESS,
         'NEXT_PUBLIC_ORDER_BOOK_ADDRESS'
       );
-      const markets = await api.getBaseMarkets({ limit: 200, offset: 0 });
+      const markets = await api.getBaseMarkets({ limit: 200, offset: 0, source: 'internal' });
       if (markets.data.length === 0) {
         return { data: [], total: 0, limit: 200, offset: 0, hasMore: false };
       }

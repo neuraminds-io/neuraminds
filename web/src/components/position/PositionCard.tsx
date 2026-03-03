@@ -21,7 +21,7 @@ export function PositionCard({ position }: PositionCardProps) {
       : 0;
 
   return (
-    <Link href={`/markets/${position.marketId}`} className="block">
+    <Link href={`/markets/${encodeURIComponent(position.marketId)}`} className="block">
       <Card hover>
         <div className="flex items-start justify-between gap-4 mb-3">
           <h3 className="font-medium text-text-primary line-clamp-2 flex-1">

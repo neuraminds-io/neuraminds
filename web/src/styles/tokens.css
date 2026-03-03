@@ -141,6 +141,14 @@
   --color-highlight: #ff8b5f;
   --color-highlight-muted: rgba(255, 139, 95, 0.15);
 
+  /* Micrographic accents */
+  --color-ink: #0f1117;
+  --color-cloud: #f1f1eb;
+  --color-ice: #dbe8ff;
+  --color-iris: #4f7cff;
+  --color-amber-glow: rgba(255, 139, 95, 0.12);
+  --color-blue-glow: rgba(79, 124, 255, 0.12);
+
   /* ========================================
      SPACING SCALE (8px base)
      ======================================== */
@@ -172,9 +180,12 @@
   --font-semibold: 600;
   --font-bold: 700;
 
-  --font-sans: 'Anonymous Pro', 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
-  --font-display: 'Anonymous Pro', 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
-  --font-mono: 'Anonymous Pro', 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
+  --font-sans:
+    "Anonymous Pro", "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+  --font-display:
+    "Anonymous Pro", "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+  --font-mono:
+    "Anonymous Pro", "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
 
   /* ========================================
      BORDER RADIUS

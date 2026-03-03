@@ -13,6 +13,9 @@ on:
       - "package.json"
       - "package-lock.json"
 
+permissions:
+  contents: read
+
 concurrency:
   group: launch-readiness-${{ github.ref }}
   cancel-in-progress: true
@@ -23,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CHAIN_MODE: base
-      DATABASE_URL: postgres://polyguard:polyguard@localhost:5432/polyguard_test
+      DATABASE_URL: postgres://neuraminds:neuraminds@localhost:5432/neuraminds_test
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: launch-readiness-static-secret-32-bytes-minimum
       BLINDFOLD_WEBHOOK_SECRET: launch-readiness-blindfold-secret

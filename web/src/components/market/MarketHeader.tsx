@@ -19,6 +19,12 @@ export function MarketHeader({ market }: MarketHeaderProps) {
     <div className="mb-6">
       <div className="flex items-center gap-2 mb-3">
         <Badge variant="muted">{market.category}</Badge>
+        <Badge variant={market.isExternal ? 'accent' : 'muted'}>
+          {market.provider}
+        </Badge>
+        <Badge variant="muted">
+          {market.chainId === 137 ? 'polygon' : market.chainId === 8453 ? 'base' : `chain-${market.chainId}`}
+        </Badge>
         <Badge variant={statusVariant}>
           {MARKET_STATUS_LABELS[market.status]}
         </Badge>

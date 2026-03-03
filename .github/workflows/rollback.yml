@@ -4,37 +4,44 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to rollback'
+        description: "Environment to rollback"
         required: true
         type: choice
         options:
-          - 'staging'
-          - 'production'
+          - "staging"
+          - "production"
       rollback_type:
-        description: 'Rollback type'
+        description: "Rollback type"
         required: true
         type: choice
         options:
-          - 'previous'
-          - 'specific-revision'
-          - 'specific-image'
-        default: 'previous'
+          - "previous"
+          - "specific-revision"
+          - "specific-image"
+        default: "previous"
       revision:
-        description: 'Revision number (for specific-revision)'
+        description: "Revision number (for specific-revision)"
         required: false
         type: string
       image_tag:
-        description: 'Image tag (for specific-image)'
+        description: "Image tag (for specific-image)"
         required: false
         type: string
       reason:
-        description: 'Reason for rollback'
+        description: "Reason for rollback"
         required: true
         type: string
+
+permissions:
+  contents: read
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/backend
+  KUBE_NAMESPACE_PREFIX: ${{ vars.KUBE_NAMESPACE_PREFIX }}
+  KUBE_DEPLOYMENT_NAME: ${{ vars.KUBE_DEPLOYMENT_NAME }}
+  PROD_HEALTHCHECK_URL: ${{ vars.PROD_HEALTHCHECK_URL }}
+  STAGING_HEALTHCHECK_URL: ${{ vars.STAGING_HEALTHCHECK_URL }}
 
 jobs:
   rollback:
@@ -50,138 +57,138 @@ jobs:
 
       - name: Configure kubeconfig
         run: |
-          mkdir -p $HOME/.kube
+          mkdir -p "$HOME/.kube"
           if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
-            echo "${{ secrets.PRODUCTION_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+            echo "${{ secrets.PRODUCTION_KUBECONFIG }}" | base64 -d > "$HOME/.kube/config"
           else
-            echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+            echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > "$HOME/.kube/config"
           fi
-          chmod 600 $HOME/.kube/config
+          chmod 600 "$HOME/.kube/config"
 
       - name: Get current state
         id: current
         run: |
-          NAMESPACE="polyguard-${{ github.event.inputs.environment }}"
+          namespace_prefix="${KUBE_NAMESPACE_PREFIX:-neuraminds}"
+          deployment_name="${KUBE_DEPLOYMENT_NAME:-neuraminds-api}"
+          namespace="${namespace_prefix}-${{ github.event.inputs.environment }}"
 
-          CURRENT_IMAGE=$(kubectl get deployment polyguard-api-blue -n $NAMESPACE \
-            -o jsonpath='{.spec.template.spec.containers[0].image}')
-          CURRENT_REVISION=$(kubectl rollout history deployment/polyguard-api-blue \
-            -n $NAMESPACE | tail -1 | awk '{print $1}')
-          REPLICAS=$(kubectl get deployment polyguard-api-blue -n $NAMESPACE \
-            -o jsonpath='{.status.readyReplicas}')
+          current_image="$(kubectl get deployment "$deployment_name" -n "$namespace" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          current_revision="$(kubectl rollout history "deployment/${deployment_name}" \
+            -n "$namespace" | tail -1 | awk '{print $1}')"
+          replicas="$(kubectl get deployment "$deployment_name" -n "$namespace" \
+            -o jsonpath='{.status.readyReplicas}')"
 
-          echo "current_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
-          echo "current_revision=$CURRENT_REVISION" >> $GITHUB_OUTPUT
-          echo "current_replicas=$REPLICAS" >> $GITHUB_OUTPUT
+          echo "current_image=$current_image" >> "$GITHUB_OUTPUT"
+          echo "current_revision=$current_revision" >> "$GITHUB_OUTPUT"
+          echo "current_replicas=$replicas" >> "$GITHUB_OUTPUT"
 
           echo "Current state:"
-          echo "  Image: $CURRENT_IMAGE"
-          echo "  Revision: $CURRENT_REVISION"
-          echo "  Ready replicas: $REPLICAS"
+          echo "  Namespace: $namespace"
+          echo "  Deployment: $deployment_name"
+          echo "  Image: $current_image"
+          echo "  Revision: $current_revision"
+          echo "  Ready replicas: $replicas"
 
       - name: Show rollout history
         run: |
-          NAMESPACE="polyguard-${{ github.event.inputs.environment }}"
-          echo "Rollout history:"
-          kubectl rollout history deployment/polyguard-api-blue -n $NAMESPACE
+          namespace_prefix="${KUBE_NAMESPACE_PREFIX:-neuraminds}"
+          deployment_name="${KUBE_DEPLOYMENT_NAME:-neuraminds-api}"
+          namespace="${namespace_prefix}-${{ github.event.inputs.environment }}"
+          kubectl rollout history "deployment/${deployment_name}" -n "$namespace"
 
       - name: Rollback to previous
         if: github.event.inputs.rollback_type == 'previous'
         run: |
-          NAMESPACE="polyguard-${{ github.event.inputs.environment }}"
+          namespace_prefix="${KUBE_NAMESPACE_PREFIX:-neuraminds}"
+          deployment_name="${KUBE_DEPLOYMENT_NAME:-neuraminds-api}"
+          namespace="${namespace_prefix}-${{ github.event.inputs.environment }}"
 
-          echo "Rolling back to previous revision..."
-          kubectl rollout undo deployment/polyguard-api-blue -n $NAMESPACE
-
-          kubectl rollout status deployment/polyguard-api-blue \
-            -n $NAMESPACE --timeout=300s
+          kubectl rollout undo "deployment/${deployment_name}" -n "$namespace"
+          kubectl rollout status "deployment/${deployment_name}" -n "$namespace" --timeout=300s
 
       - name: Rollback to specific revision
         if: github.event.inputs.rollback_type == 'specific-revision'
         run: |
-          NAMESPACE="polyguard-${{ github.event.inputs.environment }}"
-          REVISION="${{ github.event.inputs.revision }}"
+          namespace_prefix="${KUBE_NAMESPACE_PREFIX:-neuraminds}"
+          deployment_name="${KUBE_DEPLOYMENT_NAME:-neuraminds-api}"
+          namespace="${namespace_prefix}-${{ github.event.inputs.environment }}"
+          revision="${{ github.event.inputs.revision }}"
 
-          if [[ -z "$REVISION" ]]; then
+          if [[ -z "$revision" ]]; then
             echo "::error::Revision number is required for specific-revision rollback"
             exit 1
           fi
 
-          echo "Rolling back to revision $REVISION..."
-          kubectl rollout undo deployment/polyguard-api-blue \
-            -n $NAMESPACE --to-revision=$REVISION
-
-          kubectl rollout status deployment/polyguard-api-blue \
-            -n $NAMESPACE --timeout=300s
+          kubectl rollout undo "deployment/${deployment_name}" -n "$namespace" --to-revision="$revision"
+          kubectl rollout status "deployment/${deployment_name}" -n "$namespace" --timeout=300s
 
       - name: Rollback to specific image
         if: github.event.inputs.rollback_type == 'specific-image'
         run: |
-          NAMESPACE="polyguard-${{ github.event.inputs.environment }}"
-          IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+          namespace_prefix="${KUBE_NAMESPACE_PREFIX:-neuraminds}"
+          deployment_name="${KUBE_DEPLOYMENT_NAME:-neuraminds-api}"
+          namespace="${namespace_prefix}-${{ github.event.inputs.environment }}"
+          image_tag="${{ github.event.inputs.image_tag }}"
 
-          if [[ -z "$IMAGE_TAG" ]]; then
+          if [[ -z "$image_tag" ]]; then
             echo "::error::Image tag is required for specific-image rollback"
             exit 1
           fi
 
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG"
-
-          echo "Rolling back to image $IMAGE..."
-          kubectl set image deployment/polyguard-api-blue \
-            api="$IMAGE" \
-            -n $NAMESPACE
-
-          kubectl rollout status deployment/polyguard-api-blue \
-            -n $NAMESPACE --timeout=300s
+          image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$image_tag"
+          kubectl set image "deployment/${deployment_name}" api="$image" -n "$namespace"
+          kubectl rollout status "deployment/${deployment_name}" -n "$namespace" --timeout=300s
 
       - name: Verify rollback
         id: verify
         run: |
-          NAMESPACE="polyguard-${{ github.event.inputs.environment }}"
+          namespace_prefix="${KUBE_NAMESPACE_PREFIX:-neuraminds}"
+          deployment_name="${KUBE_DEPLOYMENT_NAME:-neuraminds-api}"
+          namespace="${namespace_prefix}-${{ github.event.inputs.environment }}"
 
-          NEW_IMAGE=$(kubectl get deployment polyguard-api-blue -n $NAMESPACE \
-            -o jsonpath='{.spec.template.spec.containers[0].image}')
-          READY=$(kubectl get deployment polyguard-api-blue -n $NAMESPACE \
-            -o jsonpath='{.status.readyReplicas}')
+          new_image="$(kubectl get deployment "$deployment_name" -n "$namespace" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          ready="$(kubectl get deployment "$deployment_name" -n "$namespace" \
+            -o jsonpath='{.status.readyReplicas}')"
 
-          echo "new_image=$NEW_IMAGE" >> $GITHUB_OUTPUT
-
+          echo "new_image=$new_image" >> "$GITHUB_OUTPUT"
           echo "Rollback verification:"
           echo "  Previous image: ${{ steps.current.outputs.current_image }}"
-          echo "  New image: $NEW_IMAGE"
-          echo "  Ready replicas: $READY"
+          echo "  New image: $new_image"
+          echo "  Ready replicas: $ready"
 
       - name: Health check
         run: |
           if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
-            HEALTH_URL="https://api.polyguard.cc/health"
+            health_url="${PROD_HEALTHCHECK_URL:-https://api.neuraminds.io/health}"
           else
-            HEALTH_URL="https://api-staging.polyguard.cc/health"
+            health_url="${STAGING_HEALTHCHECK_URL:-https://api-staging.neuraminds.io/health}"
           fi
 
           sleep 15
           for i in {1..5}; do
-            if curl -sf "$HEALTH_URL" > /dev/null; then
+            if curl -sf "$health_url" > /dev/null; then
               echo "Health check passed"
               exit 0
             fi
             echo "Attempt $i failed, retrying..."
             sleep 10
           done
+
           echo "::error::Health check failed after rollback"
           exit 1
 
       - name: Create rollback record
         run: |
-          echo "## Rollback Record" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Environment | ${{ github.event.inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Rollback type | ${{ github.event.inputs.rollback_type }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Previous image | ${{ steps.current.outputs.current_image }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| New image | ${{ steps.verify.outputs.new_image }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Reason | ${{ github.event.inputs.reason }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Timestamp | $(date -u +"%Y-%m-%dT%H:%M:%SZ") |" >> $GITHUB_STEP_SUMMARY
+          echo "## Rollback Record" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | ${{ github.event.inputs.environment }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Rollback type | ${{ github.event.inputs.rollback_type }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Previous image | ${{ steps.current.outputs.current_image }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| New image | ${{ steps.verify.outputs.new_image }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Reason | ${{ github.event.inputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Triggered by | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Timestamp | $(date -u +"%Y-%m-%dT%H:%M:%SZ") |" >> "$GITHUB_STEP_SUMMARY"

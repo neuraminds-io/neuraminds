@@ -95,6 +95,37 @@ const API_DOCS: EndpointGroup[] = [
     endpoints: [
       {
         method: 'GET',
+        path: '/evm/markets',
+        summary: 'List unified internal + external markets',
+        auth: false,
+        params: [
+          { name: 'source', type: 'string', required: false, description: 'all | internal | limitless | polymarket' },
+          { name: 'tradable', type: 'string', required: false, description: 'all | user | agent' },
+          { name: 'limit', type: 'integer', required: false, description: 'Results per page (max: 200)' },
+          { name: 'offset', type: 'integer', required: false, description: 'Pagination offset' },
+        ],
+        response: {
+          example: `{
+  "markets": [
+    {
+      "id": "15",
+      "source": "internal_market_core",
+      "provider": "internal",
+      "is_external": false
+    },
+    {
+      "id": "limitless:fed-rate-june",
+      "source": "external_limitless",
+      "provider": "limitless",
+      "is_external": true
+    }
+  ],
+  "total": 2
+}`,
+        },
+      },
+      {
+        method: 'GET',
         path: '/markets',
         summary: 'List markets',
         auth: false,
@@ -152,7 +183,7 @@ const API_DOCS: EndpointGroup[] = [
         summary: 'Get order book',
         auth: false,
         params: [
-          { name: 'id', type: 'string', required: true, description: 'Market ID' },
+          { name: 'id', type: 'string', required: true, description: 'Internal numeric ID or namespaced ID (limitless:<slug>, polymarket:<id>)' },
           { name: 'outcome', type: 'string', required: true, description: 'yes or no' },
           { name: 'depth', type: 'integer', required: false, description: 'Number of levels (default: 20)' },
         ],
@@ -169,6 +200,42 @@ const API_DOCS: EndpointGroup[] = [
   "lastUpdated": "2024-01-01T12:00:00Z"
 }`,
         },
+      },
+    ],
+  },
+  {
+    name: 'External Trading',
+    description: 'Credentialed execution on Limitless + Polymarket',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/external/credentials',
+        summary: 'List BYOK venue credentials',
+        auth: true,
+      },
+      {
+        method: 'POST',
+        path: '/external/orders/intent',
+        summary: 'Prepare external order intent',
+        auth: true,
+      },
+      {
+        method: 'POST',
+        path: '/external/orders/submit',
+        summary: 'Submit signed external order intent',
+        auth: true,
+      },
+      {
+        method: 'GET',
+        path: '/external/agents',
+        summary: 'List external agents',
+        auth: true,
+      },
+      {
+        method: 'POST',
+        path: '/external/agents/{agent_id}/execute',
+        summary: 'Execute external agent cycle',
+        auth: true,
       },
     ],
   },

@@ -213,7 +213,7 @@ async fn main() -> std::io::Result<()> {
             warn!("CORS: Development mode - allowing all origins");
             Cors::default()
                 .allow_any_origin()
-                .allowed_methods(vec!["GET", "POST", "DELETE", "OPTIONS"])
+                .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE", "OPTIONS"])
                 .allowed_headers(vec![
                     header::AUTHORIZATION,
                     header::ACCEPT,
@@ -222,7 +222,7 @@ async fn main() -> std::io::Result<()> {
                 .max_age(3600)
         } else {
             let mut cors = Cors::default()
-                .allowed_methods(vec!["GET", "POST", "DELETE", "OPTIONS"])
+                .allowed_methods(vec!["GET", "POST", "PATCH", "DELETE", "OPTIONS"])
                 .allowed_headers(vec![
                     header::AUTHORIZATION,
                     header::ACCEPT,
@@ -344,6 +344,10 @@ async fn main() -> std::io::Result<()> {
                     .service(
                         web::scope("/evm")
                             .route("/markets", web::get().to(api::evm::get_base_markets))
+                            .route(
+                                "/markets/{market_id}",
+                                web::get().to(api::evm::get_base_market),
+                            )
                             .route("/agents", web::get().to(api::evm::get_base_agents))
                             .route(
                                 "/payouts/candidates",
@@ -393,6 +397,10 @@ async fn main() -> std::io::Result<()> {
                             .route(
                                 "/reputation/{wallet}",
                                 web::get().to(api::evm::get_base_reputation),
+                            )
+                            .route(
+                                "/validation/{request_hash}",
+                                web::get().to(api::evm::get_base_validation),
                             )
                             .route(
                                 "/markets/{market_id}/orderbook",
@@ -459,9 +467,67 @@ async fn main() -> std::io::Result<()> {
                                             .to(api::evm::prepare_erc8004_submit_outcome_write),
                                     )
                                     .route(
+                                        "/validation/request",
+                                        web::post()
+                                            .to(api::evm::prepare_erc8004_validation_request_write),
+                                    )
+                                    .route(
+                                        "/validation/response",
+                                        web::post().to(
+                                            api::evm::prepare_erc8004_validation_response_write,
+                                        ),
+                                    )
+                                    .route(
                                         "/relay",
                                         web::post().to(api::evm::relay_raw_transaction),
                                     ),
+                            ),
+                    )
+                    .service(
+                        web::scope("/external")
+                            .route(
+                                "/credentials",
+                                web::get().to(api::external::list_external_credentials),
+                            )
+                            .route(
+                                "/credentials",
+                                web::post().to(api::external::upsert_external_credentials),
+                            )
+                            .route(
+                                "/credentials/{credential_id}",
+                                web::delete().to(api::external::delete_external_credentials),
+                            )
+                            .route(
+                                "/orders/intent",
+                                web::post().to(api::external::create_external_order_intent),
+                            )
+                            .route(
+                                "/orders/submit",
+                                web::post().to(api::external::submit_external_order),
+                            )
+                            .route(
+                                "/orders/cancel",
+                                web::post().to(api::external::cancel_external_order),
+                            )
+                            .route(
+                                "/orders",
+                                web::get().to(api::external::list_external_orders),
+                            )
+                            .route(
+                                "/agents",
+                                web::get().to(api::external::list_external_agents),
+                            )
+                            .route(
+                                "/agents",
+                                web::post().to(api::external::create_external_agent),
+                            )
+                            .route(
+                                "/agents/{agent_id}",
+                                web::patch().to(api::external::update_external_agent),
+                            )
+                            .route(
+                                "/agents/{agent_id}/execute",
+                                web::post().to(api::external::execute_external_agent),
                             ),
                     )
                     .service(

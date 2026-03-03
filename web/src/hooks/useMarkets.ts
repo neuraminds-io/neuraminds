@@ -9,6 +9,8 @@ export function useMarkets(filters?: MarketFilters) {
       const response = await api.getBaseMarkets({
         limit: filters?.limit || 50,
         offset: filters?.offset || 0,
+        source: filters?.source || 'all',
+        tradable: filters?.tradable || 'all',
       });
 
       let data = [...response.data];

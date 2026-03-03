@@ -2,6 +2,7 @@ pub mod auth;
 pub mod compliance;
 pub mod error;
 pub mod evm;
+pub mod external;
 pub mod health;
 pub mod jwt;
 pub mod markets;

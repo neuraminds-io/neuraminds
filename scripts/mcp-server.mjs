@@ -163,10 +163,12 @@ async function main() {
   server.registerTool(
     'getMarkets',
     {
-      description: 'List Base markets with pagination.',
+      description: 'List unified markets with source/tradable filters.',
       inputSchema: z.object({
         limit: z.number().int().min(1).max(200).optional(),
         offset: z.number().int().min(0).optional(),
+        source: z.enum(['all', 'internal', 'limitless', 'polymarket']).optional(),
+        tradable: z.enum(['all', 'user', 'agent']).optional(),
       }),
     },
     async (args) => {
@@ -183,7 +185,7 @@ async function main() {
     {
       description: 'Fetch market orderbook (x402 payment required when enabled).',
       inputSchema: z.object({
-        market_id: z.number().int().min(1),
+        market_id: z.union([z.string(), z.number().int().min(1)]),
         outcome: z.enum(['yes', 'no']),
         depth: z.number().int().min(1).max(100).optional(),
         payment: z
@@ -212,7 +214,7 @@ async function main() {
     {
       description: 'Fetch market trades (x402 payment required when enabled).',
       inputSchema: z.object({
-        market_id: z.number().int().min(1),
+        market_id: z.union([z.string(), z.number().int().min(1)]),
         outcome: z.enum(['yes', 'no']).optional(),
         limit: z.number().int().min(1).max(200).optional(),
         offset: z.number().int().min(0).optional(),
@@ -252,6 +254,107 @@ async function main() {
     async (args) => {
       try {
         return await callTool('getAgents', args);
+      } catch (error) {
+        return withRuntimeError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'prepareExternalOrder',
+    {
+      description: 'Create external order intent and return preflight + typed data.',
+      inputSchema: z.object({
+        provider: z.enum(['limitless', 'polymarket']),
+        market_id: z.string().min(1),
+        outcome: z.enum(['yes', 'no']),
+        side: z.enum(['buy', 'sell']),
+        price: z.number().gt(0).lt(1),
+        quantity: z.number().gt(0),
+        credential_id: z.string().optional(),
+      }),
+    },
+    async (args) => {
+      try {
+        return await callTool('prepareExternalOrder', args);
+      } catch (error) {
+        return withRuntimeError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'submitExternalOrder',
+    {
+      description: 'Submit signed external order intent.',
+      inputSchema: z.object({
+        intent_id: z.string().min(1),
+        signed_order: z.record(z.any()),
+        credential_id: z.string().optional(),
+      }),
+    },
+    async (args) => {
+      try {
+        return await callTool('submitExternalOrder', args);
+      } catch (error) {
+        return withRuntimeError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'cancelExternalOrder',
+    {
+      description: 'Cancel external venue order.',
+      inputSchema: z.object({
+        provider: z.enum(['limitless', 'polymarket']),
+        provider_order_id: z.string().min(1),
+        credential_id: z.string().optional(),
+        payload: z.record(z.any()).optional(),
+      }),
+    },
+    async (args) => {
+      try {
+        return await callTool('cancelExternalOrder', args);
+      } catch (error) {
+        return withRuntimeError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'listExternalAgents',
+    {
+      description: 'List external agents.',
+      inputSchema: z.object({
+        provider: z.enum(['limitless', 'polymarket']).optional(),
+        active: z.boolean().optional(),
+        limit: z.number().int().min(1).max(200).optional(),
+        offset: z.number().int().min(0).optional(),
+      }),
+    },
+    async (args) => {
+      try {
+        return await callTool('listExternalAgents', args);
+      } catch (error) {
+        return withRuntimeError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'executeExternalAgent',
+    {
+      description: 'Execute external agent cycle.',
+      inputSchema: z.object({
+        agent_id: z.string().min(1),
+        force: z.boolean().optional(),
+        signed_order: z.record(z.any()).optional(),
+      }),
+    },
+    async (args) => {
+      try {
+        return await callTool('executeExternalAgent', args);
       } catch (error) {
         return withRuntimeError(error);
       }

@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
@@ -48,9 +51,9 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: polyguard
-          POSTGRES_PASSWORD: polyguard
-          POSTGRES_DB: polyguard_test
+          POSTGRES_USER: neuraminds
+          POSTGRES_PASSWORD: neuraminds
+          POSTGRES_DB: neuraminds_test
         ports:
           - 5432:5432
         options: >-
@@ -86,7 +89,7 @@ jobs:
 
       - name: Run backend tests
         env:
-          DATABASE_URL: postgres://polyguard:polyguard@localhost:5432/polyguard_test
+          DATABASE_URL: postgres://neuraminds:neuraminds@localhost:5432/neuraminds_test
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: test-secret-key-for-ci
           EVM_ENABLED: "true"

@@ -1,6 +1,6 @@
-@import '../styles/tokens.css';
-@import '@fontsource/anonymous-pro/400.css';
-@import '@fontsource/anonymous-pro/700.css';
+@import "../styles/tokens.css";
+@import "@fontsource/anonymous-pro/400.css";
+@import "@fontsource/anonymous-pro/700.css";
 
 @tailwind base;
 @tailwind components;
@@ -17,12 +17,12 @@
     border-radius: 0 !important;
   }
 
-  [class*='blur'],
-  [style*='blur'] {
+  [class*="blur"],
+  [style*="blur"] {
     filter: none !important;
   }
 
-  [class*='backdrop-blur'],
+  [class*="backdrop-blur"],
   .glass {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -39,39 +39,46 @@
     background-color: var(--color-bg-base);
     min-height: 100vh;
     font-family: var(--font-mono);
-    font-feature-settings: 'zero' 1, 'tnum' 1;
+    font-feature-settings:
+      "zero" 1,
+      "tnum" 1;
     letter-spacing: 0.02em;
     position: relative;
     isolation: isolate;
   }
 
   body::before {
-    content: '';
+    content: "";
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: -2;
-    opacity: 0.26;
-    background-image: repeating-linear-gradient(
-      to bottom,
-      rgba(0, 0, 0, 0.06) 0,
-      rgba(0, 0, 0, 0.06) 1px,
-      transparent 1px,
-      transparent 4px
-    );
+    opacity: 0.3;
+    background:
+      radial-gradient(circle at 18% 24%, var(--color-ice) 0, transparent 32%),
+      radial-gradient(
+        circle at 80% 12%,
+        var(--color-amber-glow) 0,
+        transparent 28%
+      ),
+      radial-gradient(
+        circle at 70% 68%,
+        var(--color-blue-glow) 0,
+        transparent 30%
+      );
   }
 
   body::after {
-    content: '';
+    content: "";
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: -2;
-    opacity: 0.4;
+    opacity: 0.35;
     background-image:
-      linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(0, 0, 0, 0.032) 1px, transparent 1px);
-    background-size: 80px 80px;
+      linear-gradient(to right, rgba(0, 0, 0, 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+    background-size: 88px 88px;
   }
 
   ::-webkit-scrollbar {
@@ -155,7 +162,7 @@
 
   .industrial-panel::before,
   .industrial-panel::after {
-    content: '';
+    content: "";
     position: absolute;
     width: 14px;
     height: 14px;
@@ -184,7 +191,11 @@
   .industrial-chip {
     @apply inline-flex items-center gap-2 border border-border px-2.5 py-1;
     @apply font-mono text-[11px] uppercase tracking-[0.16em] text-text-secondary;
-    background-color: color-mix(in srgb, var(--color-bg-secondary) 92%, transparent);
+    background-color: color-mix(
+      in srgb,
+      var(--color-bg-secondary) 92%,
+      transparent
+    );
   }
 
   .brandmark {
@@ -208,7 +219,7 @@
   }
 
   .brandmark-main::before {
-    content: '>';
+    content: ">";
     margin-right: 6px;
     color: var(--color-text-muted);
   }
@@ -254,7 +265,7 @@
   }
 
   .animated-gradient-bg::before {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
     opacity: 0.28;
@@ -268,7 +279,7 @@
   }
 
   .animated-gradient-bg::after {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
     opacity: 0.3;
@@ -290,12 +301,150 @@
     display: none;
   }
 
+  .micro-surface {
+    position: relative;
+    background: linear-gradient(
+      145deg,
+      var(--color-bg-primary),
+      color-mix(in srgb, var(--color-bg-secondary) 60%, transparent)
+    );
+    border: 1px solid var(--color-border);
+    box-shadow: 0 10px 50px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+  }
+
+  .micro-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0.06),
+      transparent 40%
+    );
+    pointer-events: none;
+  }
+
+  .micro-chip {
+    @apply inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em];
+    padding: 8px 12px;
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-bg-secondary) 92%, transparent);
+  }
+
+  .micro-chip strong {
+    @apply text-text-primary font-semibold;
+  }
+
+  .micro-orb {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px !important;
+    background: radial-gradient(circle at 30% 30%, #fff, var(--color-iris));
+    box-shadow: 0 0 0 6px rgba(79, 124, 255, 0.08);
+  }
+
+  .micro-stripes {
+    position: absolute;
+    inset: 0;
+    mask-image: linear-gradient(
+      90deg,
+      transparent 0,
+      rgba(0, 0, 0, 0.6) 20%,
+      rgba(0, 0, 0, 0.6) 80%,
+      transparent 100%
+    );
+    background-size: 22px 22px;
+    background-image: linear-gradient(
+      135deg,
+      rgba(0, 0, 0, 0.04) 25%,
+      transparent 25%,
+      transparent 50%,
+      rgba(0, 0, 0, 0.04) 50%,
+      rgba(0, 0, 0, 0.04) 75%,
+      transparent 75%,
+      transparent
+    );
+    pointer-events: none;
+  }
+
+  .micrographic-signal {
+    position: absolute;
+    width: 240px;
+    height: 360px;
+    background: url("/micrographics/signal-stack.svg") no-repeat center;
+    background-size: contain;
+    opacity: 0.16;
+    pointer-events: none;
+  }
+
+  .micrographic-grid {
+    position: absolute;
+    width: 320px;
+    height: 160px;
+    background: url("/micrographics/grid-bands.svg") no-repeat center;
+    background-size: contain;
+    opacity: 0.18;
+    pointer-events: none;
+  }
+
+  .dot-noise {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .dot-noise::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      rgba(0, 0, 0, 0.14) 1px,
+      transparent 0
+    );
+    background-size: 14px 14px;
+    opacity: 0.25;
+  }
+
+  .tape-stripe {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .tape-stripe::before {
+    content: "";
+    position: absolute;
+    inset-inline: -32px;
+    top: 50%;
+    height: 12px;
+    transform: translateY(-50%);
+    background: repeating-linear-gradient(
+      90deg,
+      rgba(255, 90, 31, 0.16) 0,
+      rgba(255, 90, 31, 0.16) 32px,
+      transparent 32px,
+      transparent 64px
+    );
+    opacity: 0.8;
+  }
+
+  .label-slab {
+    @apply uppercase tracking-[0.18em] text-[11px];
+    letter-spacing: 0.18em;
+  }
+
+  .hero-serif {
+    font-family: "IBM Plex Mono", var(--font-mono);
+    letter-spacing: 0.16em;
+  }
+
   .scanline-surface {
     position: relative;
   }
 
   .scanline-surface::after {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
     pointer-events: none;

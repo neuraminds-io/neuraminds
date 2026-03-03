@@ -140,7 +140,7 @@ export function ProfileActivity({ wallet }: ProfileActivityProps) {
             {activities.map((activity) => (
               <Link
                 key={activity.id}
-                href={`/markets/${activity.marketId}`}
+                href={`/markets/${encodeURIComponent(activity.marketId)}`}
                 className="flex items-start gap-3 p-3  hover:bg-bg-secondary transition-colors duration-fast cursor-pointer"
               >
                 {/* Icon */}

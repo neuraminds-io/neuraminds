@@ -41,6 +41,18 @@ export interface BaseTokenState {
   decimals: number;
 }
 
+export interface BaseValidationStatus {
+  request_hash: string;
+  validator: string;
+  agent_id: string;
+  response: number;
+  response_hash: string;
+  tag: string;
+  last_update: number;
+  responded: boolean;
+  source: string;
+}
+
 interface BaseMarketSnapshot {
   id: string;
   question_hash: string;
@@ -54,6 +66,15 @@ interface BaseMarketSnapshot {
   resolved: boolean;
   outcome?: 'yes' | 'no' | null;
   status: string;
+  source?: string;
+  provider?: string;
+  is_external?: boolean;
+  external_url?: string | null;
+  chain_id?: number;
+  requires_credentials?: boolean;
+  execution_users?: boolean;
+  execution_agents?: boolean;
+  outcomes?: Array<{ label: string; probability: number }>;
 }
 
 interface BaseMarketsResponse {
@@ -75,6 +96,10 @@ interface BaseOrderBookResponse {
   bids: BaseOrderBookLevel[];
   asks: BaseOrderBookLevel[];
   last_updated: string;
+  provider?: string;
+  chain_id?: number;
+  provider_market_ref?: string;
+  is_synthetic?: boolean;
 }
 
 interface BaseTradeSnapshot {
@@ -95,6 +120,10 @@ interface BaseTradesResponse {
   limit: number;
   offset: number;
   has_more: boolean;
+  provider?: string;
+  chain_id?: number;
+  provider_market_ref?: string;
+  is_synthetic?: boolean;
 }
 
 interface BaseAgentSnapshot {
@@ -124,6 +153,77 @@ interface BaseAgentSnapshot {
 
 interface BaseAgentsResponse {
   agents: BaseAgentSnapshot[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ExternalCredential {
+  id: string;
+  provider: 'limitless' | 'polymarket';
+  label: string;
+  key_id: string;
+  created_at: string;
+  updated_at: string;
+  credentials: Record<string, unknown>;
+}
+
+interface ExternalCredentialsListResponse {
+  credentials: ExternalCredential[];
+  total: number;
+}
+
+export interface ExternalOrderIntent {
+  id: string;
+  provider: 'limitless' | 'polymarket';
+  market_id: string;
+  preflight: Record<string, unknown>;
+  typed_data: Record<string, unknown>;
+  status: string;
+  expires_at: string;
+}
+
+export interface ExternalOrderRecord {
+  id: string;
+  provider: 'limitless' | 'polymarket';
+  market_id: string;
+  provider_order_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  response_payload: Record<string, unknown>;
+  error_message?: string | null;
+}
+
+interface ExternalOrdersListResponse {
+  orders: ExternalOrderRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ExternalAgentRecord {
+  id: string;
+  owner: string;
+  name: string;
+  provider: 'limitless' | 'polymarket';
+  market_id: string;
+  outcome: 'yes' | 'no';
+  side: 'buy' | 'sell';
+  price: number;
+  quantity: number;
+  cadence_seconds: number;
+  strategy: string;
+  credential_id?: string | null;
+  active: boolean;
+  last_executed_at?: string | null;
+  next_execution_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ExternalAgentsListResponse {
+  agents: ExternalAgentRecord[];
   total: number;
   limit: number;
   offset: number;
@@ -194,10 +294,24 @@ function normalizeMarketStatus(value: unknown): Market['status'] {
 function normalizeMarket(raw: Record<string, unknown>): Market {
   const yesPrice = toNumber(raw.yesPrice ?? raw.yes_price, 0.5);
   const noPrice = toNumber(raw.noPrice ?? raw.no_price, 1 - yesPrice);
+  const sourceRaw = String(raw.source ?? 'internal').toLowerCase();
+  const source =
+    sourceRaw === 'limitless' || sourceRaw === 'polymarket' || sourceRaw === 'all'
+      ? sourceRaw
+      : 'internal';
 
   return {
     id: String(raw.id ?? ''),
     address: String(raw.address ?? raw.id ?? ''),
+    source,
+    provider: String(raw.provider ?? 'internal'),
+    isExternal: Boolean(raw.isExternal ?? raw.is_external ?? false),
+    externalUrl: String(raw.externalUrl ?? raw.external_url ?? '') || undefined,
+    chainId: toNumber(raw.chainId ?? raw.chain_id, 8453),
+    requiresCredentials: Boolean(raw.requiresCredentials ?? raw.requires_credentials ?? false),
+    executionUsers: Boolean(raw.executionUsers ?? raw.execution_users ?? true),
+    executionAgents: Boolean(raw.executionAgents ?? raw.execution_agents ?? true),
+    isSyntheticTrades: Boolean(raw.isSyntheticTrades ?? raw.is_synthetic_trades ?? false),
     question: String(raw.question ?? ''),
     description: String(raw.description ?? ''),
     category: String(raw.category ?? 'unknown'),
@@ -237,10 +351,24 @@ function mapBaseSnapshotToMarket(snapshot: BaseMarketSnapshot): Market {
   const description = snapshot.description?.trim()
     || (curated ? `Outcomes: ${curated.outcomes}. Context: ${curated.rationale}` : `Question hash: ${snapshot.question_hash}`);
   const category = snapshot.category?.trim() || curated?.category || 'base';
+  const sourceRaw = String(snapshot.source || 'internal').toLowerCase();
+  const source =
+    sourceRaw === 'limitless' || sourceRaw === 'polymarket' || sourceRaw === 'all'
+      ? sourceRaw
+      : 'internal';
 
   return {
     id: snapshot.id,
     address: `base-market-${snapshot.id}`,
+    source,
+    provider: snapshot.provider || (snapshot.is_external ? source : 'internal'),
+    isExternal: Boolean(snapshot.is_external),
+    externalUrl: snapshot.external_url || undefined,
+    chainId: toNumber(snapshot.chain_id, 8453),
+    requiresCredentials: Boolean(snapshot.requires_credentials),
+    executionUsers: snapshot.execution_users ?? true,
+    executionAgents: snapshot.execution_agents ?? true,
+    isSyntheticTrades: false,
     question,
     description,
     category,
@@ -262,6 +390,9 @@ function mapBaseSnapshotToMarket(snapshot: BaseMarketSnapshot): Market {
     resolvedOutcome,
     createdAt: tradingEnd,
     resolvedAt: snapshot.resolved ? fromUnixSeconds(snapshot.resolve_time) : undefined,
+    outcomes: snapshot.outcomes && snapshot.outcomes.length > 0
+      ? snapshot.outcomes
+      : undefined,
   };
 }
 
@@ -576,7 +707,12 @@ class ApiClient {
     return this.request('/wallet/balance');
   }
 
-  async getBaseMarkets(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Market>> {
+  async getBaseMarkets(params?: {
+    limit?: number;
+    offset?: number;
+    source?: 'all' | 'internal' | 'limitless' | 'polymarket';
+    tradable?: 'all' | 'user' | 'agent';
+  }): Promise<PaginatedResponse<Market>> {
     const query = this.buildQuery(params || {});
     const response = await this.request<BaseMarketsResponse>(`/evm/markets${query}`);
     const data = response.markets.map(mapBaseSnapshotToMarket);
@@ -599,8 +735,9 @@ class ApiClient {
     depth = 20
   ): Promise<OrderBook> {
     const query = this.buildQuery({ outcome, depth });
+    const encodedMarketId = encodeURIComponent(marketId);
     const response = await this.request<BaseOrderBookResponse>(
-      `/evm/markets/${marketId}/orderbook${query}`
+      `/evm/markets/${encodedMarketId}/orderbook${query}`
     );
 
     return {
@@ -621,8 +758,9 @@ class ApiClient {
       limit: params?.limit,
       offset: params?.offset,
     });
+    const encodedMarketId = encodeURIComponent(marketId);
     const response = await this.request<BaseTradesResponse>(
-      `/evm/markets/${marketId}/trades${query}`
+      `/evm/markets/${encodedMarketId}/trades${query}`
     );
     const data = (response.trades ?? []).map(mapBaseTradeToTrade);
     const total = toNumber(response.total, data.length);
@@ -639,18 +777,8 @@ class ApiClient {
   }
 
   async getBaseMarket(id: string): Promise<Market> {
-    const parsedId = Number(id);
-    if (!Number.isInteger(parsedId) || parsedId < 1) {
-      throw new ApiError(404, 'Market not found');
-    }
-
-    const page = await this.getBaseMarkets({ limit: 1, offset: parsedId - 1 });
-    const market = page.data[0];
-    if (!market || market.id !== id) {
-      throw new ApiError(404, 'Market not found');
-    }
-
-    return market;
+    const response = await this.request<BaseMarketSnapshot>(`/evm/markets/${encodeURIComponent(id)}`);
+    return mapBaseSnapshotToMarket(response);
   }
 
   async getBaseAgents(filters?: AgentFilters): Promise<PaginatedResponse<Agent>> {
@@ -687,6 +815,139 @@ class ApiClient {
 
   async getBaseTokenState(): Promise<BaseTokenState> {
     return this.request('/evm/token/state');
+  }
+
+  async getBaseValidationStatus(requestHash: string): Promise<BaseValidationStatus> {
+    return this.request(`/evm/validation/${encodeURIComponent(requestHash)}`);
+  }
+
+  async getExternalCredentials(provider?: 'limitless' | 'polymarket'): Promise<ExternalCredential[]> {
+    const query = this.buildQuery({ provider });
+    const response = await this.request<ExternalCredentialsListResponse>(`/external/credentials${query}`);
+    return response.credentials ?? [];
+  }
+
+  async upsertExternalCredential(data: {
+    provider: 'limitless' | 'polymarket';
+    label?: string;
+    credentials: Record<string, unknown>;
+  }): Promise<ExternalCredential> {
+    return this.request('/external/credentials', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteExternalCredential(credentialId: string): Promise<{ ok: boolean }> {
+    return this.request(`/external/credentials/${credentialId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async createExternalOrderIntent(data: {
+    provider: 'limitless' | 'polymarket';
+    market_id: string;
+    outcome: 'yes' | 'no';
+    side: 'buy' | 'sell';
+    price: number;
+    quantity: number;
+    credential_id?: string;
+  }): Promise<ExternalOrderIntent> {
+    return this.request('/external/orders/intent', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async submitExternalOrder(data: {
+    intent_id: string;
+    signed_order: Record<string, unknown>;
+    credential_id?: string;
+  }): Promise<ExternalOrderRecord> {
+    return this.request('/external/orders/submit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async cancelExternalOrder(data: {
+    provider: 'limitless' | 'polymarket';
+    provider_order_id: string;
+    credential_id?: string;
+    payload?: Record<string, unknown>;
+  }): Promise<{ ok: boolean }> {
+    return this.request('/external/orders/cancel', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async listExternalOrders(params?: {
+    provider?: 'limitless' | 'polymarket';
+    limit?: number;
+    offset?: number;
+  }): Promise<ExternalOrdersListResponse> {
+    const query = this.buildQuery(params || {});
+    return this.request(`/external/orders${query}`);
+  }
+
+  async listExternalAgents(params?: {
+    provider?: 'limitless' | 'polymarket';
+    active?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<ExternalAgentsListResponse> {
+    const query = this.buildQuery(params || {});
+    return this.request(`/external/agents${query}`);
+  }
+
+  async createExternalAgent(data: {
+    name: string;
+    provider: 'limitless' | 'polymarket';
+    market_id: string;
+    outcome: 'yes' | 'no';
+    side: 'buy' | 'sell';
+    price: number;
+    quantity: number;
+    cadence_seconds: number;
+    strategy: string;
+    credential_id?: string;
+    active?: boolean;
+  }): Promise<ExternalAgentRecord> {
+    return this.request('/external/agents', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateExternalAgent(
+    agentId: string,
+    data: Partial<{
+      name: string;
+      outcome: 'yes' | 'no';
+      side: 'buy' | 'sell';
+      price: number;
+      quantity: number;
+      cadence_seconds: number;
+      strategy: string;
+      credential_id: string;
+      active: boolean;
+    }>,
+  ): Promise<ExternalAgentRecord> {
+    return this.request(`/external/agents/${agentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async executeExternalAgent(
+    agentId: string,
+    data?: { force?: boolean; signed_order?: Record<string, unknown> },
+  ): Promise<Record<string, unknown>> {
+    return this.request(`/external/agents/${agentId}/execute`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    });
   }
 
   async prepareBaseCreateMarket(data: {
@@ -828,6 +1089,33 @@ class ApiClient {
     confidenceWeightBps: number;
   }): Promise<PreparedEvmWriteTx> {
     return this.request('/evm/write/reputation/outcome', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBaseValidationRequest(data: {
+    from?: string;
+    validator: string;
+    agentId: string;
+    requestUri: string;
+    requestHash?: string;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/validation/request', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async prepareBaseValidationResponse(data: {
+    from?: string;
+    requestHash: string;
+    response: number;
+    responseUri: string;
+    responseHash: string;
+    tag: string;
+  }): Promise<PreparedEvmWriteTx> {
+    return this.request('/evm/write/validation/response', {
       method: 'POST',
       body: JSON.stringify(data),
     });

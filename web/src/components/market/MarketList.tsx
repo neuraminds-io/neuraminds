@@ -1,6 +1,6 @@
-import { MarketCard } from './MarketCard';
-import { Skeleton } from '@/components/ui';
-import type { Market } from '@/types';
+import { MarketCard } from "./MarketCard";
+import { Skeleton } from "@/components/ui";
+import type { Market } from "@/types";
 
 export interface MarketListProps {
   markets?: Market[];
@@ -11,7 +11,7 @@ export interface MarketListProps {
 
 function MarketCardSkeleton() {
   return (
-    <div className="bg-bg-primary  border border-border p-4">
+    <div className="bg-bg-primary/90 micro-surface border border-border p-4">
       <div className="flex items-start gap-3 mb-3">
         <Skeleton className="w-10 h-10 " />
         <div className="flex-1 space-y-2">
@@ -30,13 +30,13 @@ function MarketCardSkeleton() {
 export function MarketList({
   markets,
   isLoading,
-  emptyMessage = 'No markets found',
+  emptyMessage = "No markets found",
   columns = 4,
 }: MarketListProps) {
   const gridCols = {
-    2: 'grid-cols-1 sm:grid-cols-2',
-    3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-    4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+    2: "grid-cols-1 sm:grid-cols-2",
+    3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+    4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
   };
 
   if (isLoading) {

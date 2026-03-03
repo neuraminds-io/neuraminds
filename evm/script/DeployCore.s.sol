@@ -11,6 +11,7 @@ import {AgentIdentityRegistry} from "../src/AgentIdentityRegistry.sol";
 import {AgentReputationRegistry} from "../src/AgentReputationRegistry.sol";
 import {ERC8004IdentityRegistry} from "../src/ERC8004IdentityRegistry.sol";
 import {ERC8004ReputationRegistry} from "../src/ERC8004ReputationRegistry.sol";
+import {ERC8004ValidationRegistry} from "../src/ERC8004ValidationRegistry.sol";
 
 contract DeployCoreScript is Script {
     function run() external {
@@ -37,6 +38,8 @@ contract DeployCoreScript is Script {
         ERC8004IdentityRegistry erc8004IdentityRegistry = new ERC8004IdentityRegistry(admin);
         ERC8004ReputationRegistry erc8004ReputationRegistry =
             new ERC8004ReputationRegistry(admin, address(erc8004IdentityRegistry));
+        ERC8004ValidationRegistry erc8004ValidationRegistry =
+            new ERC8004ValidationRegistry(admin, address(erc8004IdentityRegistry));
 
         collateralVault.grantRole(collateralVault.OPERATOR_ROLE(), address(orderBook));
         orderBook.grantRole(orderBook.AGENT_RUNTIME_ROLE(), address(agentRuntime));
@@ -44,6 +47,7 @@ contract DeployCoreScript is Script {
         reputationRegistry.grantRole(reputationRegistry.ORACLE_ROLE(), admin);
         erc8004IdentityRegistry.grantRole(erc8004IdentityRegistry.ISSUER_ROLE(), admin);
         erc8004ReputationRegistry.grantRole(erc8004ReputationRegistry.ATTESTER_ROLE(), admin);
+        erc8004ValidationRegistry.addValidator(admin);
         agentRuntime.setIdentityRegistry(address(identityRegistry));
 
         vm.stopBroadcast();
@@ -57,5 +61,6 @@ contract DeployCoreScript is Script {
         console2.log("AgentReputationRegistry:", address(reputationRegistry));
         console2.log("ERC8004IdentityRegistry:", address(erc8004IdentityRegistry));
         console2.log("ERC8004ReputationRegistry:", address(erc8004ReputationRegistry));
+        console2.log("ERC8004ValidationRegistry:", address(erc8004ValidationRegistry));
     }
 }

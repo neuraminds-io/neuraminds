@@ -16,7 +16,7 @@ function FeaturedCard({ market }: { market: Market }) {
   const noPrice = Math.round(market.noPrice * 100);
 
   return (
-    <Link href={`/markets/${market.id}`} className="block group flex-shrink-0 w-[320px] md:w-[380px]">
+    <Link href={`/markets/${encodeURIComponent(market.id)}`} className="block group flex-shrink-0 w-[320px] md:w-[380px]">
       <div
         className={cn(
           'h-full  overflow-hidden',

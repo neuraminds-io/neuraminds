@@ -44,6 +44,7 @@ pub struct AppConfig {
     pub usdc_mint: String,
     pub erc8004_identity_registry_address: String,
     pub erc8004_reputation_registry_address: String,
+    pub erc8004_validation_registry_address: String,
     pub x402_enabled: bool,
     pub x402_signing_key: String,
     pub x402_receiver_address: String,
@@ -58,6 +59,17 @@ pub struct AppConfig {
     pub xmtp_swarm_topic_prefix: String,
     pub xmtp_swarm_max_messages: u64,
     pub xmtp_swarm_max_message_bytes: u64,
+    pub external_markets_enabled: bool,
+    pub external_trading_enabled: bool,
+    pub external_agents_enabled: bool,
+    pub limitless_enabled: bool,
+    pub polymarket_enabled: bool,
+    pub external_credentials_master_key: String,
+    pub external_credentials_key_id: String,
+    pub limitless_api_base: String,
+    pub polymarket_gamma_api_base: String,
+    pub polymarket_clob_api_base: String,
+    pub polygon_rpc_url: String,
     pub sanctions_blocked_addresses: Vec<String>,
     pub admin_control_key: String,
     pub matcher_enabled: bool,
@@ -195,6 +207,40 @@ impl AppConfig {
             );
         }
 
+        let external_markets_enabled = env::var("EXTERNAL_MARKETS_ENABLED")
+            .unwrap_or_else(|_| "true".to_string())
+            .to_lowercase()
+            == "true";
+        let external_trading_enabled = env::var("EXTERNAL_TRADING_ENABLED")
+            .unwrap_or_else(|_| "false".to_string())
+            .to_lowercase()
+            == "true";
+        let external_agents_enabled = env::var("EXTERNAL_AGENTS_ENABLED")
+            .unwrap_or_else(|_| "false".to_string())
+            .to_lowercase()
+            == "true";
+        let limitless_enabled = env::var("LIMITLESS_ENABLED")
+            .unwrap_or_else(|_| "true".to_string())
+            .to_lowercase()
+            == "true";
+        let polymarket_enabled = env::var("POLYMARKET_ENABLED")
+            .unwrap_or_else(|_| "true".to_string())
+            .to_lowercase()
+            == "true";
+
+        let external_credentials_master_key =
+            env::var("EXTERNAL_CREDENTIALS_MASTER_KEY").unwrap_or_else(|_| String::new());
+        let external_credentials_key_id =
+            env::var("EXTERNAL_CREDENTIALS_KEY_ID").unwrap_or_else(|_| "v1".to_string());
+        if (external_trading_enabled || external_agents_enabled)
+            && !is_development
+            && external_credentials_master_key.trim().is_empty()
+        {
+            panic!(
+                "SECURITY ERROR: EXTERNAL_CREDENTIALS_MASTER_KEY must be set when external trading or agents are enabled"
+            );
+        }
+
         Self {
             host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port: env::var("PORT")
@@ -269,6 +315,8 @@ impl AppConfig {
                 .unwrap_or_else(|_| "".to_string()),
             erc8004_reputation_registry_address: env::var("ERC8004_REPUTATION_REGISTRY_ADDRESS")
                 .unwrap_or_else(|_| "".to_string()),
+            erc8004_validation_registry_address: env::var("ERC8004_VALIDATION_REGISTRY_ADDRESS")
+                .unwrap_or_else(|_| "".to_string()),
             x402_enabled,
             x402_signing_key,
             x402_receiver_address,
@@ -302,6 +350,21 @@ impl AppConfig {
                 .unwrap_or_else(|_| "32768".to_string())
                 .parse()
                 .expect("XMTP_SWARM_MAX_MESSAGE_BYTES must be a number"),
+            external_markets_enabled,
+            external_trading_enabled,
+            external_agents_enabled,
+            limitless_enabled,
+            polymarket_enabled,
+            external_credentials_master_key,
+            external_credentials_key_id,
+            limitless_api_base: env::var("LIMITLESS_API_BASE")
+                .unwrap_or_else(|_| "https://api.limitless.exchange".to_string()),
+            polymarket_gamma_api_base: env::var("POLYMARKET_GAMMA_API_BASE")
+                .unwrap_or_else(|_| "https://gamma-api.polymarket.com".to_string()),
+            polymarket_clob_api_base: env::var("POLYMARKET_CLOB_API_BASE")
+                .unwrap_or_else(|_| "https://clob.polymarket.com".to_string()),
+            polygon_rpc_url: env::var("POLYGON_RPC_URL")
+                .unwrap_or_else(|_| "https://polygon-rpc.com".to_string()),
             sanctions_blocked_addresses: env::var("SANCTIONS_BLOCKED_ADDRESSES")
                 .unwrap_or_else(|_| "".to_string())
                 .split(',')
@@ -375,6 +438,7 @@ mod tests {
             "AGENT_RUNTIME_ADDRESS",
             "ERC8004_IDENTITY_REGISTRY_ADDRESS",
             "ERC8004_REPUTATION_REGISTRY_ADDRESS",
+            "ERC8004_VALIDATION_REGISTRY_ADDRESS",
             "X402_ENABLED",
             "X402_SIGNING_KEY",
             "X402_RECEIVER_ADDRESS",
@@ -389,6 +453,17 @@ mod tests {
             "XMTP_SWARM_TOPIC_PREFIX",
             "XMTP_SWARM_MAX_MESSAGES",
             "XMTP_SWARM_MAX_MESSAGE_BYTES",
+            "EXTERNAL_MARKETS_ENABLED",
+            "EXTERNAL_TRADING_ENABLED",
+            "EXTERNAL_AGENTS_ENABLED",
+            "LIMITLESS_ENABLED",
+            "POLYMARKET_ENABLED",
+            "EXTERNAL_CREDENTIALS_MASTER_KEY",
+            "EXTERNAL_CREDENTIALS_KEY_ID",
+            "LIMITLESS_API_BASE",
+            "POLYMARKET_GAMMA_API_BASE",
+            "POLYMARKET_CLOB_API_BASE",
+            "POLYGON_RPC_URL",
             "SANCTIONS_BLOCKED_ADDRESSES",
             "ADMIN_CONTROL_KEY",
             "MATCHER_ENABLED",
