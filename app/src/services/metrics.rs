@@ -253,68 +253,68 @@ impl MetricsService {
         let mut output = String::new();
 
         // Uptime
-        output.push_str("# HELP polyguard_uptime_seconds Seconds since service start\n");
-        output.push_str("# TYPE polyguard_uptime_seconds gauge\n");
+        output.push_str("# HELP neuraminds_uptime_seconds Seconds since service start\n");
+        output.push_str("# TYPE neuraminds_uptime_seconds gauge\n");
         output.push_str(&format!(
-            "polyguard_uptime_seconds {}\n\n",
+            "neuraminds_uptime_seconds {}\n\n",
             metrics.uptime_seconds
         ));
 
         // Requests
-        output.push_str("# HELP polyguard_requests_total Total HTTP requests\n");
-        output.push_str("# TYPE polyguard_requests_total counter\n");
+        output.push_str("# HELP neuraminds_requests_total Total HTTP requests\n");
+        output.push_str("# TYPE neuraminds_requests_total counter\n");
         output.push_str(&format!(
-            "polyguard_requests_total{{status=\"success\"}} {}\n",
+            "neuraminds_requests_total{{status=\"success\"}} {}\n",
             metrics.requests.success
         ));
         output.push_str(&format!(
-            "polyguard_requests_total{{status=\"error\"}} {}\n\n",
+            "neuraminds_requests_total{{status=\"error\"}} {}\n\n",
             metrics.requests.error
         ));
 
         // Orders
-        output.push_str("# HELP polyguard_orders_total Total orders processed\n");
-        output.push_str("# TYPE polyguard_orders_total counter\n");
+        output.push_str("# HELP neuraminds_orders_total Total orders processed\n");
+        output.push_str("# TYPE neuraminds_orders_total counter\n");
         output.push_str(&format!(
-            "polyguard_orders_total{{action=\"placed\"}} {}\n",
+            "neuraminds_orders_total{{action=\"placed\"}} {}\n",
             metrics.orders.placed
         ));
         output.push_str(&format!(
-            "polyguard_orders_total{{action=\"cancelled\"}} {}\n\n",
+            "neuraminds_orders_total{{action=\"cancelled\"}} {}\n\n",
             metrics.orders.cancelled
         ));
 
         // Trades
-        output.push_str("# HELP polyguard_trades_total Total trades executed\n");
-        output.push_str("# TYPE polyguard_trades_total counter\n");
+        output.push_str("# HELP neuraminds_trades_total Total trades executed\n");
+        output.push_str("# TYPE neuraminds_trades_total counter\n");
         output.push_str(&format!(
-            "polyguard_trades_total {}\n\n",
+            "neuraminds_trades_total {}\n\n",
             metrics.trades.executed
         ));
 
         // Volume
-        output.push_str("# HELP polyguard_volume_total Total trading volume in lamports\n");
-        output.push_str("# TYPE polyguard_volume_total counter\n");
+        output.push_str("# HELP neuraminds_volume_total Total trading volume in lamports\n");
+        output.push_str("# TYPE neuraminds_volume_total counter\n");
         output.push_str(&format!(
-            "polyguard_volume_total {}\n\n",
+            "neuraminds_volume_total {}\n\n",
             metrics.trades.total_volume
         ));
 
         // Latency histograms
         output.push_str(&self.request_latency.export_prometheus(
-            "polyguard_request_duration_ms",
+            "neuraminds_request_duration_ms",
             "HTTP request duration in milliseconds",
         ));
         output.push_str(&self.order_latency.export_prometheus(
-            "polyguard_order_duration_ms",
+            "neuraminds_order_duration_ms",
             "Order processing duration in milliseconds",
         ));
         output.push_str(&self.trade_latency.export_prometheus(
-            "polyguard_trade_duration_ms",
+            "neuraminds_trade_duration_ms",
             "Trade execution duration in milliseconds",
         ));
         output.push_str(&self.database_latency.export_prometheus(
-            "polyguard_database_duration_ms",
+            "neuraminds_database_duration_ms",
             "Database query duration in milliseconds",
         ));
 
@@ -488,8 +488,8 @@ mod tests {
         metrics.record_success();
 
         let output = metrics.export_prometheus();
-        assert!(output.contains("polyguard_requests_total"));
-        assert!(output.contains("polyguard_uptime_seconds"));
+        assert!(output.contains("neuraminds_requests_total"));
+        assert!(output.contains("neuraminds_uptime_seconds"));
     }
 
     #[test]

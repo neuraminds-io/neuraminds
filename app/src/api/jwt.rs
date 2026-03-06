@@ -24,10 +24,12 @@ pub struct Claims {
     pub iss: String,
 }
 
-/// Expected audience for tokens
-pub const TOKEN_AUDIENCE: &str = "polyguard-api";
-/// Token issuer
-pub const TOKEN_ISSUER: &str = "polyguard";
+/// Expected audience for newly-issued tokens.
+pub const TOKEN_AUDIENCE: &str = "neuraminds-api";
+/// Issuer for newly-issued tokens.
+pub const TOKEN_ISSUER: &str = "neuraminds";
+const LEGACY_TOKEN_AUDIENCE: &str = "polyguard-api";
+const LEGACY_TOKEN_ISSUER: &str = "polyguard";
 
 /// User roles for RBAC
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
@@ -253,8 +255,8 @@ impl JwtService {
 
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
-        validation.set_audience(&[TOKEN_AUDIENCE]);
-        validation.set_issuer(&[TOKEN_ISSUER]);
+        validation.set_audience(&[TOKEN_AUDIENCE, LEGACY_TOKEN_AUDIENCE]);
+        validation.set_issuer(&[TOKEN_ISSUER, LEGACY_TOKEN_ISSUER]);
 
         decode::<Claims>(token, decoding_key, &validation)
             .map(|data| data.claims)
@@ -352,6 +354,34 @@ mod tests {
 
         assert_eq!(claims.sub, wallet);
         assert_eq!(claims.role, UserRole::Admin);
+    }
+
+    #[test]
+    fn test_validate_legacy_audience_and_issuer() {
+        let service = test_jwt_service();
+        let wallet = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+        let now = Utc::now();
+        let claims = Claims {
+            sub: wallet.to_string(),
+            iat: now.timestamp(),
+            exp: (now + Duration::hours(1)).timestamp(),
+            role: UserRole::User,
+            jti: "legacy-token".to_string(),
+            aud: LEGACY_TOKEN_AUDIENCE.to_string(),
+            iss: LEGACY_TOKEN_ISSUER.to_string(),
+        };
+
+        let token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret("test-secret-key-for-unit-tests-only-12345678".as_bytes()),
+        )
+        .unwrap();
+
+        let validated = service.validate_token(&token).unwrap();
+        assert_eq!(validated.sub, wallet);
+        assert_eq!(validated.aud, LEGACY_TOKEN_AUDIENCE);
+        assert_eq!(validated.iss, LEGACY_TOKEN_ISSUER);
     }
 
     #[test]

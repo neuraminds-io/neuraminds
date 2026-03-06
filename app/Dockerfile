@@ -15,7 +15,7 @@ COPY app ./app
 COPY programs ./programs
 
 # Build release binary
-RUN cargo build --release --package polyguard-backend
+RUN cargo build --release --package neuraminds-backend
 
 # Runtime stage
 FROM debian:bookworm-slim
@@ -30,14 +30,14 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
-COPY --from=builder /app/target/release/polyguard-api /app/polyguard-api
+COPY --from=builder /app/target/release/neuraminds-api /app/neuraminds-api
 
 # Copy migrations
 COPY migrations ./migrations
 
 # Create non-root user
-RUN useradd -r -s /bin/false polyguard
-USER polyguard
+RUN useradd -r -s /bin/false neuraminds
+USER neuraminds
 
 # Expose port
 EXPOSE 8080
@@ -47,4 +47,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 # Run
-CMD ["/app/polyguard-api"]
+CMD ["/app/neuraminds-api"]

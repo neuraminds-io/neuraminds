@@ -66,7 +66,7 @@ async fn main() -> std::io::Result<()> {
     dotenv().ok();
     services::logging::init();
 
-    info!("Starting Polyguard Backend API...");
+    info!("Starting Neuraminds Backend API...");
 
     let config = AppConfig::from_env();
     let bind_addr = format!("{}:{}", config.host, config.port);

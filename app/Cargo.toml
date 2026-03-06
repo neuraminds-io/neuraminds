@@ -1,11 +1,11 @@
 [package]
-name = "polyguard-backend"
+name = "neuraminds-backend"
 version = "0.1.0"
 edition = "2021"
-description = "Polyguard Backend API - Order matching, settlement, and real-time updates"
+description = "Neuraminds Backend API - Order matching, settlement, and real-time updates"
 
 [[bin]]
-name = "polyguard-api"
+name = "neuraminds-api"
 path = "src/main.rs"
 
 [dependencies]

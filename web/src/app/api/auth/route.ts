@@ -15,7 +15,7 @@ const ALLOWED_ORIGINS = new Set(
 );
 
 const REFRESH_TOKEN_COOKIE = 'neuraminds_refresh';
-const COMPAT_REFRESH_TOKEN_COOKIES = ['neuralminds_refresh', 'polybit_refresh', 'polyguard_refresh'];
+const COMPAT_REFRESH_TOKEN_COOKIES = ['neuralminds_refresh'];
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60;
 
 function jsonError(status: number, error: string) {

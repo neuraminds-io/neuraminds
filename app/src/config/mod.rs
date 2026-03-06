@@ -142,7 +142,7 @@ impl AppConfig {
                 warn!(
                     "SECURITY WARNING: Using default DATABASE_URL. Set DATABASE_URL env var in production!"
                 );
-                "postgres://postgres:password@localhost:5432/polyguard".to_string()
+                "postgres://postgres:password@localhost:5432/neuraminds".to_string()
             } else {
                 panic!("SECURITY ERROR: DATABASE_URL environment variable must be set in production");
             }
