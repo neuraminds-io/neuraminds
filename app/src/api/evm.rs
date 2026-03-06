@@ -766,6 +766,19 @@ fn from_external_market(snapshot: external::types::ExternalMarketSnapshot) -> Ba
     }
 }
 
+fn internal_feed_warning(err: &ApiError) -> BaseFeedWarning {
+    let message = if err.message.contains("429 Too Many Requests") {
+        "internal Base feed temporarily rate limited".to_string()
+    } else {
+        "internal Base feed unavailable".to_string()
+    };
+
+    BaseFeedWarning {
+        source: "internal".to_string(),
+        message,
+    }
+}
+
 async fn fetch_internal_market_snapshots(
     state: &AppState,
 ) -> Result<Vec<BaseMarketSnapshot>, ApiError> {
@@ -942,7 +955,13 @@ pub async fn get_base_markets(
         source,
         ExternalMarketSource::All | ExternalMarketSource::Internal
     ) {
-        markets.extend(fetch_internal_market_snapshots(&state).await?);
+        match fetch_internal_market_snapshots(&state).await {
+            Ok(internal_markets) => markets.extend(internal_markets),
+            Err(err) if matches!(source, ExternalMarketSource::All) => {
+                warnings.push(internal_feed_warning(&err));
+            }
+            Err(err) => return Err(err),
+        }
     }
 
     if matches!(
@@ -3717,5 +3736,28 @@ mod tests {
     fn test_unix_to_rfc3339() {
         let value = unix_to_rfc3339(1_700_000_000);
         assert!(value.starts_with("2023-"));
+    }
+
+    #[test]
+    fn test_internal_feed_warning_for_rate_limit() {
+        let warning = internal_feed_warning(&ApiError::internal(
+            "Base RPC request failed: Base RPC returned non-success status: 429 Too Many Requests",
+        ));
+
+        assert_eq!(warning.source, "internal");
+        assert_eq!(
+            warning.message,
+            "internal Base feed temporarily rate limited"
+        );
+    }
+
+    #[test]
+    fn test_internal_feed_warning_for_generic_failure() {
+        let warning = internal_feed_warning(&ApiError::internal(
+            "Base RPC request failed: connection reset",
+        ));
+
+        assert_eq!(warning.source, "internal");
+        assert_eq!(warning.message, "internal Base feed unavailable");
     }
 }
