@@ -47,6 +47,107 @@ fn parse_u64(value: Option<&Value>) -> u64 {
     0
 }
 
+fn clean_text(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn first_sentence(value: &str, max_length: usize) -> String {
+    let compact = clean_text(value);
+    if compact.is_empty() {
+        return String::new();
+    }
+
+    let mut sentence = compact.clone();
+    if let Some(position) = compact.find(|ch: char| ['.', '?', '!'].contains(&ch)) {
+        sentence = compact[..=position].to_string();
+    }
+    let sentence = clean_text(sentence.as_str());
+    if sentence.chars().count() <= max_length {
+        return sentence;
+    }
+
+    let truncated: String = sentence
+        .chars()
+        .take(max_length.saturating_sub(1))
+        .collect();
+    format!("{}…", truncated.trim_end())
+}
+
+fn slug_to_question(slug: &str) -> String {
+    let normalized = clean_text(&slug.replace(['-', '_'], " "));
+    if normalized.is_empty() {
+        "Limitless market".to_string()
+    } else {
+        normalized
+    }
+}
+
+fn is_generic_description(value: &str, question: &str, slug: &str) -> bool {
+    let normalized = clean_text(value).to_ascii_lowercase();
+    if normalized.is_empty() {
+        return true;
+    }
+
+    let slug_question = slug_to_question(slug).to_ascii_lowercase();
+    normalized == clean_text(question).to_ascii_lowercase()
+        || normalized == clean_text(slug).to_ascii_lowercase()
+        || normalized == slug_question
+        || normalized == "limitless market"
+}
+
+fn build_limitless_question(
+    raw_title: Option<&Value>,
+    raw_proxy_title: Option<&Value>,
+    slug: &str,
+) -> String {
+    let title = clean_text(parse_string(raw_title).as_str());
+    if !title.is_empty() {
+        return title;
+    }
+
+    let proxy_title = clean_text(parse_string(raw_proxy_title).as_str());
+    if !proxy_title.is_empty() {
+        return proxy_title;
+    }
+
+    slug_to_question(slug)
+}
+
+fn build_limitless_description(
+    raw_description: Option<&Value>,
+    raw_proxy_title: Option<&Value>,
+    question: &str,
+    slug: &str,
+    close_time_secs: u64,
+) -> String {
+    let description = clean_text(parse_string(raw_description).as_str());
+    if !description.is_empty() && !is_generic_description(description.as_str(), question, slug) {
+        return first_sentence(description.as_str(), 420);
+    }
+
+    let proxy = clean_text(parse_string(raw_proxy_title).as_str());
+    if !proxy.is_empty() && !is_generic_description(proxy.as_str(), question, slug) {
+        return first_sentence(proxy.as_str(), 320);
+    }
+
+    if close_time_secs > 0 {
+        if let Some(close_time) =
+            chrono::DateTime::<chrono::Utc>::from_timestamp(close_time_secs as i64, 0)
+        {
+            return format!(
+                "Binary prediction market on Limitless for \"{}\". Trading ends {}.",
+                question,
+                close_time.to_rfc3339()
+            );
+        }
+    }
+
+    format!(
+        "Binary prediction market on Limitless for \"{}\".",
+        question
+    )
+}
+
 fn millis_to_secs(value: u64) -> u64 {
     if value > 100_000_000_000 {
         value / 1000
@@ -72,8 +173,16 @@ fn parse_limitless_market(entry: &Value) -> Option<ExternalMarketSnapshot> {
         return None;
     }
 
-    let title = parse_string(entry.get("title"));
-    let description = parse_string(entry.get("description"));
+    let close_time = millis_to_secs(parse_u64(entry.get("expirationTimestamp")));
+    let question =
+        build_limitless_question(entry.get("title"), entry.get("proxyTitle"), slug.as_str());
+    let description = build_limitless_description(
+        entry.get("description"),
+        entry.get("proxyTitle"),
+        question.as_str(),
+        slug.as_str(),
+        close_time,
+    );
     let category = entry
         .get("categories")
         .and_then(|value| value.as_array())
@@ -82,7 +191,6 @@ fn parse_limitless_market(entry: &Value) -> Option<ExternalMarketSnapshot> {
         .unwrap_or("external")
         .to_ascii_lowercase();
 
-    let close_time = millis_to_secs(parse_u64(entry.get("expirationTimestamp")));
     let resolved = parse_string(entry.get("status")).eq_ignore_ascii_case("resolved")
         || parse_u64(entry.get("winningOutcomeIndex")) <= 1
             && entry.get("winningOutcomeIndex").is_some();
@@ -112,11 +220,7 @@ fn parse_limitless_market(entry: &Value) -> Option<ExternalMarketSnapshot> {
 
     Some(ExternalMarketSnapshot {
         id: format!("limitless:{}", slug),
-        question: if title.is_empty() {
-            slug.clone()
-        } else {
-            title
-        },
+        question,
         description,
         category,
         status: parse_string(entry.get("status")).to_ascii_lowercase(),
@@ -350,4 +454,67 @@ pub async fn fetch_trades(
         provider_market_ref: slug.to_string(),
         is_synthetic: false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_limitless_market_uses_slug_when_title_missing() {
+        let payload = json!({
+            "slug": "btc-above-100k",
+            "description": "",
+            "categories": ["crypto"],
+            "expirationTimestamp": 1893456000000u64,
+            "status": "active",
+            "prices": [0.61, 0.39],
+            "volume": 51234.0
+        });
+
+        let market = parse_limitless_market(&payload).expect("market");
+        assert_eq!(market.question, "btc above 100k");
+        assert!(market
+            .description
+            .contains("Binary prediction market on Limitless"));
+    }
+
+    #[test]
+    fn parse_limitless_market_discards_generic_description() {
+        let payload = json!({
+            "slug": "eth-new-ath",
+            "title": "ETH new ATH",
+            "description": "ETH new ATH",
+            "proxyTitle": "ETH new ATH",
+            "categories": ["crypto"],
+            "expirationTimestamp": 1893456000000u64,
+            "status": "active",
+            "prices": [0.4, 0.6],
+            "volume": 12000.0
+        });
+
+        let market = parse_limitless_market(&payload).expect("market");
+        assert_ne!(market.description, "ETH new ATH");
+        assert!(market
+            .description
+            .contains("Binary prediction market on Limitless"));
+    }
+
+    #[test]
+    fn parse_limitless_market_keeps_first_sentence_only() {
+        let payload = json!({
+            "slug": "sol-through-300",
+            "title": "SOL through 300",
+            "description": "First sentence. Second sentence should not be present.",
+            "categories": ["crypto"],
+            "expirationTimestamp": 1893456000000u64,
+            "status": "active",
+            "prices": [0.5, 0.5],
+            "volume": 9999.0
+        });
+
+        let market = parse_limitless_market(&payload).expect("market");
+        assert_eq!(market.description, "First sentence.");
+    }
 }

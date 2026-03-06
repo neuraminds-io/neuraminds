@@ -1,189 +1,86 @@
-'use client';
+import MarketsClient from './MarketsClient';
+import {
+  normalizeBaseMarketsResponse,
+  type BaseMarketsResponse,
+} from '@/lib/api';
+import type { Market, PaginatedResponse } from '@/types';
 
-import { Suspense, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Flame, Clock } from 'lucide-react';
-import { Header, BottomNav } from '@/components/layout';
-import { MarketList } from '@/components/market';
-import { Skeleton } from '@/components/ui';
-import { useMarkets } from '@/hooks';
-import { cn } from '@/lib/utils';
-import { CATEGORIES } from '@/lib/constants';
-import type { MarketFilters } from '@/types';
-
-type SortTab = 'trending' | 'new' | 'ending';
-type SourceTab = 'all' | 'internal' | 'limitless' | 'polymarket';
-
-function MarketsContent() {
-  const searchParams = useSearchParams();
-  const initialCategory = searchParams.get('category') || 'All';
-
-  const [category, setCategory] = useState(
-    initialCategory.charAt(0).toUpperCase() + initialCategory.slice(1)
-  );
-  const [sortTab, setSortTab] = useState<SortTab>('trending');
-  const [sourceTab, setSourceTab] = useState<SourceTab>('all');
-
-  const filters: MarketFilters = {
-    source: sourceTab,
-    category: category === 'All' ? undefined : category.toLowerCase(),
-    sort: sortTab === 'trending' ? 'volume' : sortTab === 'new' ? 'newest' : 'ending',
-    limit: 50,
-  };
-
-  const { data, isLoading, error } = useMarkets(filters);
-  const markets = data?.data || [];
-  const errorMessage = error instanceof Error ? error.message : null;
-
-  return (
-    <div className="min-h-screen bg-bg-base">
-      <Header />
-      {/* Category Filter Bar */}
-      <div className="sticky top-14 z-40 bg-bg-primary border-b border-border">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
-          <div className="flex items-center gap-4 py-3 overflow-x-auto scrollbar-hide">
-            {/* Sort tabs */}
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <button
-                onClick={() => setSortTab('trending')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5  text-sm font-medium transition-colors cursor-pointer',
-                  sortTab === 'trending'
-                    ? 'bg-accent text-white'
-                    : 'text-text-secondary hover:bg-bg-hover'
-                )}
-              >
-                <Flame className="w-3.5 h-3.5" />
-                Trending
-              </button>
-              <button
-                onClick={() => setSortTab('new')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5  text-sm font-medium transition-colors cursor-pointer',
-                  sortTab === 'new'
-                    ? 'bg-accent text-white'
-                    : 'text-text-secondary hover:bg-bg-hover'
-                )}
-              >
-                <Clock className="w-3.5 h-3.5" />
-                New
-              </button>
-              <button
-                onClick={() => setSortTab('ending')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5  text-sm font-medium transition-colors cursor-pointer',
-                  sortTab === 'ending'
-                    ? 'bg-accent text-white'
-                    : 'text-text-secondary hover:bg-bg-hover'
-                )}
-              >
-                <Clock className="w-3.5 h-3.5" />
-                Ending Soon
-              </button>
-            </div>
-
-            <div className="w-px h-5 bg-border flex-shrink-0" />
-
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {(['all', 'internal', 'limitless', 'polymarket'] as SourceTab[]).map((source) => (
-                <button
-                  key={source}
-                  onClick={() => setSourceTab(source)}
-                  className={cn(
-                    'px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors cursor-pointer border',
-                    sourceTab === source
-                      ? 'border-accent text-accent'
-                      : 'border-border text-text-secondary hover:border-border-hover'
-                  )}
-                >
-                  {source.toUpperCase()}
-                </button>
-              ))}
-            </div>
-
-            <div className="w-px h-5 bg-border flex-shrink-0" />
-
-            {/* Category pills */}
-            <div className="flex items-center gap-1.5">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setCategory(cat)}
-                  className={cn(
-                    'px-3 py-1.5  text-sm font-medium whitespace-nowrap transition-colors cursor-pointer',
-                    category === cat
-                      ? 'bg-bg-tertiary text-text-primary'
-                      : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
-                  )}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-semibold text-text-primary">
-            {category === 'All' ? 'All Markets' : category}
-          </h1>
-          <span className="text-sm text-text-muted">
-            {data?.total || 0} markets
-          </span>
-        </div>
-
-        {errorMessage && (
-          <div className="mb-4 p-3 border border-ask/20 bg-ask/10 text-ask text-sm">
-            {errorMessage}
-          </div>
-        )}
-
-        <MarketList
-          markets={markets}
-          isLoading={isLoading}
-          columns={4}
-          emptyMessage="No markets found in this category"
-        />
-      </div>
-
-      <BottomNav />
-    </div>
-  );
+interface MarketsPageProps {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }
 
-function MarketsLoading() {
-  return (
-    <div className="min-h-screen bg-bg-base">
-      <Header />
-      <div className="sticky top-14 z-40 bg-bg-primary border-b border-border">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-3">
-          <div className="flex gap-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-8 w-20 " />
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
-        <Skeleton className="h-8 w-48 mb-6" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-40 " />
-          ))}
-        </div>
-      </div>
-      <BottomNav />
-    </div>
-  );
+export const revalidate = 5;
+
+function getApiBases(): string[] {
+  const primary = process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:8080/v1';
+  const fallback = process.env.NEXT_PUBLIC_API_FALLBACK_URL?.trim() || '';
+  return [...new Set([primary, fallback].filter(Boolean))];
 }
 
-export default function MarketsPage() {
+function normalizeCategory(input: string | string[] | undefined): string {
+  const value = Array.isArray(input) ? input[0] : input;
+  return value || 'All';
+}
+
+async function fetchMarketsFromBase(base: string): Promise<PaginatedResponse<Market> | null> {
+  const query = new URLSearchParams({
+    limit: '50',
+    offset: '0',
+    source: 'all',
+    tradable: 'all',
+  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
+  try {
+    const res = await fetch(`${base}/evm/markets?${query.toString()}`, {
+      method: 'GET',
+      next: { revalidate: 5 },
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as BaseMarketsResponse;
+    if (!Array.isArray(payload.markets)) return null;
+    return normalizeBaseMarketsResponse(payload);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchInitialMarkets(): Promise<PaginatedResponse<Market> | null> {
+  const bases = getApiBases();
+  if (bases.length === 0) return null;
+
+  const attempts = bases.map(async (base) => {
+    const payload = await fetchMarketsFromBase(base);
+    if (!payload || payload.data.length === 0) {
+      throw new Error(`Empty markets payload from ${base}`);
+    }
+    return payload;
+  });
+
+  try {
+    return await Promise.any(attempts);
+  } catch {
+    for (const base of bases) {
+      const payload = await fetchMarketsFromBase(base);
+      if (payload && payload.data.length > 0) {
+        return payload;
+      }
+    }
+    return null;
+  }
+}
+
+export default async function MarketsPage({ searchParams }: MarketsPageProps) {
+  const params = searchParams ? await searchParams : {};
+  const initialMarkets = await fetchInitialMarkets();
+
   return (
-    <Suspense fallback={<MarketsLoading />}>
-      <MarketsContent />
-    </Suspense>
+    <MarketsClient
+      initialCategory={normalizeCategory(params.category)}
+      initialMarkets={initialMarkets}
+    />
   );
 }

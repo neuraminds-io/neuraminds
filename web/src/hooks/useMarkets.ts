@@ -2,15 +2,25 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { MarketFilters, Outcome, PaginatedResponse, Market } from '@/types';
 
-export function useMarkets(filters?: MarketFilters) {
+interface UseMarketsOptions {
+  initialData?: PaginatedResponse<Market>;
+}
+
+export function useMarkets(filters?: MarketFilters, options?: UseMarketsOptions) {
   return useQuery({
     queryKey: ['markets', filters, 'base-api'],
+    initialData: options?.initialData,
+    placeholderData: (previousData) => previousData,
+    staleTime: options?.initialData ? 15000 : 10000,
+    refetchOnMount: options?.initialData ? false : true,
+    refetchOnWindowFocus: false,
     queryFn: async (): Promise<PaginatedResponse<Market>> => {
       const response = await api.getBaseMarkets({
         limit: filters?.limit || 50,
         offset: filters?.offset || 0,
         source: filters?.source || 'all',
         tradable: filters?.tradable || 'all',
+        includeLowLiquidity: filters?.includeLowLiquidity,
       });
 
       let data = [...response.data];

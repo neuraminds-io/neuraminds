@@ -224,6 +224,7 @@ export interface PaginatedResponse<T> {
 export interface MarketFilters {
   source?: MarketSource;
   tradable?: TradableFilter;
+  includeLowLiquidity?: boolean;
   status?: MarketStatus;
   category?: string;
   limit?: number;

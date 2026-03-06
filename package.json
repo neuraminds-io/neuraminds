@@ -53,6 +53,10 @@
     "agents:executor": "bash scripts/base-agent-executor.sh --network mainnet",
     "agents:executor:sepolia": "bash scripts/base-agent-executor.sh --network sepolia",
     "agents:executor:dry": "bash scripts/base-agent-executor.sh --network mainnet --dry-run",
+    "paper-cohort:start": "node scripts/paper-cohort-start.mjs",
+    "paper-cohort:tick": "node scripts/paper-cohort-tick.mjs",
+    "paper-cohort:run": "node scripts/paper-cohort-run.mjs",
+    "paper-cohort:report": "node scripts/paper-cohort-report.mjs",
     "matcher:worker": "bash scripts/base-matcher-worker.sh --network mainnet",
     "matcher:worker:sepolia": "bash scripts/base-matcher-worker.sh --network sepolia",
     "matcher:worker:dry": "bash scripts/base-matcher-worker.sh --network mainnet --dry-run --once",
@@ -98,6 +102,7 @@
     "@xmtp/agent-sdk": "^2.2.0",
     "express": "^5.2.1",
     "http-proxy-middleware": "^3.0.5",
+    "viem": "^2.39.3",
     "zod": "^3.25.76"
   }
 }

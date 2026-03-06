@@ -11,7 +11,14 @@ export function useBaseWallet() {
   const { disconnect } = useDisconnect();
   const { switchChainAsync, isPending: switchPending } = useSwitchChain();
 
-  const preferredConnector = useMemo(() => connectors[0], [connectors]);
+  const preferredConnector = useMemo(() => {
+    if (connectors.length === 0) return undefined;
+    return (
+      connectors.find((connector) =>
+        connector.name.toLowerCase().includes('metamask')
+      ) || connectors[0]
+    );
+  }, [connectors]);
 
   const connect = async () => {
     const connector = preferredConnector;

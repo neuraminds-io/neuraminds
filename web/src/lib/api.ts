@@ -32,7 +32,8 @@ import type {
 } from '@/types';
 import { CURATED_MARKETS_BY_ID } from '@/lib/curatedMarkets';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/v1';
+const PRIMARY_API_BASE = process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:8080/v1';
+const FALLBACK_API_BASE = process.env.NEXT_PUBLIC_API_FALLBACK_URL?.trim() || '';
 
 export interface BaseTokenState {
   chain_id: number;
@@ -53,7 +54,7 @@ export interface BaseValidationStatus {
   source: string;
 }
 
-interface BaseMarketSnapshot {
+export interface BaseMarketSnapshot {
   id: string;
   question_hash: string;
   question: string;
@@ -77,7 +78,7 @@ interface BaseMarketSnapshot {
   outcomes?: Array<{ label: string; probability: number }>;
 }
 
-interface BaseMarketsResponse {
+export interface BaseMarketsResponse {
   markets: BaseMarketSnapshot[];
   total: number;
   limit: number;
@@ -396,6 +397,23 @@ function mapBaseSnapshotToMarket(snapshot: BaseMarketSnapshot): Market {
   };
 }
 
+export function normalizeBaseMarketsResponse(
+  response: BaseMarketsResponse
+): PaginatedResponse<Market> {
+  const data = response.markets.map(mapBaseSnapshotToMarket);
+  const total = toNumber(response.total, data.length);
+  const limit = toNumber(response.limit, data.length);
+  const offset = toNumber(response.offset, 0);
+
+  return {
+    data,
+    total,
+    limit,
+    offset,
+    hasMore: offset + limit < total,
+  };
+}
+
 function normalizeOutcome(value: unknown): Outcome {
   return value === 'no' ? 'no' : 'yes';
 }
@@ -520,10 +538,45 @@ class ApiClient {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
-    const res = await fetch(`${API_BASE}${path}`, {
+    const method = String(options.method || 'GET').toUpperCase();
+    const canUseFallback =
+      method === 'GET' &&
+      !this.accessToken &&
+      !!FALLBACK_API_BASE &&
+      FALLBACK_API_BASE !== PRIMARY_API_BASE;
+    const requestOptions: RequestInit = {
       ...options,
       headers,
-    });
+    };
+
+    const fetchFromBase = async (base: string) => {
+      return fetch(`${base}${path}`, requestOptions);
+    };
+
+    let res: Response;
+    try {
+      res = await fetchFromBase(PRIMARY_API_BASE);
+    } catch (error) {
+      if (!canUseFallback) {
+        throw error;
+      }
+      res = await fetchFromBase(FALLBACK_API_BASE);
+    }
+
+    if (
+      canUseFallback &&
+      res.status >= 500 &&
+      PRIMARY_API_BASE !== FALLBACK_API_BASE
+    ) {
+      try {
+        const fallback = await fetchFromBase(FALLBACK_API_BASE);
+        if (fallback.ok || fallback.status < 500) {
+          res = fallback;
+        }
+      } catch {
+        // Keep primary response path when fallback is unreachable.
+      }
+    }
 
     // Handle 401 by attempting token refresh
     if (res.status === 401 && !skipRefresh && this.accessToken) {
@@ -712,21 +765,11 @@ class ApiClient {
     offset?: number;
     source?: 'all' | 'internal' | 'limitless' | 'polymarket';
     tradable?: 'all' | 'user' | 'agent';
+    includeLowLiquidity?: boolean;
   }): Promise<PaginatedResponse<Market>> {
     const query = this.buildQuery(params || {});
     const response = await this.request<BaseMarketsResponse>(`/evm/markets${query}`);
-    const data = response.markets.map(mapBaseSnapshotToMarket);
-    const total = toNumber(response.total, data.length);
-    const limit = toNumber(response.limit, data.length);
-    const offset = toNumber(response.offset, 0);
-
-    return {
-      data,
-      total,
-      limit,
-      offset,
-      hasMore: offset + limit < total,
-    };
+    return normalizeBaseMarketsResponse(response);
   }
 
   async getBaseOrderBook(

@@ -1,4 +1,11 @@
 services:
+  - type: keyvalue
+    name: neuraminds-redis
+    region: singapore
+    plan: starter
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
   - type: web
     name: neuraminds-api
     runtime: docker
@@ -15,7 +22,7 @@ services:
       - key: REDIS_URL
         fromService:
           name: neuraminds-redis
-          type: redis
+          type: keyvalue
           property: connectionString
       - key: ENVIRONMENT
         value: production
@@ -25,6 +32,26 @@ services:
         value: "8080"
       - key: JWT_SECRET
         generateValue: true
+      - key: EXTERNAL_MARKETS_ENABLED
+        value: "true"
+      - key: EXTERNAL_TRADING_ENABLED
+        value: "true"
+      - key: EXTERNAL_AGENTS_ENABLED
+        value: "true"
+      - key: EXTERNAL_EXECUTION_MODE
+        value: paper
+      - key: ADMIN_WALLETS
+        sync: false
+      - key: EXTERNAL_CREDENTIALS_MASTER_KEY
+        sync: false
+      - key: EXTERNAL_CREDENTIALS_KEY_ID
+        value: v1
+      - key: PAPER_HOLD_DURATION_SECONDS
+        value: "3600"
+      - key: PAPER_FEE_BPS
+        value: "30"
+      - key: PAPER_RUNNER_SCAN_LIMIT
+        value: "200"
       - key: EVM_ENABLED
         value: "true"
       - key: EVM_READS_ENABLED
@@ -35,15 +62,74 @@ services:
         value: https://mainnet.base.org
       - key: BASE_CHAIN_ID
         value: "8453"
+      - key: LIMITLESS_API_BASE
+        value: https://api.limitless.exchange
+      - key: POLYMARKET_GAMMA_API_BASE
+        value: https://gamma-api.polymarket.com
+      - key: POLYMARKET_CLOB_API_BASE
+        value: https://clob.polymarket.com
       - key: CORS_ORIGINS
         value: https://neuraminds.io,https://app.neuraminds.io
 
+  - type: web
+    name: neuraminds-web
+    runtime: node
+    rootDir: web
+    region: singapore
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_WS_URL
+        sync: false
+      - key: NEXT_PUBLIC_SITE_URL
+        value: https://neuraminds.io
+      - key: NEXT_PUBLIC_DISABLE_PWA
+        value: "false"
+      - key: NEXT_PUBLIC_BASE_RPC_URL
+        value: https://mainnet.base.org
+      - key: NEXT_PUBLIC_BASE_CHAIN_ID
+        value: "8453"
+      - key: NEXT_PUBLIC_SIWE_DOMAIN
+        value: neuraminds.io
+      - key: NEXT_PUBLIC_ADMIN_WALLETS
+        sync: false
+      - key: AUTH_ALLOWED_ORIGINS
+        value: https://neuraminds.io
+
+  - type: cron
+    name: neuraminds-paper-cohort-tick
+    runtime: node
+    region: singapore
+    plan: starter
+    schedule: "* * * * *"
+    buildCommand: npm ci
+    startCommand: node scripts/paper-cohort-tick.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PAPER_COHORT_API_URL
+        sync: false
+      - key: PAPER_COHORT_ADMIN_PRIVATE_KEY
+        sync: false
+      - key: PAPER_COHORT_SIWE_DOMAIN
+        value: neuraminds.io
+      - key: PAPER_COHORT_CHAIN_ID
+        value: "8453"
+      - key: PAPER_RUNNER_TICK_LIMIT
+        value: "200"
+      - key: PAPER_RUNNER_COUNTRY_CODE
+        sync: false
+      - key: NODE_ENV
+        value: production
 
 databases:
   - name: neuraminds-db
     plan: starter
     region: singapore
     postgresMajorVersion: "16"
-
-# Note: Redis requires paid plan on Render
-# For free tier, use external Redis (e.g., Upstash)

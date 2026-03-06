@@ -438,13 +438,13 @@ pub fn extract_jwt_user(
 }
 
 async fn determine_user_role(wallet: &str, _state: &web::Data<Arc<AppState>>) -> UserRole {
-    let keeper_addresses: Vec<&str> = vec![];
-    let admin_addresses: Vec<&str> = vec![];
+    determine_user_role_from_allowlists(wallet, &_state.config.admin_wallets)
+}
 
-    if admin_addresses.contains(&wallet) {
+fn determine_user_role_from_allowlists(wallet: &str, admin_wallets: &[String]) -> UserRole {
+    let normalized = wallet.trim().to_ascii_lowercase();
+    if admin_wallets.iter().any(|entry| entry == &normalized) {
         UserRole::Admin
-    } else if keeper_addresses.contains(&wallet) {
-        UserRole::Keeper
     } else {
         UserRole::User
     }
@@ -785,5 +785,25 @@ mod tests {
             OffsetDateTime::now_utc() - time::Duration::seconds(601),
         );
         assert!(validate_solana_signin_message(message.as_str(), wallet, domain).is_err());
+    }
+
+    #[test]
+    fn test_determine_user_role_from_allowlists_grants_admin() {
+        let role = determine_user_role_from_allowlists(
+            "0x1111111111111111111111111111111111111111",
+            &["0x1111111111111111111111111111111111111111".to_string()],
+        );
+
+        assert_eq!(role, UserRole::Admin);
+    }
+
+    #[test]
+    fn test_determine_user_role_from_allowlists_defaults_to_user() {
+        let role = determine_user_role_from_allowlists(
+            "0x2222222222222222222222222222222222222222",
+            &["0x1111111111111111111111111111111111111111".to_string()],
+        );
+
+        assert_eq!(role, UserRole::User);
     }
 }

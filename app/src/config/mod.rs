@@ -9,6 +9,37 @@ fn is_valid_hex_address(value: &str) -> bool {
     trimmed[2..].chars().all(|ch| ch.is_ascii_hexdigit())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExternalExecutionMode {
+    Live,
+    Paper,
+}
+
+impl ExternalExecutionMode {
+    fn from_env(raw: Option<String>) -> Self {
+        match raw
+            .unwrap_or_else(|| "live".to_string())
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "paper" => Self::Paper,
+            _ => Self::Live,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Live => "live",
+            Self::Paper => "paper",
+        }
+    }
+
+    pub fn is_paper(self) -> bool {
+        matches!(self, Self::Paper)
+    }
+}
+
 #[derive(Clone)]
 pub struct AppConfig {
     pub host: String,
@@ -62,6 +93,7 @@ pub struct AppConfig {
     pub external_markets_enabled: bool,
     pub external_trading_enabled: bool,
     pub external_agents_enabled: bool,
+    pub external_execution_mode: ExternalExecutionMode,
     pub limitless_enabled: bool,
     pub polymarket_enabled: bool,
     pub external_credentials_master_key: String,
@@ -71,7 +103,11 @@ pub struct AppConfig {
     pub polymarket_clob_api_base: String,
     pub polygon_rpc_url: String,
     pub sanctions_blocked_addresses: Vec<String>,
+    pub admin_wallets: Vec<String>,
     pub admin_control_key: String,
+    pub paper_hold_duration_seconds: u64,
+    pub paper_fee_bps: u64,
+    pub paper_runner_scan_limit: u64,
     pub matcher_enabled: bool,
     pub matcher_max_fill_size: u64,
     pub matcher_rate_limit_per_market: u64,
@@ -219,6 +255,8 @@ impl AppConfig {
             .unwrap_or_else(|_| "false".to_string())
             .to_lowercase()
             == "true";
+        let external_execution_mode =
+            ExternalExecutionMode::from_env(env::var("EXTERNAL_EXECUTION_MODE").ok());
         let limitless_enabled = env::var("LIMITLESS_ENABLED")
             .unwrap_or_else(|_| "true".to_string())
             .to_lowercase()
@@ -233,6 +271,7 @@ impl AppConfig {
         let external_credentials_key_id =
             env::var("EXTERNAL_CREDENTIALS_KEY_ID").unwrap_or_else(|_| "v1".to_string());
         if (external_trading_enabled || external_agents_enabled)
+            && external_execution_mode == ExternalExecutionMode::Live
             && !is_development
             && external_credentials_master_key.trim().is_empty()
         {
@@ -353,6 +392,7 @@ impl AppConfig {
             external_markets_enabled,
             external_trading_enabled,
             external_agents_enabled,
+            external_execution_mode,
             limitless_enabled,
             polymarket_enabled,
             external_credentials_master_key,
@@ -371,7 +411,25 @@ impl AppConfig {
                 .map(|s| s.trim().to_ascii_lowercase())
                 .filter(|s| is_valid_hex_address(s))
                 .collect(),
+            admin_wallets: env::var("ADMIN_WALLETS")
+                .unwrap_or_else(|_| "".to_string())
+                .split(',')
+                .map(|s| s.trim().to_ascii_lowercase())
+                .filter(|s| is_valid_hex_address(s))
+                .collect(),
             admin_control_key: env::var("ADMIN_CONTROL_KEY").unwrap_or_else(|_| "".to_string()),
+            paper_hold_duration_seconds: env::var("PAPER_HOLD_DURATION_SECONDS")
+                .unwrap_or_else(|_| "3600".to_string())
+                .parse()
+                .expect("PAPER_HOLD_DURATION_SECONDS must be a number"),
+            paper_fee_bps: env::var("PAPER_FEE_BPS")
+                .unwrap_or_else(|_| "30".to_string())
+                .parse()
+                .expect("PAPER_FEE_BPS must be a number"),
+            paper_runner_scan_limit: env::var("PAPER_RUNNER_SCAN_LIMIT")
+                .unwrap_or_else(|_| "200".to_string())
+                .parse()
+                .expect("PAPER_RUNNER_SCAN_LIMIT must be a number"),
             matcher_enabled: env::var("MATCHER_ENABLED")
                 .unwrap_or_else(|_| "true".to_string())
                 .to_lowercase()
@@ -456,6 +514,7 @@ mod tests {
             "EXTERNAL_MARKETS_ENABLED",
             "EXTERNAL_TRADING_ENABLED",
             "EXTERNAL_AGENTS_ENABLED",
+            "EXTERNAL_EXECUTION_MODE",
             "LIMITLESS_ENABLED",
             "POLYMARKET_ENABLED",
             "EXTERNAL_CREDENTIALS_MASTER_KEY",
@@ -465,7 +524,11 @@ mod tests {
             "POLYMARKET_CLOB_API_BASE",
             "POLYGON_RPC_URL",
             "SANCTIONS_BLOCKED_ADDRESSES",
+            "ADMIN_WALLETS",
             "ADMIN_CONTROL_KEY",
+            "PAPER_HOLD_DURATION_SECONDS",
+            "PAPER_FEE_BPS",
+            "PAPER_RUNNER_SCAN_LIMIT",
             "MATCHER_ENABLED",
             "MATCHER_MAX_FILL_SIZE",
             "MATCHER_RATE_LIMIT_PER_MARKET",
@@ -578,6 +641,40 @@ mod tests {
 
             let config = AppConfig::from_env();
             assert!(config.is_development);
+        });
+    }
+
+    #[test]
+    fn test_paper_execution_mode_parsing() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "development");
+            std::env::set_var("EXTERNAL_EXECUTION_MODE", "paper");
+
+            let config = AppConfig::from_env();
+
+            assert_eq!(config.external_execution_mode, ExternalExecutionMode::Paper);
+            assert_eq!(config.external_execution_mode.as_str(), "paper");
+        });
+    }
+
+    #[test]
+    fn test_admin_wallets_parsing() {
+        with_clean_env(|| {
+            std::env::set_var("ENVIRONMENT", "development");
+            std::env::set_var(
+                "ADMIN_WALLETS",
+                "0x1111111111111111111111111111111111111111,invalid,0x2222222222222222222222222222222222222222",
+            );
+
+            let config = AppConfig::from_env();
+
+            assert_eq!(config.admin_wallets.len(), 2);
+            assert!(config
+                .admin_wallets
+                .contains(&"0x1111111111111111111111111111111111111111".to_string()));
+            assert!(config
+                .admin_wallets
+                .contains(&"0x2222222222222222222222222222222222222222".to_string()));
         });
     }
 }

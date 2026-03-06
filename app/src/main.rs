@@ -522,6 +522,14 @@ async fn main() -> std::io::Result<()> {
                                 web::post().to(api::external::create_external_agent),
                             )
                             .route(
+                                "/agents/performance",
+                                web::get().to(api::external::get_external_agents_performance),
+                            )
+                            .route(
+                                "/agents/runner/tick",
+                                web::post().to(api::external::run_external_agents_tick),
+                            )
+                            .route(
                                 "/agents/{agent_id}",
                                 web::patch().to(api::external::update_external_agent),
                             )

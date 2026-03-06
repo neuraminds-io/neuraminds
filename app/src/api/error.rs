@@ -86,6 +86,15 @@ impl ApiError {
             details,
         }
     }
+
+    pub fn legal_restricted(code: &str, message: &str, details: Option<serde_json::Value>) -> Self {
+        Self {
+            code: code.to_string(),
+            message: message.to_string(),
+            status: 451,
+            details,
+        }
+    }
 }
 
 impl fmt::Display for ApiError {
@@ -111,6 +120,8 @@ impl ResponseError for ApiError {
             403 => HttpResponse::Forbidden().json(body),
             404 => HttpResponse::NotFound().json(body),
             409 => HttpResponse::Conflict().json(body),
+            451 => HttpResponse::build(actix_web::http::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS)
+                .json(body),
             429 => HttpResponse::TooManyRequests().json(body),
             _ => HttpResponse::InternalServerError().json(body),
         }
@@ -208,6 +219,14 @@ mod tests {
     }
 
     #[test]
+    fn test_legal_restricted_error() {
+        let err = ApiError::legal_restricted("REGION_PROVIDER_RESTRICTED", "blocked", None);
+        assert_eq!(err.code, "REGION_PROVIDER_RESTRICTED");
+        assert_eq!(err.message, "blocked");
+        assert_eq!(err.status, 451);
+    }
+
+    #[test]
     fn test_display_trait() {
         let err = ApiError::bad_request("TEST_CODE", "Test message");
         let display = format!("{}", err);
@@ -242,8 +261,9 @@ mod tests {
             ApiError::internal(""),
             ApiError::rate_limited(0),
             ApiError::conflict("", ""),
+            ApiError::legal_restricted("REGION_PROVIDER_RESTRICTED", "", None),
         ];
         let statuses: Vec<u16> = errors.iter().map(|e| e.status).collect();
-        assert_eq!(statuses, [400, 401, 403, 404, 500, 429, 409]);
+        assert_eq!(statuses, [400, 401, 403, 404, 500, 429, 409, 451]);
     }
 }

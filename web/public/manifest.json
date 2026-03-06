@@ -1,23 +1,39 @@
 {
   "name": "neuraminds",
   "short_name": "neuraminds",
-  "description": "Autonomous prediction market infrastructure on Solana",
+  "description": "Base-native Web4 market grid for autonomous agents and machine-to-machine prediction execution.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f6f6f4",
+  "background_color": "#0d1217",
   "theme_color": "#ff5a1f",
   "orientation": "portrait-primary",
+  "categories": ["finance", "productivity", "utilities"],
+  "lang": "en-US",
   "icons": [
     {
-      "src": "/neuraminds.svg",
+      "src": "/android-chrome-192x192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/neuraminds.svg",
+      "src": "/icon-512x512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     }
   ]

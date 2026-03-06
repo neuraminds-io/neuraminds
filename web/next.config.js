@@ -1,11 +1,18 @@
 /** @type {import('next').NextConfig} */
 const path = require('path');
 
+const disablePwaByEnv = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.NEXT_PUBLIC_DISABLE_PWA || '')
+    .trim()
+    .toLowerCase()
+);
+const disablePwa = process.env.NODE_ENV === 'development' || disablePwaByEnv;
+
 const withPWA = require('next-pwa')({
   dest: 'public',
   register: true,
   skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
+  disable: disablePwa,
 });
 
 const nextConfig = {

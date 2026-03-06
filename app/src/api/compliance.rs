@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::api::ApiError;
 use crate::middleware;
 use crate::services::database::ComplianceDecisionEntry;
+use crate::services::provider_rails::{build_compliance_profile, ProviderCapabilities};
 use crate::AppState;
 
 #[derive(Debug, Serialize)]
@@ -13,6 +14,11 @@ pub struct CompliancePolicyResponse {
     pub mode: String,
     pub blocked_countries: Vec<String>,
     pub writes_restricted: bool,
+    pub country: Option<String>,
+    pub region_class: String,
+    pub routing_mode: String,
+    pub rails: std::collections::BTreeMap<String, ProviderCapabilities>,
+    pub legacy_close_only: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,8 +59,10 @@ fn ensure_admin(req: &HttpRequest, state: &AppState) -> Result<(), ApiError> {
 }
 
 pub async fn get_compliance_policy(
+    req: HttpRequest,
     _state: web::Data<Arc<AppState>>,
 ) -> Result<impl Responder, ApiError> {
+    let rails_profile = build_compliance_profile(&req);
     let blocked_countries = middleware::blocked_country_codes()
         .into_iter()
         .map(|value| value.to_string())
@@ -64,6 +72,11 @@ pub async fn get_compliance_policy(
         mode: "us_restricted_geofence".to_string(),
         blocked_countries,
         writes_restricted: true,
+        country: rails_profile.country,
+        region_class: rails_profile.region_class,
+        routing_mode: rails_profile.mode,
+        rails: rails_profile.rails,
+        legacy_close_only: rails_profile.legacy_close_only,
     }))
 }
 

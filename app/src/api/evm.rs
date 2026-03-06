@@ -10,7 +10,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::api::ApiError;
 use crate::services::database::PayoutJobRecord;
 use crate::services::external::types::ExternalMarketId;
-use crate::services::external::{self, ExternalMarketSource, TradableFilter};
+use crate::services::external::{
+    self, ExternalMarketSource, ExternalMarketsRequest, TradableFilter,
+};
+use crate::services::provider_rails::{evaluate_provider_access, ProviderRailAction, RailProvider};
 use crate::services::x402::{self, X402Resource};
 use crate::AppState;
 
@@ -43,6 +46,7 @@ const ERC8004_VALIDATION_RESPONSE_SELECTOR: &str = "0x30e5993a";
 const ORDER_FILLED_TOPIC: &str =
     "0x5aac01386940f75e601757cfe5dc1d4ab2bac84f98d30664486114a8abb38a45";
 const MAX_MARKETS_PAGE_SIZE: u64 = 200;
+const MAX_EXTERNAL_MARKETS_FETCH_WINDOW: u64 = 500;
 const MAX_ORDERBOOK_DEPTH: u64 = 100;
 const MAX_TRADES_PAGE_SIZE: u64 = 200;
 const MAX_AGENTS_PAGE_SIZE: u64 = 200;
@@ -68,6 +72,8 @@ pub struct BaseMarketsQuery {
     pub offset: Option<u64>,
     pub source: Option<String>,
     pub tradable: Option<String>,
+    #[serde(rename = "includeLowLiquidity")]
+    pub include_low_liquidity: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -145,6 +151,14 @@ pub struct BaseMarketsResponse {
     pub limit: u64,
     pub offset: u64,
     pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warnings: Option<Vec<BaseFeedWarning>>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct BaseFeedWarning {
+    pub source: String,
+    pub message: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -666,6 +680,59 @@ fn source_label(source: ExternalMarketSource) -> &'static str {
     }
 }
 
+fn to_rail_provider(provider: external::types::ExternalProvider) -> RailProvider {
+    match provider {
+        external::types::ExternalProvider::Limitless => RailProvider::Limitless,
+        external::types::ExternalProvider::Polymarket => RailProvider::Polymarket,
+    }
+}
+
+fn provider_blocked_error(
+    req: &HttpRequest,
+    provider: RailProvider,
+    action: ProviderRailAction,
+) -> ApiError {
+    let decision = evaluate_provider_access(req, provider, action);
+    ApiError::legal_restricted(
+        "REGION_PROVIDER_RESTRICTED",
+        "provider unavailable in your region for this action",
+        Some(json!({
+            "provider": provider.as_str(),
+            "action": action.as_str(),
+            "country": decision.country,
+            "regionClass": decision.region_class.as_str(),
+            "routingMode": decision.mode.as_str(),
+            "legacyCloseOnly": decision.legacy_close_only,
+            "safeFallbackRestriction": decision.safe_fallback_restriction,
+            "detail": decision.reason
+        })),
+    )
+}
+
+fn ensure_provider_action_allowed(
+    req: &HttpRequest,
+    provider: RailProvider,
+    action: ProviderRailAction,
+) -> Result<(), ApiError> {
+    let decision = evaluate_provider_access(req, provider, action);
+    if decision.allowed {
+        Ok(())
+    } else {
+        Err(provider_blocked_error(req, provider, action))
+    }
+}
+
+fn restriction_warning(source: &str, action: ProviderRailAction) -> BaseFeedWarning {
+    BaseFeedWarning {
+        source: source.to_string(),
+        message: format!(
+            "{} feed omitted by region policy for {}",
+            source,
+            action.as_str()
+        ),
+    }
+}
+
 fn from_external_market(snapshot: external::types::ExternalMarketSnapshot) -> BaseMarketSnapshot {
     BaseMarketSnapshot {
         id: snapshot.id,
@@ -849,6 +916,7 @@ async fn fetch_internal_market_snapshot_by_id(
 
 pub async fn get_base_markets(
     state: web::Data<Arc<AppState>>,
+    req: HttpRequest,
     query: web::Query<BaseMarketsQuery>,
 ) -> Result<impl Responder, ApiError> {
     if !state.config.evm_enabled || !state.config.evm_reads_enabled {
@@ -862,7 +930,13 @@ pub async fn get_base_markets(
     let tradable = TradableFilter::from_query(query.tradable.as_deref())?;
     let limit = query.limit.unwrap_or(50).min(MAX_MARKETS_PAGE_SIZE);
     let offset = query.offset.unwrap_or(0);
+    let include_low_liquidity = query.include_low_liquidity.unwrap_or(false);
+    let external_fetch_window = limit
+        .saturating_add(offset)
+        .clamp(1, MAX_EXTERNAL_MARKETS_FETCH_WINDOW);
+
     let mut markets = Vec::new();
+    let mut warnings: Vec<BaseFeedWarning> = Vec::new();
 
     if matches!(
         source,
@@ -877,8 +951,63 @@ pub async fn get_base_markets(
             | ExternalMarketSource::Limitless
             | ExternalMarketSource::Polymarket
     ) {
-        let external_markets =
-            external::fetch_markets(&state.config, &state.redis, source, tradable, 250, 0).await?;
+        if matches!(source, ExternalMarketSource::Limitless) {
+            ensure_provider_action_allowed(
+                &req,
+                RailProvider::Limitless,
+                ProviderRailAction::Feed,
+            )?;
+        }
+        if matches!(source, ExternalMarketSource::Polymarket) {
+            ensure_provider_action_allowed(
+                &req,
+                RailProvider::Polymarket,
+                ProviderRailAction::Feed,
+            )?;
+        }
+
+        let mut allow_limitless = true;
+        let mut allow_polymarket = true;
+        if matches!(source, ExternalMarketSource::All) {
+            let decision =
+                evaluate_provider_access(&req, RailProvider::Limitless, ProviderRailAction::Feed);
+            if !decision.allowed {
+                allow_limitless = false;
+                warnings.push(restriction_warning("limitless", ProviderRailAction::Feed));
+            } else if decision.would_block {
+                warnings.push(BaseFeedWarning {
+                    source: "limitless".to_string(),
+                    message: "limitless feed is in observe-only regional policy state".to_string(),
+                });
+            }
+
+            let polymarket_decision =
+                evaluate_provider_access(&req, RailProvider::Polymarket, ProviderRailAction::Feed);
+            if !polymarket_decision.allowed {
+                allow_polymarket = false;
+                warnings.push(restriction_warning("polymarket", ProviderRailAction::Feed));
+            } else if polymarket_decision.would_block {
+                warnings.push(BaseFeedWarning {
+                    source: "polymarket".to_string(),
+                    message: "polymarket feed is in observe-only regional policy state".to_string(),
+                });
+            }
+        }
+
+        let external_markets = external::fetch_markets(
+            &state.config,
+            &state.redis,
+            source,
+            tradable,
+            external_fetch_window,
+            0,
+            ExternalMarketsRequest {
+                include_low_liquidity,
+                allow_limitless,
+                allow_polymarket,
+            },
+        )
+        .await?;
         markets.extend(external_markets.into_iter().map(from_external_market));
     }
 
@@ -892,13 +1021,27 @@ pub async fn get_base_markets(
 
     let total = markets.len() as u64;
     if total == 0 || offset >= total {
-        return Ok(HttpResponse::Ok().json(BaseMarketsResponse {
-            markets: vec![],
-            total,
-            limit,
-            offset,
-            source: source_label(source).to_string(),
-        }));
+        return Ok(HttpResponse::Ok()
+            .insert_header((
+                "Cache-Control",
+                "public, max-age=15, stale-while-revalidate=30",
+            ))
+            .insert_header((
+                "Vary",
+                "Accept-Encoding, CF-IPCountry, X-Vercel-IP-Country, X-Country-Code",
+            ))
+            .json(BaseMarketsResponse {
+                markets: vec![],
+                total,
+                limit,
+                offset,
+                source: source_label(source).to_string(),
+                warnings: if warnings.is_empty() {
+                    None
+                } else {
+                    Some(warnings)
+                },
+            }));
     }
 
     let page = markets
@@ -907,17 +1050,32 @@ pub async fn get_base_markets(
         .take(limit as usize)
         .collect::<Vec<_>>();
 
-    Ok(HttpResponse::Ok().json(BaseMarketsResponse {
-        markets: page,
-        total,
-        limit,
-        offset,
-        source: source_label(source).to_string(),
-    }))
+    Ok(HttpResponse::Ok()
+        .insert_header((
+            "Cache-Control",
+            "public, max-age=15, stale-while-revalidate=30",
+        ))
+        .insert_header((
+            "Vary",
+            "Accept-Encoding, CF-IPCountry, X-Vercel-IP-Country, X-Country-Code",
+        ))
+        .json(BaseMarketsResponse {
+            markets: page,
+            total,
+            limit,
+            offset,
+            source: source_label(source).to_string(),
+            warnings: if warnings.is_empty() {
+                None
+            } else {
+                Some(warnings)
+            },
+        }))
 }
 
 pub async fn get_base_market(
     state: web::Data<Arc<AppState>>,
+    req: HttpRequest,
     path: web::Path<String>,
 ) -> Result<impl Responder, ApiError> {
     if !state.config.evm_enabled || !state.config.evm_reads_enabled {
@@ -930,6 +1088,11 @@ pub async fn get_base_market(
     let market_id_raw = path.into_inner();
     if is_external_market_id(&market_id_raw) {
         let external_id = ExternalMarketId::parse(market_id_raw.as_str())?;
+        ensure_provider_action_allowed(
+            &req,
+            to_rail_provider(external_id.provider),
+            ProviderRailAction::MarketData,
+        )?;
         let market = external::fetch_market_by_id(&state.config, &external_id).await?;
         return Ok(HttpResponse::Ok().json(from_external_market(market)));
     }
@@ -1531,6 +1694,11 @@ pub async fn get_base_orderbook(
 
     if is_external_market_id(&market_id_raw) {
         let external_id = ExternalMarketId::parse(market_id_raw.as_str())?;
+        ensure_provider_action_allowed(
+            &req,
+            to_rail_provider(external_id.provider),
+            ProviderRailAction::MarketData,
+        )?;
         let snapshot =
             external::fetch_orderbook(&state.config, &state.redis, &external_id, outcome, depth)
                 .await?;
@@ -1731,6 +1899,11 @@ pub async fn get_base_trades(
 
     if is_external_market_id(&market_id_raw) {
         let external_id = ExternalMarketId::parse(market_id_raw.as_str())?;
+        ensure_provider_action_allowed(
+            &req,
+            to_rail_provider(external_id.provider),
+            ProviderRailAction::MarketData,
+        )?;
         let snapshot = external::fetch_trades(
             &state.config,
             &state.redis,
