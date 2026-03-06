@@ -2826,6 +2826,21 @@ pub async fn run_external_agents_tick(
             }
             Err(err) => {
                 let reason = skip_reason_from_error(&err);
+                log::error!(
+                    "external runner failed agent_id={} provider={} market_id={} strategy={} side={} outcome={} code={} message={} details={}",
+                    agent.id,
+                    agent.provider.as_str(),
+                    agent.market_id,
+                    agent.strategy,
+                    agent.side,
+                    agent.outcome,
+                    err.code,
+                    err.message,
+                    err.details
+                        .as_ref()
+                        .map(Value::to_string)
+                        .unwrap_or_else(|| "null".to_string()),
+                );
                 increment_skip_reason(&mut skips_by_reason, reason.as_str());
                 let run_id = Uuid::new_v4().to_string();
                 insert_external_agent_run(
