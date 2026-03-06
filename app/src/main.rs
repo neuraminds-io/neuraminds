@@ -47,6 +47,20 @@ async fn graceful_shutdown(state: Arc<AppState>) {
     info!("Graceful shutdown complete");
 }
 
+fn is_base_rpc_rate_limited(err: &anyhow::Error) -> bool {
+    err.to_string().contains("429 Too Many Requests")
+}
+
+fn base_indexer_backoff_seconds(rate_limit_streak: u32) -> u64 {
+    match rate_limit_streak {
+        0 => 20,
+        1 => 60,
+        2 => 120,
+        3 => 240,
+        _ => 300,
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
@@ -140,13 +154,27 @@ async fn main() -> std::io::Result<()> {
                     "0x5aac01386940f75e601757cfe5dc1d4ab2bac84f98d30664486114a8abb38a45", // OrderFilled
                     "0x93c1c30a0fa404e7a08a9f6a9d68323786a7e120f3adc0c16eb8855922e35dfa", // Claimed
                 ];
+                let mut rate_limit_streak = 0_u32;
 
                 loop {
                     let latest_block = match rpc.eth_block_number().await {
                         Ok(block) => block,
                         Err(err) => {
-                            warn!("Failed to fetch latest Base block for indexer: {}", err);
-                            tokio::time::sleep(tokio::time::Duration::from_secs(20)).await;
+                            let delay_seconds = if is_base_rpc_rate_limited(&err) {
+                                rate_limit_streak = rate_limit_streak.saturating_add(1);
+                                let delay = base_indexer_backoff_seconds(rate_limit_streak);
+                                warn!(
+                                    "Base RPC rate limited for indexer latest block fetch; backing off {}s (streak={})",
+                                    delay, rate_limit_streak
+                                );
+                                delay
+                            } else {
+                                rate_limit_streak = 0;
+                                warn!("Failed to fetch latest Base block for indexer: {}", err);
+                                base_indexer_backoff_seconds(0)
+                            };
+                            tokio::time::sleep(tokio::time::Duration::from_secs(delay_seconds))
+                                .await;
                             continue;
                         }
                     };
@@ -163,6 +191,7 @@ async fn main() -> std::io::Result<()> {
                         .await
                     {
                         Ok(log_count) => {
+                            rate_limit_streak = 0;
                             let last_synced = indexer.last_synced_block().await;
                             let meta = json!({
                                 "latestBlock": latest_block,
@@ -178,10 +207,24 @@ async fn main() -> std::io::Result<()> {
                             }
                         }
                         Err(err) => {
+                            if is_base_rpc_rate_limited(&err) {
+                                rate_limit_streak = rate_limit_streak.saturating_add(1);
+                                let delay = base_indexer_backoff_seconds(rate_limit_streak);
+                                warn!(
+                                    "Base RPC rate limited during indexer sync; backing off {}s (streak={})",
+                                    delay, rate_limit_streak
+                                );
+                                tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
+                                continue;
+                            }
+                            rate_limit_streak = 0;
                             warn!("EVM indexer sync failed: {}", err);
                         }
                     }
-                    tokio::time::sleep(tokio::time::Duration::from_secs(20)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_secs(
+                        base_indexer_backoff_seconds(0),
+                    ))
+                    .await;
                 }
             });
         }

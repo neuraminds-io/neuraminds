@@ -639,6 +639,28 @@ async fn update_external_agent_schedule(
     Ok(())
 }
 
+async fn deactivate_external_agent(
+    state: &AppState,
+    agent_id: &str,
+    executed_at: chrono::DateTime<Utc>,
+) -> Result<(), ApiError> {
+    sqlx::query(
+        "UPDATE external_agents
+         SET active = FALSE,
+             last_executed_at = $2,
+             next_execution_at = $2,
+             updated_at = NOW()
+         WHERE id = $1",
+    )
+    .bind(agent_id)
+    .bind(executed_at)
+    .execute(state.db.pool())
+    .await
+    .map_err(|err| ApiError::internal(&err.to_string()))?;
+
+    Ok(())
+}
+
 async fn load_credential(
     state: &AppState,
     owner: &str,
@@ -1751,21 +1773,58 @@ async fn execute_paper_agent(
                 }),
             });
         }
+
+        if market_closed {
+            deactivate_external_agent(state, agent.id.as_str(), now).await?;
+            let run_id = Uuid::new_v4().to_string();
+            insert_external_agent_run(
+                state,
+                run_id.as_str(),
+                agent,
+                "paper_closed",
+                None,
+                None,
+                &json!({
+                    "mode": "paper",
+                    "retired": true,
+                    "reason": "market_closed",
+                    "close": close_response
+                }),
+            )
+            .await?;
+
+            return Ok(AgentExecutionOutcome {
+                executed: true,
+                skip_reason: None,
+                run_status: "paper_closed".to_string(),
+                run_id,
+                external_order_id: None,
+                provider_order_id: None,
+                next_execution_at: now,
+                response: json!({
+                    "mode": "paper",
+                    "status": "closed",
+                    "retired": true,
+                    "reason": "market_closed",
+                    "close": close_response
+                }),
+            });
+        }
     }
 
     if market_closed {
         let run_id = Uuid::new_v4().to_string();
-        let next_execution_at = now + Duration::seconds(agent.cadence_seconds.max(1));
-        update_external_agent_schedule(state, agent.id.as_str(), now, next_execution_at).await?;
+        deactivate_external_agent(state, agent.id.as_str(), now).await?;
         insert_external_agent_run(
             state,
             run_id.as_str(),
             agent,
-            "paper_skipped",
+            "paper_retired",
             None,
             Some("market_closed"),
             &json!({
                 "mode": "paper",
+                "retired": true,
                 "reason": "market_closed",
                 "marketQuestion": market.question,
                 "marketStatus": market.status,
@@ -1778,14 +1837,15 @@ async fn execute_paper_agent(
         return Ok(AgentExecutionOutcome {
             executed: false,
             skip_reason: Some("market_closed".to_string()),
-            run_status: "paper_skipped".to_string(),
+            run_status: "paper_retired".to_string(),
             run_id,
             external_order_id: None,
             provider_order_id: None,
-            next_execution_at,
+            next_execution_at: now,
             response: json!({
                 "mode": "paper",
-                "status": "skipped",
+                "status": "retired",
+                "retired": true,
                 "reason": "market_closed"
             }),
         });
