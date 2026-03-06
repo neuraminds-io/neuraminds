@@ -1588,6 +1588,24 @@ async fn open_paper_position(
     })
 }
 
+fn market_is_closed_for_paper_entry(
+    market: &external::types::ExternalMarketSnapshot,
+    now: chrono::DateTime<Utc>,
+) -> bool {
+    if market.resolved {
+        return true;
+    }
+
+    if market.close_time > 0 && market.close_time as i64 <= now.timestamp() {
+        return true;
+    }
+
+    matches!(
+        market.status.trim().to_ascii_lowercase().as_str(),
+        "closed" | "expired" | "resolved"
+    )
+}
+
 async fn execute_paper_agent(
     state: &AppState,
     agent: &ExternalAgentRecord,
@@ -1595,17 +1613,19 @@ async fn execute_paper_agent(
     let now = Utc::now();
     let market_id = ExternalMarketId::parse(agent.market_id.as_str())?;
     let market = external::fetch_market_by_id(&state.config, &market_id).await?;
-    let orderbook = external::fetch_orderbook(
-        &state.config,
-        &state.redis,
-        &market_id,
-        agent.outcome.as_str(),
-        20,
-    )
-    .await?;
+    let market_closed = market_is_closed_for_paper_entry(&market, now);
 
     if let Some(position) = load_open_paper_position(state, agent.id.as_str()).await? {
-        if now < position.hold_until {
+        let orderbook = external::fetch_orderbook(
+            &state.config,
+            &state.redis,
+            &market_id,
+            agent.outcome.as_str(),
+            20,
+        )
+        .await?;
+
+        if !market_closed && now < position.hold_until {
             let fill = simulate_fill(
                 &market,
                 &orderbook,
@@ -1732,6 +1752,53 @@ async fn execute_paper_agent(
             });
         }
     }
+
+    if market_closed {
+        let run_id = Uuid::new_v4().to_string();
+        let next_execution_at = now + Duration::seconds(agent.cadence_seconds.max(1));
+        update_external_agent_schedule(state, agent.id.as_str(), now, next_execution_at).await?;
+        insert_external_agent_run(
+            state,
+            run_id.as_str(),
+            agent,
+            "paper_skipped",
+            None,
+            Some("market_closed"),
+            &json!({
+                "mode": "paper",
+                "reason": "market_closed",
+                "marketQuestion": market.question,
+                "marketStatus": market.status,
+                "marketResolved": market.resolved,
+                "marketCloseTime": market.close_time
+            }),
+        )
+        .await?;
+
+        return Ok(AgentExecutionOutcome {
+            executed: false,
+            skip_reason: Some("market_closed".to_string()),
+            run_status: "paper_skipped".to_string(),
+            run_id,
+            external_order_id: None,
+            provider_order_id: None,
+            next_execution_at,
+            response: json!({
+                "mode": "paper",
+                "status": "skipped",
+                "reason": "market_closed"
+            }),
+        });
+    }
+
+    let orderbook = external::fetch_orderbook(
+        &state.config,
+        &state.redis,
+        &market_id,
+        agent.outcome.as_str(),
+        20,
+    )
+    .await?;
 
     open_paper_position(state, agent, now, &market, &orderbook).await
 }
@@ -3417,4 +3484,71 @@ pub async fn get_external_agents_performance(
         timeline,
         updated_at: Utc::now().to_rfc3339(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::external::types::ExternalOutcome;
+
+    fn sample_market() -> external::types::ExternalMarketSnapshot {
+        external::types::ExternalMarketSnapshot {
+            id: "limitless:test".to_string(),
+            question: "q".to_string(),
+            description: "d".to_string(),
+            category: "c".to_string(),
+            status: "active".to_string(),
+            close_time: 0,
+            resolved: false,
+            outcome: None,
+            yes_price: 0.6,
+            no_price: 0.4,
+            volume: 1000.0,
+            source: "external_limitless".to_string(),
+            provider: "limitless".to_string(),
+            is_external: true,
+            external_url: "https://example.com".to_string(),
+            chain_id: 8453,
+            requires_credentials: false,
+            execution_users: true,
+            execution_agents: true,
+            outcomes: vec![
+                ExternalOutcome {
+                    label: "Yes".to_string(),
+                    probability: 0.6,
+                },
+                ExternalOutcome {
+                    label: "No".to_string(),
+                    probability: 0.4,
+                },
+            ],
+            provider_market_ref: "ref".to_string(),
+        }
+    }
+
+    #[test]
+    fn market_is_closed_for_paper_entry_when_resolved() {
+        let mut market = sample_market();
+        market.resolved = true;
+
+        assert!(market_is_closed_for_paper_entry(&market, Utc::now()));
+    }
+
+    #[test]
+    fn market_is_closed_for_paper_entry_when_close_time_has_passed() {
+        let mut market = sample_market();
+        let now = Utc::now();
+        market.close_time = now.timestamp().saturating_sub(1) as u64;
+
+        assert!(market_is_closed_for_paper_entry(&market, now));
+    }
+
+    #[test]
+    fn market_is_not_closed_for_paper_entry_while_active() {
+        let mut market = sample_market();
+        let now = Utc::now();
+        market.close_time = now.timestamp().saturating_add(60) as u64;
+
+        assert!(!market_is_closed_for_paper_entry(&market, now));
+    }
 }

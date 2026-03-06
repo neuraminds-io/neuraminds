@@ -1,4 +1,4 @@
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::Value;
 
 use crate::api::ApiError;
@@ -169,6 +169,36 @@ fn parse_prices(entry: &Value) -> (f64, f64) {
     (0.5, 0.5)
 }
 
+fn empty_orderbook_snapshot(slug: &str, outcome: &str) -> ExternalOrderBookSnapshot {
+    ExternalOrderBookSnapshot {
+        market_id: format!("limitless:{}", slug),
+        outcome: outcome.to_string(),
+        bids: Vec::new(),
+        asks: Vec::new(),
+        last_updated: now_rfc3339(),
+        source: "external_limitless".to_string(),
+        provider: "limitless".to_string(),
+        chain_id: 8453,
+        provider_market_ref: String::new(),
+        is_synthetic: false,
+    }
+}
+
+fn is_amm_orderbook_response(status: StatusCode, payload: Option<&Value>) -> bool {
+    if status != StatusCode::BAD_REQUEST {
+        return false;
+    }
+
+    let message = payload
+        .and_then(|value| value.get("message"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+
+    message.contains("does not support orderbook") || message.contains("amm market")
+}
+
 fn parse_limitless_market(entry: &Value) -> Option<ExternalMarketSnapshot> {
     let slug = parse_string(entry.get("slug"));
     if slug.is_empty() {
@@ -206,7 +236,18 @@ fn parse_limitless_market(entry: &Value) -> Option<ExternalMarketSnapshot> {
         _ => None,
     };
 
-    let (yes_price, no_price) = parse_prices(entry);
+    let (mut yes_price, mut no_price) = parse_prices(entry);
+    match outcome.as_deref() {
+        Some("yes") if resolved => {
+            yes_price = 1.0;
+            no_price = 0.0;
+        }
+        Some("no") if resolved => {
+            yes_price = 0.0;
+            no_price = 1.0;
+        }
+        _ => {}
+    }
     let volume = parse_f64(entry.get("volume"));
     let outcomes = vec![
         ExternalOutcome {
@@ -341,7 +382,7 @@ pub async fn fetch_market_by_slug(
     let url = format!("{}/markets/{}", api_base.trim_end_matches('/'), slug.trim());
 
     let payload = client
-        .get(url)
+        .get(&url)
         .send()
         .await
         .map_err(|err| api_error("limitless market request failed", err))?
@@ -372,15 +413,37 @@ pub async fn fetch_orderbook(
         slug.trim()
     );
 
-    let payload = client
-        .get(url)
+    let response = client
+        .get(&url)
         .send()
         .await
-        .map_err(|err| api_error("limitless orderbook request failed", err))?
-        .error_for_status()
-        .map_err(|err| api_error("limitless orderbook response failed", err))?
-        .json::<Value>()
+        .map_err(|err| api_error("limitless orderbook request failed", err))?;
+    let status = response.status();
+    let body = response
+        .text()
         .await
+        .map_err(|err| api_error("limitless orderbook response failed", err))?;
+
+    if !status.is_success() {
+        let payload = serde_json::from_str::<Value>(&body).ok();
+        if is_amm_orderbook_response(status, payload.as_ref()) {
+            return Ok(empty_orderbook_snapshot(slug, outcome));
+        }
+
+        let detail = payload
+            .as_ref()
+            .and_then(|value| value.get("message"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| body.trim());
+
+        return Err(api_error(
+            "limitless orderbook response failed",
+            format!("{} for url ({url}): {detail}", status),
+        ));
+    }
+
+    let payload = serde_json::from_str::<Value>(&body)
         .map_err(|err| api_error("limitless orderbook payload invalid", err))?;
 
     let mut bids = parse_orderbook_levels(payload.get("bids"));
@@ -545,5 +608,40 @@ mod tests {
 
         let market = parse_limitless_market(&payload).expect("market");
         assert_eq!(market.description, "First sentence.");
+    }
+
+    #[test]
+    fn parse_limitless_market_uses_winning_outcome_prices() {
+        let payload = json!({
+            "slug": "sol-through-300",
+            "title": "SOL through 300",
+            "categories": ["crypto"],
+            "expirationTimestamp": 1893456000000u64,
+            "status": "resolved",
+            "winningOutcomeIndex": 1u64,
+            "volume": 9999.0
+        });
+
+        let market = parse_limitless_market(&payload).expect("market");
+        assert!(market.resolved);
+        assert_eq!(market.outcome.as_deref(), Some("no"));
+        assert_eq!(market.yes_price, 0.0);
+        assert_eq!(market.no_price, 1.0);
+    }
+
+    #[test]
+    fn identifies_amm_orderbook_response() {
+        let payload = json!({
+            "message": "Market does not support orderbook (AMM market)"
+        });
+
+        assert!(is_amm_orderbook_response(
+            StatusCode::BAD_REQUEST,
+            Some(&payload)
+        ));
+        assert!(!is_amm_orderbook_response(
+            StatusCode::NOT_FOUND,
+            Some(&payload)
+        ));
     }
 }
