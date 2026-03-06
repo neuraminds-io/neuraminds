@@ -8,6 +8,8 @@ use crate::services::external::types::{
     ExternalTradesSnapshot,
 };
 
+const ACTIVE_MARKETS_PAGE_SIZE_MAX: u64 = 25;
+
 fn api_error(prefix: &str, err: impl ToString) -> ApiError {
     ApiError::internal(&format!("{}: {}", prefix, err.to_string()))
 }
@@ -272,33 +274,60 @@ pub async fn fetch_active_markets(
     limit: u64,
     offset: u64,
 ) -> Result<Vec<ExternalMarketSnapshot>, ApiError> {
-    let safe_limit = limit.clamp(1, 250);
-    let page = (offset / safe_limit) + 1;
-    let url = format!(
-        "{}/markets/active?limit={}&page={}",
-        api_base.trim_end_matches('/'),
-        safe_limit,
-        page
-    );
-
-    let payload = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|err| api_error("limitless active markets request failed", err))?
-        .error_for_status()
-        .map_err(|err| api_error("limitless active markets response failed", err))?
-        .json::<Value>()
-        .await
-        .map_err(|err| api_error("limitless active markets payload invalid", err))?;
-
+    let requested = limit.max(1);
+    let page_size = requested.clamp(1, ACTIVE_MARKETS_PAGE_SIZE_MAX);
+    let mut page = (offset / page_size) + 1;
+    let mut skipped = offset % page_size;
     let mut markets = Vec::new();
-    if let Some(data) = payload.get("data").and_then(|value| value.as_array()) {
+
+    while markets.len() < requested as usize {
+        let url = format!(
+            "{}/markets/active?limit={}&page={}",
+            api_base.trim_end_matches('/'),
+            page_size,
+            page
+        );
+
+        let payload = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|err| api_error("limitless active markets request failed", err))?
+            .error_for_status()
+            .map_err(|err| api_error("limitless active markets response failed", err))?
+            .json::<Value>()
+            .await
+            .map_err(|err| api_error("limitless active markets payload invalid", err))?;
+
+        let Some(data) = payload.get("data").and_then(|value| value.as_array()) else {
+            break;
+        };
+
+        if data.is_empty() {
+            break;
+        }
+
+        let mut added_this_page = 0usize;
         for row in data {
+            if skipped > 0 {
+                skipped -= 1;
+                continue;
+            }
+
             if let Some(market) = parse_limitless_market(row) {
                 markets.push(market);
+                added_this_page += 1;
+                if markets.len() >= requested as usize {
+                    break;
+                }
             }
         }
+
+        if data.len() < page_size as usize || added_this_page == 0 {
+            break;
+        }
+
+        page += 1;
     }
 
     Ok(markets)

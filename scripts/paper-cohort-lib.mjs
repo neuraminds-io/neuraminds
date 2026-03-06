@@ -136,13 +136,26 @@ export async function listAgents(token) {
 }
 
 export async function listExecutableMarkets(token) {
-  const payload = await apiGet(
-    "/evm/markets?source=all&tradable=agent&limit=200&offset=0&includeLowLiquidity=true",
-    token,
-  );
-  return (payload?.markets || []).filter(
-    (market) => market.isExternal && market.executionAgents,
-  );
+  const [limitless, polymarket] = await Promise.all([
+    apiGet(
+      "/evm/markets?source=limitless&tradable=agent&limit=25&offset=0&includeLowLiquidity=true",
+      token,
+    ),
+    apiGet(
+      "/evm/markets?source=polymarket&tradable=agent&limit=25&offset=0&includeLowLiquidity=true",
+      token,
+    ),
+  ]);
+
+  return [...(limitless?.markets || []), ...(polymarket?.markets || [])]
+    .map((market) => ({
+      ...market,
+      isExternal: market.isExternal ?? market.is_external ?? false,
+      executionAgents:
+        market.executionAgents ?? market.execution_agents ?? false,
+      executionUsers: market.executionUsers ?? market.execution_users ?? false,
+    }))
+    .filter((market) => market.isExternal && market.executionAgents);
 }
 
 export function probabilityForOutcome(market, outcome) {

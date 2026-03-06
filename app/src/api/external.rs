@@ -1507,6 +1507,22 @@ async fn open_paper_position(
     .await
     .map_err(|err| ApiError::internal(&err.to_string()))?;
 
+    insert_external_agent_run(
+        state,
+        run_id.as_str(),
+        agent,
+        "paper_opened",
+        Some(order_id.as_str()),
+        None,
+        &json!({
+            "mode": "paper",
+            "positionId": position_id,
+            "holdUntil": hold_until.to_rfc3339(),
+            "fill": fill
+        }),
+    )
+    .await?;
+
     sqlx::query(
         "INSERT INTO paper_fills (
             id, run_id, position_id, agent_id, owner, provider, market_id, outcome, side, fill_type,
@@ -1553,21 +1569,6 @@ async fn open_paper_position(
     .await?;
 
     update_external_agent_schedule(state, agent.id.as_str(), now, next_execution_at).await?;
-    insert_external_agent_run(
-        state,
-        run_id.as_str(),
-        agent,
-        "paper_opened",
-        Some(order_id.as_str()),
-        None,
-        &json!({
-            "mode": "paper",
-            "positionId": position_id,
-            "holdUntil": hold_until.to_rfc3339(),
-            "fill": fill
-        }),
-    )
-    .await?;
 
     Ok(AgentExecutionOutcome {
         executed: true,
