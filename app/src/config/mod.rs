@@ -9,6 +9,13 @@ fn is_valid_hex_address(value: &str) -> bool {
     trimmed[2..].chars().all(|ch| ch.is_ascii_hexdigit())
 }
 
+fn parse_csv_env(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(|entry| entry.trim().to_string())
+        .filter(|entry| !entry.is_empty())
+        .collect()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExternalExecutionMode {
     Live,
@@ -53,6 +60,8 @@ pub struct AppConfig {
     pub solana_orderbook_program_id: String,
     pub solana_privacy_program_id: String,
     pub base_rpc_url: String,
+    pub base_rpc_fallback_urls: Vec<String>,
+    pub base_indexer_rpc_url: Option<String>,
     pub base_ws_url: String,
     pub base_chain_id: u64,
     pub siwe_domain: String,
@@ -280,6 +289,22 @@ impl AppConfig {
             );
         }
 
+        let base_rpc_url = env::var("BASE_RPC_URL")
+            .unwrap_or_else(|_| "https://mainnet.base.org".to_string())
+            .trim()
+            .to_string();
+        let base_rpc_fallback_urls = env::var("BASE_RPC_FALLBACK_URLS")
+            .ok()
+            .map(|raw| parse_csv_env(raw.as_str()))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|url| !url.eq_ignore_ascii_case(base_rpc_url.as_str()))
+            .collect();
+        let base_indexer_rpc_url = env::var("BASE_INDEXER_RPC_URL")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
         Self {
             host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port: env::var("PORT")
@@ -300,8 +325,9 @@ impl AppConfig {
                 .unwrap_or_else(|_| "".to_string()),
             solana_privacy_program_id: env::var("SOLANA_PRIVACY_PROGRAM_ID")
                 .unwrap_or_else(|_| "".to_string()),
-            base_rpc_url: env::var("BASE_RPC_URL")
-                .unwrap_or_else(|_| "https://mainnet.base.org".to_string()),
+            base_rpc_url,
+            base_rpc_fallback_urls,
+            base_indexer_rpc_url,
             base_ws_url: env::var("BASE_WS_URL")
                 .unwrap_or_else(|_| "wss://mainnet.base.org".to_string()),
             base_chain_id: env::var("BASE_CHAIN_ID")
@@ -482,6 +508,8 @@ mod tests {
             "SOLANA_ORDERBOOK_PROGRAM_ID",
             "SOLANA_PRIVACY_PROGRAM_ID",
             "BASE_RPC_URL",
+            "BASE_RPC_FALLBACK_URLS",
+            "BASE_INDEXER_RPC_URL",
             "BASE_WS_URL",
             "BASE_CHAIN_ID",
             "SIWE_DOMAIN",
@@ -610,6 +638,11 @@ mod tests {
         with_clean_env(|| {
             std::env::set_var("ENVIRONMENT", "development");
             std::env::set_var("BASE_RPC_URL", "https://base.rpc.example");
+            std::env::set_var(
+                "BASE_RPC_FALLBACK_URLS",
+                "https://base.rpc.backup,https://base.rpc.example, https://base.rpc.third ",
+            );
+            std::env::set_var("BASE_INDEXER_RPC_URL", "https://base.indexer.example");
             std::env::set_var("BASE_WS_URL", "wss://base.rpc.example");
             std::env::set_var("BASE_CHAIN_ID", "8453");
             std::env::set_var("SIWE_DOMAIN", "app.neuralminds.example");
@@ -617,6 +650,17 @@ mod tests {
             let config = AppConfig::from_env();
 
             assert_eq!(config.base_rpc_url, "https://base.rpc.example");
+            assert_eq!(
+                config.base_rpc_fallback_urls,
+                vec![
+                    "https://base.rpc.backup".to_string(),
+                    "https://base.rpc.third".to_string()
+                ]
+            );
+            assert_eq!(
+                config.base_indexer_rpc_url,
+                Some("https://base.indexer.example".to_string())
+            );
             assert_eq!(config.base_ws_url, "wss://base.rpc.example");
             assert_eq!(config.base_chain_id, 8453);
             assert_eq!(config.siwe_domain, "app.neuralminds.example");

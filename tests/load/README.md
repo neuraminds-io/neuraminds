@@ -1,4 +1,4 @@
-# Polyguard Load Testing
+# Neuraminds Load Testing
 
 Load testing configuration using k6.
 
@@ -33,7 +33,7 @@ k6 run tests/load/k6-config.js
 k6 run --vus 100 --duration 10m tests/load/k6-config.js
 
 # Against specific environment
-API_URL=https://api.staging.polyguard.cc k6 run tests/load/k6-config.js
+API_URL=https://api.staging.neuraminds.io k6 run tests/load/k6-config.js
 
 # Public baseline test (target QPS + p95/p99)
 API_URL=https://api.neuraminds.ai TARGET_QPS=80 DURATION=10m \

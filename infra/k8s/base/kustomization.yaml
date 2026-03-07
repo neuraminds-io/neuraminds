@@ -7,6 +7,6 @@ resources:
   - ../secrets.yaml
 
 commonLabels:
-  app.kubernetes.io/name: polyguard
+  app.kubernetes.io/name: neuraminds
   app.kubernetes.io/component: api
   app.kubernetes.io/managed-by: kustomize

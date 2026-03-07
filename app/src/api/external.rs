@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::api::auth::{extract_authenticated_user, extract_jwt_user};
+use crate::api::auth::{extract_authenticated_user, extract_jwt_user, AuthenticatedUserWithRole};
 use crate::api::jwt::{check_role, UserRole};
 use crate::api::ApiError;
 use crate::config::ExternalExecutionMode;
@@ -17,6 +17,7 @@ use crate::services::external::paper::{realized_pnl, simulate_fill, unrealized_p
 use crate::services::external::types::{ExternalMarketId, ExternalProvider};
 use crate::services::provider_rails::{evaluate_provider_access, ProviderRailAction, RailProvider};
 use crate::AppState;
+use sqlx::{Postgres, QueryBuilder};
 
 const MAX_PAGE_SIZE: i64 = 200;
 
@@ -167,6 +168,8 @@ pub struct ExecuteExternalAgentRequest {
 pub struct ListExternalAgentsQuery {
     pub provider: Option<String>,
     pub active: Option<bool>,
+    pub scope: Option<String>,
+    pub owner: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -424,6 +427,47 @@ fn ensure_external_features_enabled(state: &AppState) -> Result<(), ApiError> {
 
 fn execution_mode(state: &AppState) -> ExternalExecutionMode {
     state.config.external_execution_mode
+}
+
+fn normalize_agent_owner(value: Option<&str>) -> Option<String> {
+    value
+        .map(|entry| entry.trim().to_ascii_lowercase())
+        .filter(|entry| !entry.is_empty())
+}
+
+fn resolve_external_agent_owner_scope(
+    user: &AuthenticatedUserWithRole,
+    scope: Option<&str>,
+    owner: Option<&str>,
+) -> Result<Option<String>, ApiError> {
+    let requested_owner = normalize_agent_owner(owner);
+    let wallet = user.wallet_address.trim().to_ascii_lowercase();
+
+    if !matches!(user.role, UserRole::Admin) {
+        if let Some(requested_owner) = requested_owner.as_ref() {
+            if requested_owner != &wallet {
+                return Err(ApiError::forbidden("Insufficient permissions"));
+            }
+        }
+        return Ok(Some(wallet));
+    }
+
+    match scope
+        .unwrap_or_else(|| {
+            if requested_owner.is_some() {
+                "owner"
+            } else {
+                "self"
+            }
+        })
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "all" => Ok(None),
+        "owner" => Ok(Some(requested_owner.unwrap_or(wallet))),
+        _ => Ok(Some(requested_owner.unwrap_or(wallet))),
+    }
 }
 
 fn requires_live_credentials(state: &AppState) -> bool {
@@ -2552,64 +2596,55 @@ pub async fn list_external_agents(
     query: web::Query<ListExternalAgentsQuery>,
 ) -> Result<impl Responder, ApiError> {
     ensure_external_features_enabled(&state)?;
-    let user = extract_authenticated_user(&req, &state).await?;
+    let user = extract_jwt_user(&req, &state)?;
 
     let limit = query.limit.unwrap_or(50).clamp(1, MAX_PAGE_SIZE);
     let offset = query.offset.unwrap_or(0).max(0);
+    let owner_filter =
+        resolve_external_agent_owner_scope(&user, query.scope.as_deref(), query.owner.as_deref())?;
 
-    let mut sql = String::from(
+    let mut sql = QueryBuilder::<Postgres>::new(
         "SELECT id, owner, name, provider, market_id, outcome, side, price, quantity, cadence_seconds,
                 strategy, credential_id, active, last_executed_at, next_execution_at, created_at, updated_at
          FROM external_agents
-         WHERE owner = $1",
+         WHERE TRUE",
+    );
+    let mut count_sql = QueryBuilder::<Postgres>::new(
+        "SELECT COUNT(*) AS total
+         FROM external_agents
+         WHERE TRUE",
     );
 
-    let mut bind_provider: Option<String> = None;
-    let mut bind_active: Option<bool> = None;
+    if let Some(owner) = owner_filter.as_deref() {
+        sql.push(" AND owner = ").push_bind(owner);
+        count_sql.push(" AND owner = ").push_bind(owner);
+    }
 
     if let Some(provider_raw) = query.provider.as_ref() {
         let provider = normalize_provider(provider_raw.as_str())?;
-        bind_provider = Some(provider.as_str().to_string());
-        sql.push_str(" AND provider = $2");
+        sql.push(" AND provider = ").push_bind(provider.as_str());
+        count_sql
+            .push(" AND provider = ")
+            .push_bind(provider.as_str());
     }
     if let Some(active) = query.active {
-        bind_active = Some(active);
-        sql.push_str(if bind_provider.is_some() {
-            " AND active = $3"
-        } else {
-            " AND active = $2"
-        });
+        sql.push(" AND active = ").push_bind(active);
+        count_sql.push(" AND active = ").push_bind(active);
     }
 
-    let pagination_index = if bind_provider.is_some() && bind_active.is_some() {
-        4
-    } else if bind_provider.is_some() || bind_active.is_some() {
-        3
-    } else {
-        2
-    };
-    sql.push_str(&format!(
-        " ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
-        pagination_index,
-        pagination_index + 1
-    ));
+    sql.push(" ORDER BY created_at DESC LIMIT ")
+        .push_bind(limit)
+        .push(" OFFSET ")
+        .push_bind(offset);
 
-    let mut query_builder = sqlx::query(sql.as_str()).bind(user.wallet_address.as_str());
-    if let Some(provider) = bind_provider.as_ref() {
-        query_builder = query_builder.bind(provider);
-    }
-    if let Some(active) = bind_active {
-        query_builder = query_builder.bind(active);
-    }
-    query_builder = query_builder.bind(limit).bind(offset);
-
-    let rows = query_builder
+    let rows = sql
+        .build()
         .fetch_all(state.db.pool())
         .await
         .map_err(|err| ApiError::internal(&err.to_string()))?;
 
-    let count_row = sqlx::query("SELECT COUNT(*) AS total FROM external_agents WHERE owner = $1")
-        .bind(user.wallet_address.as_str())
+    let count_row = count_sql
+        .build()
         .fetch_one(state.db.pool())
         .await
         .map_err(|err| ApiError::internal(&err.to_string()))?;
@@ -2735,25 +2770,41 @@ pub async fn update_external_agent(
     body: web::Json<UpdateExternalAgentRequest>,
 ) -> Result<impl Responder, ApiError> {
     ensure_external_features_enabled(&state)?;
-    let user = extract_authenticated_user(&req, &state).await?;
+    let user = extract_jwt_user(&req, &state)?;
 
     let agent_id = path.into_inner();
-    let current = sqlx::query(
-        "SELECT id, provider, market_id, outcome, side, price, quantity, cadence_seconds, strategy, credential_id, active
-         FROM external_agents
-         WHERE id = $1 AND owner = $2",
-    )
-    .bind(agent_id.as_str())
-    .bind(user.wallet_address.as_str())
-    .fetch_optional(state.db.pool())
-    .await
-    .map_err(|err| ApiError::internal(&err.to_string()))?
-    .ok_or_else(|| ApiError::not_found("External agent"))?;
+    let current = if matches!(user.role, UserRole::Admin) {
+        sqlx::query(
+            "SELECT id, owner, provider, market_id, outcome, side, price, quantity, cadence_seconds, strategy, credential_id, active
+             FROM external_agents
+             WHERE id = $1",
+        )
+        .bind(agent_id.as_str())
+        .fetch_optional(state.db.pool())
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?
+        .ok_or_else(|| ApiError::not_found("External agent"))?
+    } else {
+        sqlx::query(
+            "SELECT id, owner, provider, market_id, outcome, side, price, quantity, cadence_seconds, strategy, credential_id, active
+             FROM external_agents
+             WHERE id = $1 AND owner = $2",
+        )
+        .bind(agent_id.as_str())
+        .bind(user.wallet_address.as_str())
+        .fetch_optional(state.db.pool())
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?
+        .ok_or_else(|| ApiError::not_found("External agent"))?
+    };
 
     let provider_raw: String = current
         .try_get("provider")
         .map_err(|err| ApiError::internal(&err.to_string()))?;
     let provider = normalize_provider(provider_raw.as_str())?;
+    let owner: String = current
+        .try_get("owner")
+        .map_err(|err| ApiError::internal(&err.to_string()))?;
 
     let next_outcome = if let Some(outcome) = body.outcome.as_deref() {
         normalize_outcome(outcome)?
@@ -2784,55 +2835,82 @@ pub async fn update_external_agent(
         .unwrap_or_else(|| current.try_get("strategy").unwrap_or("external"))
         .trim()
         .to_string();
-    let next_name = body
-        .name
-        .as_deref()
-        .unwrap_or("external-agent")
-        .trim()
-        .to_string();
+    let next_name = body.name.as_deref().unwrap_or("").trim().to_string();
     let next_active = body
         .active
         .unwrap_or_else(|| current.try_get("active").unwrap_or(true));
 
     let credential_id = if let Some(id) = body.credential_id.as_deref() {
-        let credential =
-            load_credential(&state, user.wallet_address.as_str(), provider, Some(id)).await?;
+        let credential = load_credential(&state, owner.as_str(), provider, Some(id)).await?;
         Some(credential.id)
     } else {
         current.try_get::<String, _>("credential_id").ok()
     };
 
-    let row = sqlx::query(
-        "UPDATE external_agents
-         SET name = COALESCE(NULLIF($3, ''), name),
-             outcome = $4,
-             side = $5,
-             price = $6,
-             quantity = $7,
-             cadence_seconds = $8,
-             strategy = $9,
-             credential_id = $10,
-             active = $11,
-             updated_at = NOW()
-         WHERE id = $1 AND owner = $2
-         RETURNING id, owner, name, provider, market_id, outcome, side, price, quantity,
-                   cadence_seconds, strategy, credential_id, active, last_executed_at,
-                   next_execution_at, created_at, updated_at",
-    )
-    .bind(agent_id.as_str())
-    .bind(user.wallet_address.as_str())
-    .bind(next_name)
-    .bind(next_outcome)
-    .bind(next_side)
-    .bind(next_price)
-    .bind(next_quantity)
-    .bind(next_cadence as i64)
-    .bind(next_strategy)
-    .bind(credential_id.as_deref())
-    .bind(next_active)
-    .fetch_one(state.db.pool())
-    .await
-    .map_err(|err| ApiError::internal(&err.to_string()))?;
+    let row = if matches!(user.role, UserRole::Admin) {
+        sqlx::query(
+            "UPDATE external_agents
+             SET name = COALESCE(NULLIF($2, ''), name),
+                 outcome = $3,
+                 side = $4,
+                 price = $5,
+                 quantity = $6,
+                 cadence_seconds = $7,
+                 strategy = $8,
+                 credential_id = $9,
+                 active = $10,
+                 updated_at = NOW()
+             WHERE id = $1
+             RETURNING id, owner, name, provider, market_id, outcome, side, price, quantity,
+                       cadence_seconds, strategy, credential_id, active, last_executed_at,
+                       next_execution_at, created_at, updated_at",
+        )
+        .bind(agent_id.as_str())
+        .bind(next_name)
+        .bind(next_outcome)
+        .bind(next_side)
+        .bind(next_price)
+        .bind(next_quantity)
+        .bind(next_cadence as i64)
+        .bind(next_strategy)
+        .bind(credential_id.as_deref())
+        .bind(next_active)
+        .fetch_one(state.db.pool())
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?
+    } else {
+        sqlx::query(
+            "UPDATE external_agents
+             SET name = COALESCE(NULLIF($3, ''), name),
+                 outcome = $4,
+                 side = $5,
+                 price = $6,
+                 quantity = $7,
+                 cadence_seconds = $8,
+                 strategy = $9,
+                 credential_id = $10,
+                 active = $11,
+                 updated_at = NOW()
+             WHERE id = $1 AND owner = $2
+             RETURNING id, owner, name, provider, market_id, outcome, side, price, quantity,
+                       cadence_seconds, strategy, credential_id, active, last_executed_at,
+                       next_execution_at, created_at, updated_at",
+        )
+        .bind(agent_id.as_str())
+        .bind(user.wallet_address.as_str())
+        .bind(next_name)
+        .bind(next_outcome)
+        .bind(next_side)
+        .bind(next_price)
+        .bind(next_quantity)
+        .bind(next_cadence as i64)
+        .bind(next_strategy)
+        .bind(credential_id.as_deref())
+        .bind(next_active)
+        .fetch_one(state.db.pool())
+        .await
+        .map_err(|err| ApiError::internal(&err.to_string()))?
+    };
 
     Ok(HttpResponse::Ok().json(parse_external_agent(row)?))
 }
@@ -3610,5 +3688,47 @@ mod tests {
         market.close_time = now.timestamp().saturating_add(60) as u64;
 
         assert!(!market_is_closed_for_paper_entry(&market, now));
+    }
+
+    #[test]
+    fn non_admin_agent_scope_stays_self() {
+        let user = AuthenticatedUserWithRole {
+            wallet_address: "0x1111111111111111111111111111111111111111".to_string(),
+            role: UserRole::User,
+        };
+
+        let scope = resolve_external_agent_owner_scope(
+            &user,
+            Some("all"),
+            Some("0x2222222222222222222222222222222222222222"),
+        );
+
+        assert!(scope.is_err());
+        assert_eq!(
+            resolve_external_agent_owner_scope(&user, None, None).unwrap(),
+            Some("0x1111111111111111111111111111111111111111".to_string())
+        );
+    }
+
+    #[test]
+    fn admin_agent_scope_supports_all_and_owner_filters() {
+        let user = AuthenticatedUserWithRole {
+            wallet_address: "0x1111111111111111111111111111111111111111".to_string(),
+            role: UserRole::Admin,
+        };
+
+        assert_eq!(
+            resolve_external_agent_owner_scope(&user, Some("all"), None).unwrap(),
+            None
+        );
+        assert_eq!(
+            resolve_external_agent_owner_scope(
+                &user,
+                Some("owner"),
+                Some("0x2222222222222222222222222222222222222222"),
+            )
+            .unwrap(),
+            Some("0x2222222222222222222222222222222222222222".to_string())
+        );
     }
 }

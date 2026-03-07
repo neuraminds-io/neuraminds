@@ -106,11 +106,6 @@ async fn check_redis_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth
 }
 
 #[derive(serde::Deserialize)]
-struct BaseBlockNumberResponse {
-    result: Option<String>,
-}
-
-#[derive(serde::Deserialize)]
 struct SolanaSlotResponse {
     result: Option<u64>,
 }
@@ -121,35 +116,10 @@ async fn check_base_health(state: &web::Data<Arc<AppState>>) -> ComponentHealth 
     }
 
     let start = Instant::now();
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "eth_blockNumber",
-        "params": []
-    });
-
-    let response = reqwest::Client::new()
-        .post(&state.config.base_rpc_url)
-        .json(&body)
-        .send()
-        .await;
-
-    let latency_ms = start.elapsed().as_millis() as u64;
-    let Ok(response) = response else {
+    if state.evm_rpc.eth_block_number().await.is_err() {
         return ComponentHealth::unhealthy("Base RPC request failed");
-    };
-    if !response.status().is_success() {
-        return ComponentHealth::unhealthy("Base RPC returned non-success status");
     }
-
-    let payload = response.json::<BaseBlockNumberResponse>().await;
-    let Ok(payload) = payload else {
-        return ComponentHealth::unhealthy("Failed to decode Base RPC response");
-    };
-
-    if payload.result.is_none() {
-        return ComponentHealth::unhealthy("Base RPC response missing block number");
-    }
+    let latency_ms = start.elapsed().as_millis() as u64;
 
     if latency_ms > 2000 {
         ComponentHealth::degraded(latency_ms, "High RPC latency")

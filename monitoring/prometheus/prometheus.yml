@@ -2,7 +2,7 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
-    monitor: 'polyguard'
+    monitor: 'neuraminds'
 
 rule_files:
   - 'alerts.yml'
@@ -18,14 +18,14 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  - job_name: 'polyguard-api'
+  - job_name: 'neuraminds-api'
     metrics_path: '/metrics/prometheus'
     static_configs:
       - targets: ['api:8080']
     relabel_configs:
       - source_labels: [__address__]
         target_label: instance
-        replacement: 'polyguard-api'
+        replacement: 'neuraminds-api'
 
   - job_name: 'node-exporter'
     static_configs:

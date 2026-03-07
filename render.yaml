@@ -60,6 +60,10 @@ services:
         value: "true"
       - key: BASE_RPC_URL
         value: https://mainnet.base.org
+      - key: BASE_RPC_FALLBACK_URLS
+        sync: false
+      - key: BASE_INDEXER_RPC_URL
+        sync: false
       - key: BASE_CHAIN_ID
         value: "8453"
       - key: LIMITLESS_API_BASE

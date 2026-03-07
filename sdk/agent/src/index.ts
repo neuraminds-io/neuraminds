@@ -1,4 +1,4 @@
-// Polyguard AI Trading Agent SDK
+// Neuraminds AI Trading Agent SDK
 
 // Core agent
 export { TradingAgent, createAgent } from './agent';

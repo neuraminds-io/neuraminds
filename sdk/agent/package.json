@@ -1,5 +1,5 @@
 {
-  "name": "@polyguard/agent-sdk",
+  "name": "@neuraminds/agent-sdk",
   "version": "0.1.0",
   "description": "NeuraMinds Base agent SDK",
   "main": "dist/index.js",

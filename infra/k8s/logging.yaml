@@ -1,4 +1,4 @@
-# Polyguard Centralized Logging Stack
+# Neuraminds Centralized Logging Stack
 #
 # Components:
 # - Loki: Log aggregation and storage
@@ -12,9 +12,9 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: polyguard
+  name: neuraminds
   labels:
-    app.kubernetes.io/part-of: polyguard
+    app.kubernetes.io/part-of: neuraminds
 
 ---
 # Loki Configuration
@@ -22,7 +22,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: loki-config
-  namespace: polyguard
+  namespace: neuraminds
 data:
   loki.yaml: |
     auth_enabled: false
@@ -91,7 +91,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: loki
-  namespace: polyguard
+  namespace: neuraminds
   labels:
     app: loki
 spec:
@@ -162,7 +162,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: loki
-  namespace: polyguard
+  namespace: neuraminds
   labels:
     app: loki
 spec:
@@ -180,7 +180,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: promtail-config
-  namespace: polyguard
+  namespace: neuraminds
 data:
   promtail.yaml: |
     server:
@@ -192,22 +192,22 @@ data:
       filename: /tmp/positions.yaml
 
     clients:
-      - url: http://loki.polyguard.svc.cluster.local:3100/loki/api/v1/push
-        tenant_id: polyguard
+      - url: http://loki.neuraminds.svc.cluster.local:3100/loki/api/v1/push
+        tenant_id: neuraminds
         batchwait: 1s
         batchsize: 1048576  # 1MB
         timeout: 10s
 
     scrape_configs:
-      # Polyguard API pods
-      - job_name: polyguard-api
+      # Neuraminds API pods
+      - job_name: neuraminds-api
         kubernetes_sd_configs:
           - role: pod
             namespaces:
-              names: ["polyguard"]
+              names: ["neuraminds"]
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_label_app]
-            regex: polyguard-api
+            regex: neuraminds-api
             action: keep
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
@@ -248,15 +248,15 @@ data:
               selector: '{level="DEBUG"}'
               action: drop
 
-      # Kubernetes system logs (polyguard namespace only)
+      # Kubernetes system logs (neuraminds namespace only)
       - job_name: kubernetes-pods
         kubernetes_sd_configs:
           - role: pod
             namespaces:
-              names: ["polyguard"]
+              names: ["neuraminds"]
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_label_app]
-            regex: polyguard-api
+            regex: neuraminds-api
             action: drop  # Already handled above
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
@@ -273,7 +273,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: promtail
-  namespace: polyguard
+  namespace: neuraminds
   labels:
     app: promtail
 spec:
@@ -339,7 +339,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: promtail
-  namespace: polyguard
+  namespace: neuraminds
 
 ---
 # Promtail ClusterRole
@@ -361,7 +361,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: promtail
-    namespace: polyguard
+    namespace: neuraminds
 roleRef:
   kind: ClusterRole
   name: promtail
@@ -373,7 +373,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-loki-datasource
-  namespace: polyguard
+  namespace: neuraminds
   labels:
     grafana_datasource: "1"
 data:
@@ -383,7 +383,7 @@ data:
       - name: Loki
         type: loki
         access: proxy
-        url: http://loki.polyguard.svc.cluster.local:3100
+        url: http://loki.neuraminds.svc.cluster.local:3100
         isDefault: false
         jsonData:
           maxLines: 1000
@@ -401,14 +401,14 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-log-dashboard
-  namespace: polyguard
+  namespace: neuraminds
   labels:
     grafana_dashboard: "1"
 data:
-  polyguard-logs.json: |
+  neuraminds-logs.json: |
     {
       "annotations": {"list": []},
-      "description": "Polyguard API Logs",
+      "description": "Neuraminds API Logs",
       "editable": true,
       "panels": [
         {
@@ -417,7 +417,7 @@ data:
           "datasource": "Loki",
           "targets": [
             {
-              "expr": "sum(count_over_time({app=\"polyguard-api\"} [1m])) by (level)",
+              "expr": "sum(count_over_time({app=\"neuraminds-api\"} [1m])) by (level)",
               "legendFormat": "{{level}}"
             }
           ],
@@ -429,7 +429,7 @@ data:
           "datasource": "Loki",
           "targets": [
             {
-              "expr": "{app=\"polyguard-api\", level=~\"ERROR|WARN\"}"
+              "expr": "{app=\"neuraminds-api\", level=~\"ERROR|WARN\"}"
             }
           ],
           "gridPos": {"h": 10, "w": 24, "x": 0, "y": 6}
@@ -440,13 +440,13 @@ data:
           "datasource": "Loki",
           "targets": [
             {
-              "expr": "{app=\"polyguard-api\"}"
+              "expr": "{app=\"neuraminds-api\"}"
             }
           ],
           "gridPos": {"h": 12, "w": 24, "x": 0, "y": 16}
         }
       ],
       "schemaVersion": 39,
-      "title": "Polyguard Logs",
-      "uid": "polyguard-logs"
+      "title": "Neuraminds Logs",
+      "uid": "neuraminds-logs"
     }

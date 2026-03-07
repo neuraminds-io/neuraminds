@@ -48,7 +48,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "polyguard_uptime_seconds",
+          "expr": "neuraminds_uptime_seconds",
           "refId": "A"
         }
       ]
@@ -91,7 +91,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(polyguard_requests_total)",
+          "expr": "sum(neuraminds_requests_total)",
           "refId": "A"
         }
       ]
@@ -134,7 +134,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "polyguard_trades_total",
+          "expr": "neuraminds_trades_total",
           "refId": "A"
         }
       ]
@@ -178,7 +178,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "polyguard_volume_total",
+          "expr": "neuraminds_volume_total",
           "refId": "A"
         }
       ]
@@ -233,12 +233,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "rate(polyguard_requests_total{status=\"success\"}[5m])",
+          "expr": "rate(neuraminds_requests_total{status=\"success\"}[5m])",
           "legendFormat": "Success",
           "refId": "A"
         },
         {
-          "expr": "rate(polyguard_requests_total{status=\"error\"}[5m])",
+          "expr": "rate(neuraminds_requests_total{status=\"error\"}[5m])",
           "legendFormat": "Error",
           "refId": "B"
         }
@@ -293,12 +293,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "rate(polyguard_orders_total{action=\"placed\"}[5m])",
+          "expr": "rate(neuraminds_orders_total{action=\"placed\"}[5m])",
           "legendFormat": "Placed",
           "refId": "A"
         },
         {
-          "expr": "rate(polyguard_orders_total{action=\"cancelled\"}[5m])",
+          "expr": "rate(neuraminds_orders_total{action=\"cancelled\"}[5m])",
           "legendFormat": "Cancelled",
           "refId": "B"
         }
@@ -354,17 +354,17 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(polyguard_request_duration_ms_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, rate(neuraminds_request_duration_ms_bucket[5m]))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.90, rate(polyguard_request_duration_ms_bucket[5m]))",
+          "expr": "histogram_quantile(0.90, rate(neuraminds_request_duration_ms_bucket[5m]))",
           "legendFormat": "p90",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(polyguard_request_duration_ms_bucket[5m]))",
+          "expr": "histogram_quantile(0.99, rate(neuraminds_request_duration_ms_bucket[5m]))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -420,12 +420,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.90, rate(polyguard_request_duration_ms_bucket[5m]))",
+          "expr": "histogram_quantile(0.90, rate(neuraminds_request_duration_ms_bucket[5m]))",
           "legendFormat": "API request p90",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.90, rate(polyguard_database_duration_ms_bucket[5m]))",
+          "expr": "histogram_quantile(0.90, rate(neuraminds_database_duration_ms_bucket[5m]))",
           "legendFormat": "Database p90",
           "refId": "B"
         }
@@ -481,22 +481,22 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(polyguard_order_duration_ms_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, rate(neuraminds_order_duration_ms_bucket[5m]))",
           "legendFormat": "Order p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.90, rate(polyguard_order_duration_ms_bucket[5m]))",
+          "expr": "histogram_quantile(0.90, rate(neuraminds_order_duration_ms_bucket[5m]))",
           "legendFormat": "Order p90",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.50, rate(polyguard_trade_duration_ms_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, rate(neuraminds_trade_duration_ms_bucket[5m]))",
           "legendFormat": "Trade p50",
           "refId": "C"
         },
         {
-          "expr": "histogram_quantile(0.90, rate(polyguard_trade_duration_ms_bucket[5m]))",
+          "expr": "histogram_quantile(0.90, rate(neuraminds_trade_duration_ms_bucket[5m]))",
           "legendFormat": "Trade p90",
           "refId": "D"
         }
@@ -505,12 +505,12 @@
   ],
   "refresh": "5s",
   "schemaVersion": 38,
-  "tags": ["polyguard"],
+  "tags": ["neuraminds"],
   "templating": {"list": []},
   "time": {"from": "now-1h", "to": "now"},
   "timepicker": {},
   "timezone": "",
-  "title": "Polyguard Overview",
-  "uid": "polyguard-overview",
+  "title": "Neuraminds Overview",
+  "uid": "neuraminds-overview",
   "version": 1
 }

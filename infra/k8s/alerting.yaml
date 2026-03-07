@@ -1,4 +1,4 @@
-# Polyguard Prometheus Alerting Rules
+# Neuraminds Prometheus Alerting Rules
 #
 # Deploy with: kubectl apply -f alerting.yaml
 # Requires Prometheus Operator
@@ -6,222 +6,222 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: polyguard-alerts
-  namespace: polyguard
+  name: neuraminds-alerts
+  namespace: neuraminds
   labels:
     release: prometheus
 spec:
   groups:
     # API Health Alerts
-    - name: polyguard.api
+    - name: neuraminds.api
       rules:
         # High Error Rate
-        - alert: PolyguardHighErrorRate
+        - alert: NeuramindsHighErrorRate
           expr: |
-            sum(rate(http_requests_total{job="polyguard-api", status=~"5.."}[5m]))
-            / sum(rate(http_requests_total{job="polyguard-api"}[5m]))
+            sum(rate(http_requests_total{job="neuraminds-api", status=~"5.."}[5m]))
+            / sum(rate(http_requests_total{job="neuraminds-api"}[5m]))
             > 0.05
           for: 2m
           labels:
             severity: critical
-            service: polyguard-api
+            service: neuraminds-api
           annotations:
             summary: "High API error rate"
             description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
 
         # High Latency
-        - alert: PolyguardHighLatency
+        - alert: NeuramindsHighLatency
           expr: |
             histogram_quantile(0.95,
-              sum(rate(http_request_duration_seconds_bucket{job="polyguard-api"}[5m])) by (le)
+              sum(rate(http_request_duration_seconds_bucket{job="neuraminds-api"}[5m])) by (le)
             ) > 0.5
           for: 5m
           labels:
             severity: warning
-            service: polyguard-api
+            service: neuraminds-api
           annotations:
             summary: "High API latency"
             description: "95th percentile latency is {{ $value | humanizeDuration }}"
 
         # P99 Latency Critical
-        - alert: PolyguardCriticalLatency
+        - alert: NeuramindsCriticalLatency
           expr: |
             histogram_quantile(0.99,
-              sum(rate(http_request_duration_seconds_bucket{job="polyguard-api"}[5m])) by (le)
+              sum(rate(http_request_duration_seconds_bucket{job="neuraminds-api"}[5m])) by (le)
             ) > 2
           for: 2m
           labels:
             severity: critical
-            service: polyguard-api
+            service: neuraminds-api
           annotations:
             summary: "Critical API latency"
             description: "99th percentile latency is {{ $value | humanizeDuration }}"
 
         # Pod Not Ready
-        - alert: PolyguardPodNotReady
+        - alert: NeuramindsPodNotReady
           expr: |
-            kube_pod_status_ready{namespace="polyguard", condition="true"} == 0
+            kube_pod_status_ready{namespace="neuraminds", condition="true"} == 0
           for: 5m
           labels:
             severity: warning
-            service: polyguard-api
+            service: neuraminds-api
           annotations:
             summary: "Pod not ready"
             description: "Pod {{ $labels.pod }} is not ready"
 
         # All Pods Down
-        - alert: PolyguardAllPodsDown
+        - alert: NeuramindsAllPodsDown
           expr: |
-            sum(kube_pod_status_ready{namespace="polyguard", condition="true"}) == 0
+            sum(kube_pod_status_ready{namespace="neuraminds", condition="true"}) == 0
           for: 1m
           labels:
             severity: critical
-            service: polyguard-api
+            service: neuraminds-api
           annotations:
             summary: "All API pods are down"
             description: "No healthy pods available"
 
     # Database Alerts
-    - name: polyguard.database
+    - name: neuraminds.database
       rules:
         # Database Connection Pool Exhaustion
-        - alert: PolyguardDBPoolExhausted
+        - alert: NeuramindsDBPoolExhausted
           expr: |
-            polyguard_db_pool_available{job="polyguard-api"} < 2
+            neuraminds_db_pool_available{job="neuraminds-api"} < 2
           for: 2m
           labels:
             severity: critical
-            service: polyguard-database
+            service: neuraminds-database
           annotations:
             summary: "Database connection pool nearly exhausted"
             description: "Only {{ $value }} connections available"
 
         # Database Latency
-        - alert: PolyguardDBHighLatency
+        - alert: NeuramindsDBHighLatency
           expr: |
             histogram_quantile(0.95,
-              sum(rate(polyguard_db_query_duration_seconds_bucket[5m])) by (le)
+              sum(rate(neuraminds_db_query_duration_seconds_bucket[5m])) by (le)
             ) > 0.1
           for: 5m
           labels:
             severity: warning
-            service: polyguard-database
+            service: neuraminds-database
           annotations:
             summary: "High database query latency"
             description: "95th percentile query time is {{ $value | humanizeDuration }}"
 
         # Database Down
-        - alert: PolyguardDBDown
+        - alert: NeuramindsDBDown
           expr: |
-            polyguard_health_database{job="polyguard-api"} != 1
+            neuraminds_health_database{job="neuraminds-api"} != 1
           for: 1m
           labels:
             severity: critical
-            service: polyguard-database
+            service: neuraminds-database
           annotations:
             summary: "Database health check failing"
             description: "Database is unhealthy or unreachable"
 
     # Redis Alerts
-    - name: polyguard.redis
+    - name: neuraminds.redis
       rules:
-        - alert: PolyguardRedisDown
+        - alert: NeuramindsRedisDown
           expr: |
-            polyguard_health_redis{job="polyguard-api"} != 1
+            neuraminds_health_redis{job="neuraminds-api"} != 1
           for: 1m
           labels:
             severity: warning
-            service: polyguard-redis
+            service: neuraminds-redis
           annotations:
             summary: "Redis health check failing"
             description: "Redis is unhealthy or unreachable"
 
-        - alert: PolyguardRedisHighMemory
+        - alert: NeuramindsRedisHighMemory
           expr: |
             redis_memory_used_bytes / redis_memory_max_bytes > 0.9
           for: 5m
           labels:
             severity: warning
-            service: polyguard-redis
+            service: neuraminds-redis
           annotations:
             summary: "Redis memory usage high"
             description: "Redis memory usage is {{ $value | humanizePercentage }}"
 
     # Business Metrics Alerts
-    - name: polyguard.business
+    - name: neuraminds.business
       rules:
         # Order Settlement Failures
-        - alert: PolyguardSettlementFailures
+        - alert: NeuramindsSettlementFailures
           expr: |
-            rate(polyguard_settlement_failures_total[5m]) > 0.1
+            rate(neuraminds_settlement_failures_total[5m]) > 0.1
           for: 5m
           labels:
             severity: warning
-            service: polyguard-settlement
+            service: neuraminds-settlement
           annotations:
             summary: "High settlement failure rate"
             description: "Settlement failures: {{ $value }} per second"
 
         # Order Queue Buildup
-        - alert: PolyguardOrderQueueHigh
+        - alert: NeuramindsOrderQueueHigh
           expr: |
-            polyguard_pending_settlements > 100
+            neuraminds_pending_settlements > 100
           for: 10m
           labels:
             severity: warning
-            service: polyguard-settlement
+            service: neuraminds-settlement
           annotations:
             summary: "Order settlement queue building up"
             description: "{{ $value }} orders pending settlement"
 
         # Rate Limiting Excessive
-        - alert: PolyguardExcessiveRateLimiting
+        - alert: NeuramindsExcessiveRateLimiting
           expr: |
-            sum(rate(polyguard_rate_limited_requests_total[5m])) > 10
+            sum(rate(neuraminds_rate_limited_requests_total[5m])) > 10
           for: 5m
           labels:
             severity: warning
-            service: polyguard-api
+            service: neuraminds-api
           annotations:
             summary: "Excessive rate limiting"
             description: "{{ $value }} requests/sec being rate limited"
 
     # Resource Alerts
-    - name: polyguard.resources
+    - name: neuraminds.resources
       rules:
         # High CPU
-        - alert: PolyguardHighCPU
+        - alert: NeuramindsHighCPU
           expr: |
-            rate(container_cpu_usage_seconds_total{namespace="polyguard"}[5m])
+            rate(container_cpu_usage_seconds_total{namespace="neuraminds"}[5m])
             / on(pod) kube_pod_container_resource_limits{resource="cpu"} > 0.9
           for: 5m
           labels:
             severity: warning
-            service: polyguard
+            service: neuraminds
           annotations:
             summary: "High CPU usage"
             description: "Pod {{ $labels.pod }} CPU at {{ $value | humanizePercentage }}"
 
         # High Memory
-        - alert: PolyguardHighMemory
+        - alert: NeuramindsHighMemory
           expr: |
-            container_memory_usage_bytes{namespace="polyguard"}
+            container_memory_usage_bytes{namespace="neuraminds"}
             / on(pod) kube_pod_container_resource_limits{resource="memory"} > 0.9
           for: 5m
           labels:
             severity: warning
-            service: polyguard
+            service: neuraminds
           annotations:
             summary: "High memory usage"
             description: "Pod {{ $labels.pod }} memory at {{ $value | humanizePercentage }}"
 
         # OOM Killed
-        - alert: PolyguardOOMKilled
+        - alert: NeuramindsOOMKilled
           expr: |
-            increase(kube_pod_container_status_restarts_total{namespace="polyguard", reason="OOMKilled"}[1h]) > 0
+            increase(kube_pod_container_status_restarts_total{namespace="neuraminds", reason="OOMKilled"}[1h]) > 0
           labels:
             severity: critical
-            service: polyguard
+            service: neuraminds
           annotations:
             summary: "Pod killed due to OOM"
             description: "Pod {{ $labels.pod }} was OOM killed"
@@ -231,8 +231,8 @@ spec:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: alertmanager-polyguard
-  namespace: polyguard
+  name: alertmanager-neuraminds
+  namespace: neuraminds
 type: Opaque
 stringData:
   alertmanager.yaml: |
@@ -258,14 +258,14 @@ stringData:
     receivers:
       - name: 'slack-default'
         slack_configs:
-          - channel: '#polyguard-alerts'
+          - channel: '#neuraminds-alerts'
             send_resolved: true
             title: '{{ .Status | toUpper }}: {{ .CommonLabels.alertname }}'
             text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
 
       - name: 'slack-warning'
         slack_configs:
-          - channel: '#polyguard-alerts'
+          - channel: '#neuraminds-alerts'
             send_resolved: true
             color: '{{ if eq .Status "firing" }}warning{{ else }}good{{ end }}'
             title: '{{ .Status | toUpper }}: {{ .CommonLabels.alertname }}'

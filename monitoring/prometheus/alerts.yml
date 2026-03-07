@@ -1,19 +1,19 @@
 groups:
-  - name: polyguard.alerts
+  - name: neuraminds.alerts
     rules:
       # API availability
-      - alert: PolyguardAPIDown
-        expr: up{job="polyguard-api"} == 0
+      - alert: NeuramindsAPIDown
+        expr: up{job="neuraminds-api"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "Polyguard API is down"
+          summary: "Neuraminds API is down"
           description: "API has been unavailable for more than 1 minute"
 
       # High error rate
       - alert: HighErrorRate
-        expr: rate(polyguard_requests_total{status="error"}[5m]) / rate(polyguard_requests_total[5m]) > 0.05
+        expr: rate(neuraminds_requests_total{status="error"}[5m]) / rate(neuraminds_requests_total[5m]) > 0.05
         for: 5m
         labels:
           severity: warning
@@ -23,7 +23,7 @@ groups:
 
       # No trades
       - alert: NoTradesExecuted
-        expr: increase(polyguard_trades_total[1h]) == 0
+        expr: increase(neuraminds_trades_total[1h]) == 0
         for: 2h
         labels:
           severity: warning
@@ -33,7 +33,7 @@ groups:
 
       # Low trading volume
       - alert: LowTradingVolume
-        expr: increase(polyguard_volume_total[24h]) < 1000000
+        expr: increase(neuraminds_volume_total[24h]) < 1000000
         for: 6h
         labels:
           severity: info

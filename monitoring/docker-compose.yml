@@ -3,7 +3,7 @@ version: '3.8'
 services:
   prometheus:
     image: prom/prometheus:v2.48.0
-    container_name: polyguard-prometheus
+    container_name: neuraminds-prometheus
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -21,7 +21,7 @@ services:
 
   alertmanager:
     image: prom/alertmanager:v0.26.0
-    container_name: polyguard-alertmanager
+    container_name: neuraminds-alertmanager
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
@@ -36,13 +36,13 @@ services:
 
   grafana:
     image: grafana/grafana:10.2.0
-    container_name: polyguard-grafana
+    container_name: neuraminds-grafana
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=polyguard
+      - GF_SECURITY_ADMIN_PASSWORD=neuraminds
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SERVER_ROOT_URL=http://localhost:3000
     ports:
@@ -55,7 +55,7 @@ services:
 
   node-exporter:
     image: prom/node-exporter:v1.7.0
-    container_name: polyguard-node-exporter
+    container_name: neuraminds-node-exporter
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro

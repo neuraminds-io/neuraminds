@@ -1,4 +1,4 @@
--- Polyguard Database Schema
+-- Neuraminds Database Schema
 -- Initial migration
 
 -- Markets table

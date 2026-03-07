@@ -1,4 +1,4 @@
-# Polyguard Backend Deployment with Blue-Green Support
+# Neuraminds Backend Deployment with Blue-Green Support
 #
 # This configuration supports zero-downtime deployments using:
 # - Rolling updates with health checks
@@ -8,10 +8,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: polyguard-api-blue
-  namespace: polyguard
+  name: neuraminds-api-blue
+  namespace: neuraminds
   labels:
-    app: polyguard-api
+    app: neuraminds-api
     version: blue
 spec:
   replicas: 3
@@ -22,19 +22,19 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app: polyguard-api
+      app: neuraminds-api
       version: blue
   template:
     metadata:
       labels:
-        app: polyguard-api
+        app: neuraminds-api
         version: blue
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9090"
         prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: polyguard-api
+      serviceAccountName: neuraminds-api
       terminationGracePeriodSeconds: 30
 
       # Pod anti-affinity for high availability
@@ -48,12 +48,12 @@ spec:
                     - key: app
                       operator: In
                       values:
-                        - polyguard-api
+                        - neuraminds-api
                 topologyKey: kubernetes.io/hostname
 
       containers:
         - name: api
-          image: polyguard/api:latest
+          image: neuraminds/api:latest
           imagePullPolicy: Always
           ports:
             - name: http
@@ -63,31 +63,31 @@ spec:
 
           env:
             - name: RUST_LOG
-              value: "info,polyguard=debug"
+              value: "info,neuraminds=debug"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: polyguard-secrets
+                  name: neuraminds-secrets
                   key: database-url
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
-                  name: polyguard-secrets
+                  name: neuraminds-secrets
                   key: redis-url
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: polyguard-secrets
+                  name: neuraminds-secrets
                   key: jwt-secret
             - name: BASE_RPC_URL
               valueFrom:
                 configMapKeyRef:
-                  name: polyguard-config
+                  name: neuraminds-config
                   key: base-rpc-url
             - name: BASE_CHAIN_ID
               valueFrom:
                 configMapKeyRef:
-                  name: polyguard-config
+                  name: neuraminds-config
                   key: base-chain-id
             - name: EVM_ENABLED
               value: "true"
@@ -141,10 +141,10 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: polyguard-api-green
-  namespace: polyguard
+  name: neuraminds-api-green
+  namespace: neuraminds
   labels:
-    app: polyguard-api
+    app: neuraminds-api
     version: green
 spec:
   replicas: 0  # Scale to 3 during deployment, then switch traffic
@@ -155,19 +155,19 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app: polyguard-api
+      app: neuraminds-api
       version: green
   template:
     metadata:
       labels:
-        app: polyguard-api
+        app: neuraminds-api
         version: green
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9090"
         prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: polyguard-api
+      serviceAccountName: neuraminds-api
       terminationGracePeriodSeconds: 30
 
       affinity:
@@ -180,12 +180,12 @@ spec:
                     - key: app
                       operator: In
                       values:
-                        - polyguard-api
+                        - neuraminds-api
                 topologyKey: kubernetes.io/hostname
 
       containers:
         - name: api
-          image: polyguard/api:latest  # Update this for green deployment
+          image: neuraminds/api:latest  # Update this for green deployment
           imagePullPolicy: Always
           ports:
             - name: http
@@ -195,31 +195,31 @@ spec:
 
           env:
             - name: RUST_LOG
-              value: "info,polyguard=debug"
+              value: "info,neuraminds=debug"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: polyguard-secrets
+                  name: neuraminds-secrets
                   key: database-url
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
-                  name: polyguard-secrets
+                  name: neuraminds-secrets
                   key: redis-url
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: polyguard-secrets
+                  name: neuraminds-secrets
                   key: jwt-secret
             - name: BASE_RPC_URL
               valueFrom:
                 configMapKeyRef:
-                  name: polyguard-config
+                  name: neuraminds-config
                   key: base-rpc-url
             - name: BASE_CHAIN_ID
               valueFrom:
                 configMapKeyRef:
-                  name: polyguard-config
+                  name: neuraminds-config
                   key: base-chain-id
             - name: EVM_ENABLED
               value: "true"
@@ -269,10 +269,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: polyguard-api
-  namespace: polyguard
+  name: neuraminds-api
+  namespace: neuraminds
   labels:
-    app: polyguard-api
+    app: neuraminds-api
 spec:
   type: ClusterIP
   ports:
@@ -280,7 +280,7 @@ spec:
       port: 80
       targetPort: http
   selector:
-    app: polyguard-api
+    app: neuraminds-api
     version: blue  # Switch to 'green' during blue-green deployment
 
 ---
@@ -288,8 +288,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: polyguard-api-blue
-  namespace: polyguard
+  name: neuraminds-api-blue
+  namespace: neuraminds
 spec:
   type: ClusterIP
   ports:
@@ -297,7 +297,7 @@ spec:
       port: 80
       targetPort: http
   selector:
-    app: polyguard-api
+    app: neuraminds-api
     version: blue
 
 ---
@@ -305,8 +305,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: polyguard-api-green
-  namespace: polyguard
+  name: neuraminds-api-green
+  namespace: neuraminds
 spec:
   type: ClusterIP
   ports:
@@ -314,7 +314,7 @@ spec:
       port: 80
       targetPort: http
   selector:
-    app: polyguard-api
+    app: neuraminds-api
     version: green
 
 ---
@@ -322,8 +322,8 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: polyguard-api
-  namespace: polyguard
+  name: neuraminds-api
+  namespace: neuraminds
   annotations:
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -331,17 +331,17 @@ metadata:
 spec:
   tls:
     - hosts:
-        - api.polyguard.cc
-      secretName: polyguard-api-tls
+        - api.neuraminds.io
+      secretName: neuraminds-api-tls
   rules:
-    - host: api.polyguard.cc
+    - host: api.neuraminds.io
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: polyguard-api
+                name: neuraminds-api
                 port:
                   number: 80
 
@@ -350,13 +350,13 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: polyguard-api-blue
-  namespace: polyguard
+  name: neuraminds-api-blue
+  namespace: neuraminds
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: polyguard-api-blue
+    name: neuraminds-api-blue
   minReplicas: 3
   maxReplicas: 20
   metrics:
@@ -395,10 +395,10 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: polyguard-api
-  namespace: polyguard
+  name: neuraminds-api
+  namespace: neuraminds
 spec:
   minAvailable: 2
   selector:
     matchLabels:
-      app: polyguard-api
+      app: neuraminds-api

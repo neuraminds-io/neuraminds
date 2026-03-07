@@ -22,10 +22,10 @@ receivers:
     # Configure actual receivers in production:
     # slack_configs:
     #   - api_url: 'https://hooks.slack.com/services/...'
-    #     channel: '#polyguard-alerts'
+    #     channel: '#neuraminds-alerts'
     # email_configs:
-    #   - to: 'alerts@polyguard.ai'
-    #     from: 'alertmanager@polyguard.ai'
+    #   - to: 'alerts@neuraminds.io'
+    #     from: 'alertmanager@neuraminds.io'
     #     smarthost: 'smtp.example.com:587'
 
   - name: 'critical'
@@ -37,7 +37,7 @@ receivers:
     # Slack for warnings
     # slack_configs:
     #   - api_url: 'https://hooks.slack.com/services/...'
-    #     channel: '#polyguard-alerts'
+    #     channel: '#neuraminds-alerts'
 
 inhibit_rules:
   - source_match:

@@ -2,13 +2,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: polyguard-staging
+namespace: neuraminds-staging
 
 resources:
   - ../base
 
 configMapGenerator:
-  - name: polyguard-config
+  - name: neuraminds-config
     behavior: merge
     literals:
       - base-rpc-url=https://sepolia.base.org
@@ -17,12 +17,12 @@ configMapGenerator:
       - log-level=debug
 
 replicas:
-  - name: polyguard-api-blue
+  - name: neuraminds-api-blue
     count: 2
 
 images:
-  - name: polyguard/api
-    newName: ghcr.io/polyguard/polyguard/backend
+  - name: neuraminds/api
+    newName: ghcr.io/neuraminds-io/neuraminds/backend
     newTag: latest
 
 patches:
@@ -41,21 +41,21 @@ patches:
         value: 500m
     target:
       kind: Deployment
-      name: polyguard-api-blue
+      name: neuraminds-api-blue
 
   - patch: |-
       - op: replace
         path: /spec/rules/0/host
-        value: api-staging.polyguard.cc
+        value: api-staging.neuraminds.io
       - op: replace
         path: /spec/tls/0/hosts/0
-        value: api-staging.polyguard.cc
+        value: api-staging.neuraminds.io
       - op: replace
         path: /spec/tls/0/secretName
-        value: polyguard-api-staging-tls
+        value: neuraminds-api-staging-tls
     target:
       kind: Ingress
-      name: polyguard-api
+      name: neuraminds-api
 
   - patch: |-
       - op: replace
@@ -66,4 +66,4 @@ patches:
         value: 5
     target:
       kind: HorizontalPodAutoscaler
-      name: polyguard-api-blue
+      name: neuraminds-api-blue

@@ -80,8 +80,23 @@ async fn main() -> std::io::Result<()> {
     let redis = RedisService::new(&config.redis_url)
         .await
         .expect("Failed to connect to Redis");
-    let evm_rpc = EvmRpcService::new(&config.base_rpc_url);
-    let evm_indexer = EvmIndexerService::new(evm_rpc.clone(), 20_000);
+    let evm_rpc = EvmRpcService::new(&config.base_rpc_url, &config.base_rpc_fallback_urls);
+    let evm_indexer_rpc = config
+        .base_indexer_rpc_url
+        .as_ref()
+        .map(|url| {
+            let mut fallbacks = vec![config.base_rpc_url.clone()];
+            fallbacks.extend(config.base_rpc_fallback_urls.clone());
+            EvmRpcService::new(url, &fallbacks)
+        })
+        .unwrap_or_else(|| evm_rpc.clone());
+    let evm_indexer = EvmIndexerService::new(evm_indexer_rpc, 20_000);
+
+    info!(
+        "Base read RPC endpoints configured: {} (dedicated indexer RPC: {})",
+        config.base_rpc_fallback_urls.len() + 1,
+        config.base_indexer_rpc_url.is_some()
+    );
 
     let orderbook = OrderBookService::new();
 

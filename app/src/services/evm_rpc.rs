@@ -1,10 +1,13 @@
 use anyhow::{anyhow, Result};
+use log::warn;
 use serde::Deserialize;
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct EvmRpcService {
     client: reqwest::Client,
-    rpc_url: String,
+    primary_url: String,
+    read_urls: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -53,10 +56,30 @@ struct JsonRpcError {
 }
 
 impl EvmRpcService {
-    pub fn new(rpc_url: &str) -> Self {
+    pub fn new(primary_url: &str, fallback_urls: &[String]) -> Self {
+        let mut read_urls = vec![primary_url.trim().to_string()];
+        for candidate in fallback_urls {
+            let candidate = candidate.trim();
+            if candidate.is_empty()
+                || read_urls
+                    .iter()
+                    .any(|existing| existing.eq_ignore_ascii_case(candidate))
+            {
+                continue;
+            }
+            read_urls.push(candidate.to_string());
+        }
+
         Self {
-            client: reqwest::Client::new(),
-            rpc_url: rpc_url.to_string(),
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
+            primary_url: read_urls
+                .first()
+                .cloned()
+                .unwrap_or_else(|| primary_url.trim().to_string()),
+            read_urls,
         }
     }
 
@@ -162,6 +185,49 @@ impl EvmRpcService {
         method: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value> {
+        let allow_failover = method != "eth_sendRawTransaction";
+        let mut last_err = None;
+
+        let endpoints: Vec<&str> = if allow_failover {
+            self.read_urls.iter().map(String::as_str).collect()
+        } else {
+            vec![self.primary_url.as_str()]
+        };
+
+        for (index, url) in endpoints.iter().enumerate() {
+            match self
+                .rpc_value_call_to_url(url, method, params.clone())
+                .await
+            {
+                Ok(value) => return Ok(value),
+                Err(err) => {
+                    let should_retry = allow_failover
+                        && index + 1 < endpoints.len()
+                        && is_retryable_rpc_error(err.to_string().as_str());
+                    if should_retry {
+                        warn!(
+                            "Base RPC {} failed on endpoint {}: {}",
+                            method,
+                            index + 1,
+                            err
+                        );
+                        last_err = Some(err);
+                        continue;
+                    }
+                    return Err(err);
+                }
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| anyhow!("Base RPC response missing result")))
+    }
+
+    async fn rpc_value_call_to_url(
+        &self,
+        rpc_url: &str,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value> {
         let body = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -171,7 +237,7 @@ impl EvmRpcService {
 
         let response = self
             .client
-            .post(&self.rpc_url)
+            .post(rpc_url)
             .json(&body)
             .send()
             .await
@@ -199,6 +265,18 @@ impl EvmRpcService {
     }
 }
 
+fn is_retryable_rpc_error(message: &str) -> bool {
+    let message = message.trim().to_ascii_lowercase();
+    message.contains("429")
+        || message.contains("too many requests")
+        || message.contains("timeout")
+        || message.contains("connection")
+        || message.contains("bad gateway")
+        || message.contains("service unavailable")
+        || message.contains("gateway timeout")
+        || message.contains("temporarily unavailable")
+}
+
 pub fn quantity_hex(value: u64) -> String {
     format!("0x{:x}", value)
 }
@@ -218,4 +296,42 @@ pub fn parse_u64_hex(value: &str) -> Result<u64> {
     }
 
     u64::from_str_radix(normalized, 16).map_err(|_| anyhow!("Invalid RPC hex value"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn evm_rpc_service_deduplicates_fallback_endpoints() {
+        let service = EvmRpcService::new(
+            "https://primary.example",
+            &[
+                "https://backup-a.example".to_string(),
+                "https://primary.example".to_string(),
+                "https://backup-b.example".to_string(),
+            ],
+        );
+
+        assert_eq!(
+            service.read_urls,
+            vec![
+                "https://primary.example".to_string(),
+                "https://backup-a.example".to_string(),
+                "https://backup-b.example".to_string()
+            ]
+        );
+        assert_eq!(service.primary_url, "https://primary.example");
+    }
+
+    #[test]
+    fn retryable_rpc_errors_cover_rate_limits_and_transport_failures() {
+        assert!(is_retryable_rpc_error("429 Too Many Requests"));
+        assert!(is_retryable_rpc_error(
+            "Base RPC request failed: connection reset"
+        ));
+        assert!(!is_retryable_rpc_error(
+            "Base RPC error: execution reverted"
+        ));
+    }
 }

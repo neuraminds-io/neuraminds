@@ -6,7 +6,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: postgres-backup
-  namespace: polyguard
+  namespace: neuraminds
 spec:
   schedule: "0 */6 * * *"  # Every 6 hours
   concurrencyPolicy: Forbid
@@ -17,7 +17,7 @@ spec:
       backoffLimit: 3
       template:
         spec:
-          serviceAccountName: polyguard-backup
+          serviceAccountName: neuraminds-backup
           restartPolicy: OnFailure
           containers:
             - name: backup
@@ -30,7 +30,7 @@ spec:
 
                   # Variables
                   TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-                  BACKUP_FILE="polyguard-${TIMESTAMP}.sql.gz"
+                  BACKUP_FILE="neuraminds-${TIMESTAMP}.sql.gz"
 
                   echo "Starting backup: ${BACKUP_FILE}"
 
@@ -52,7 +52,7 @@ spec:
                   # Cleanup old backups (keep last 30 days)
                   aws s3 ls s3://${S3_BUCKET}/postgres/ | \
                     awk '{print $4}' | \
-                    grep -E 'polyguard-[0-9]{8}' | \
+                    grep -E 'neuraminds-[0-9]{8}' | \
                     sort | \
                     head -n -120 | \
                     xargs -I {} aws s3 rm s3://${S3_BUCKET}/postgres/{}
@@ -63,10 +63,10 @@ spec:
                 - name: DATABASE_URL
                   valueFrom:
                     secretKeyRef:
-                      name: polyguard-secrets
+                      name: neuraminds-secrets
                       key: database-url
                 - name: S3_BUCKET
-                  value: polyguard-backups
+                  value: neuraminds-backups
                 - name: AWS_DEFAULT_REGION
                   value: us-east-1
 
@@ -93,7 +93,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: postgres-wal-backup
-  namespace: polyguard
+  namespace: neuraminds
 spec:
   schedule: "*/5 * * * *"  # Every 5 minutes
   concurrencyPolicy: Forbid
@@ -118,7 +118,7 @@ spec:
                 - name: DATABASE_URL
                   valueFrom:
                     secretKeyRef:
-                      name: polyguard-secrets
+                      name: neuraminds-secrets
                       key: database-url
               resources:
                 requests:
@@ -130,10 +130,10 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: polyguard-backup
-  namespace: polyguard
+  name: neuraminds-backup
+  namespace: neuraminds
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/polyguard-backup
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/neuraminds-backup
 
 ---
 # Backup verification job (weekly)
@@ -141,7 +141,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: backup-verification
-  namespace: polyguard
+  namespace: neuraminds
 spec:
   schedule: "0 2 * * 0"  # Weekly on Sunday at 2 AM
   concurrencyPolicy: Forbid
@@ -183,7 +183,7 @@ spec:
 
               env:
                 - name: S3_BUCKET
-                  value: polyguard-backups
+                  value: neuraminds-backups
                 - name: PGHOST
                   value: postgres-test
                 - name: PGUSER
@@ -205,7 +205,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-backup-to-postgres
-  namespace: polyguard
+  namespace: neuraminds
 spec:
   podSelector:
     matchLabels:

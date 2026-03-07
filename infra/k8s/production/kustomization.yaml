@@ -2,13 +2,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: polyguard-production
+namespace: neuraminds-production
 
 resources:
   - ../base
 
 configMapGenerator:
-  - name: polyguard-config
+  - name: neuraminds-config
     behavior: merge
     literals:
       - base-rpc-url=https://mainnet.base.org
@@ -17,12 +17,12 @@ configMapGenerator:
       - log-level=info
 
 replicas:
-  - name: polyguard-api-blue
+  - name: neuraminds-api-blue
     count: 3
 
 images:
-  - name: polyguard/api
-    newName: ghcr.io/polyguard/polyguard/backend
+  - name: neuraminds/api
+    newName: ghcr.io/neuraminds-io/neuraminds/backend
 
 patches:
   - patch: |-
@@ -40,21 +40,21 @@ patches:
         value: 1000m
     target:
       kind: Deployment
-      name: polyguard-api-blue
+      name: neuraminds-api-blue
 
   - patch: |-
       - op: replace
         path: /spec/rules/0/host
-        value: api.polyguard.cc
+        value: api.neuraminds.io
       - op: replace
         path: /spec/tls/0/hosts/0
-        value: api.polyguard.cc
+        value: api.neuraminds.io
       - op: replace
         path: /spec/tls/0/secretName
-        value: polyguard-api-tls
+        value: neuraminds-api-tls
     target:
       kind: Ingress
-      name: polyguard-api
+      name: neuraminds-api
 
   - patch: |-
       - op: replace
@@ -65,7 +65,7 @@ patches:
         value: 20
     target:
       kind: HorizontalPodAutoscaler
-      name: polyguard-api-blue
+      name: neuraminds-api-blue
 
   - patch: |-
       - op: replace
@@ -73,4 +73,4 @@ patches:
         value: 2
     target:
       kind: PodDisruptionBudget
-      name: polyguard-api
+      name: neuraminds-api

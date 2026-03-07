@@ -1,10 +1,10 @@
-# Polyguard Backend API
+# Neuraminds Backend API
 # Multi-stage build for minimal production image
 
 # Build stage
 FROM rust:1.88-bookworm AS builder
 
-WORKDIR /usr/src/polyguard/app
+WORKDIR /usr/src/neuraminds/app
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -41,12 +41,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN useradd --create-home --shell /bin/bash polyguard
-USER polyguard
-WORKDIR /home/polyguard
+RUN useradd --create-home --shell /bin/bash neuraminds
+USER neuraminds
+WORKDIR /home/neuraminds
 
 # Copy binary and sqlx-cli from builder
-COPY --from=builder /usr/src/polyguard/app/target/release/polyguard-api ./
+COPY --from=builder /usr/src/neuraminds/app/target/release/neuraminds-api ./
 COPY --from=builder /usr/local/cargo/bin/sqlx ./
 
 # Copy migrations
@@ -62,4 +62,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-CMD ["./polyguard-api"]
+CMD ["./neuraminds-api"]

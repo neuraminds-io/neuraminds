@@ -135,16 +135,16 @@ https://github.com/OWNER/REPO/actions
 
 ```bash
 # Check deployment status
-kubectl get deployments -n polyguard-production
+kubectl get deployments -n neuraminds-production
 
 # Check pod status
-kubectl get pods -n polyguard-production
+kubectl get pods -n neuraminds-production
 
 # View logs
-kubectl logs -f deployment/polyguard-api-blue -n polyguard-production
+kubectl logs -f deployment/neuraminds-api-blue -n neuraminds-production
 
 # View rollout history
-kubectl rollout history deployment/polyguard-api-blue -n polyguard-production
+kubectl rollout history deployment/neuraminds-api-blue -n neuraminds-production
 ```
 
 ### Solana Program
@@ -166,7 +166,7 @@ cast code <CONTRACT_ADDRESS> --rpc-url https://mainnet.base.org
 
 Or via kubectl:
 ```bash
-kubectl rollout undo deployment/polyguard-api-blue -n polyguard-production
+kubectl rollout undo deployment/neuraminds-api-blue -n neuraminds-production
 ```
 
 ### Program Upgrade Failure

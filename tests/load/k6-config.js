@@ -1,5 +1,5 @@
 /**
- * Polyguard Load Testing Configuration
+ * Neuraminds Load Testing Configuration
  *
  * Uses k6 for load testing. Install: https://k6.io/docs/getting-started/installation/
  *
@@ -124,7 +124,7 @@ function authenticate(wallet) {
   }
 
   const nonce = nonceResp.json('nonce');
-  const message = `Sign this message to authenticate with Polyguard.\n\nWallet: ${wallet.address}\nNonce: ${nonce}`;
+  const message = `Sign this message to authenticate with Neuraminds.\n\nWallet: ${wallet.address}\nNonce: ${nonce}`;
 
   // Verify (mock signature in load test)
   const verifyResp = http.post(

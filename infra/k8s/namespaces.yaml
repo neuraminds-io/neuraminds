@@ -1,4 +1,4 @@
-# Polyguard Kubernetes Namespaces
+# Neuraminds Kubernetes Namespaces
 # Environment separation with resource quotas and network policies
 
 ---
@@ -6,20 +6,20 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: polyguard-staging
+  name: neuraminds-staging
   labels:
     environment: staging
-    app: polyguard
+    app: neuraminds
 
 ---
 # Production namespace
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: polyguard-production
+  name: neuraminds-production
   labels:
     environment: production
-    app: polyguard
+    app: neuraminds
 
 ---
 # Staging resource quota
@@ -27,7 +27,7 @@ apiVersion: v1
 kind: ResourceQuota
 metadata:
   name: staging-quota
-  namespace: polyguard-staging
+  namespace: neuraminds-staging
 spec:
   hard:
     requests.cpu: "4"
@@ -44,7 +44,7 @@ apiVersion: v1
 kind: ResourceQuota
 metadata:
   name: production-quota
-  namespace: polyguard-production
+  namespace: neuraminds-production
 spec:
   hard:
     requests.cpu: "16"
@@ -61,7 +61,7 @@ apiVersion: v1
 kind: LimitRange
 metadata:
   name: staging-limits
-  namespace: polyguard-staging
+  namespace: neuraminds-staging
 spec:
   limits:
     - type: Container
@@ -84,7 +84,7 @@ apiVersion: v1
 kind: LimitRange
 metadata:
   name: production-limits
-  namespace: polyguard-production
+  namespace: neuraminds-production
 spec:
   limits:
     - type: Container
@@ -107,7 +107,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: staging-network-policy
-  namespace: polyguard-staging
+  namespace: neuraminds-staging
 spec:
   podSelector: {}
   policyTypes:
@@ -147,7 +147,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: production-network-policy
-  namespace: polyguard-production
+  namespace: neuraminds-production
 spec:
   podSelector: {}
   policyTypes:
